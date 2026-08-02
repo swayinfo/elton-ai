@@ -1,0 +1,82 @@
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"#","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":" Три прич","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ины в","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ести заметки\n\n1","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":". **Ул","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"учшение","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":" пам","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"яти**","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":" —","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":" пись","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"менная","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":" ф","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"и","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ксация информации пом","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"огает л","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"учше её","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":" запомнить и ус","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"воить.\n\n2. **","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"Организ","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ован","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ность** — структур","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ированные заметки обл","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"егчают поиск н","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ужной информации и план","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ирование.","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"\n\n3. **","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"Яс","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ность м","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ысли** — проц","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"есс запис","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"и пом","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"огает раз","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"об","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"раться в с","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"ложных ид","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"еях и ув","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"иде","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"length","native_finish_reason":"max_tokens"}]}
+
+data: {"id":"gen-1785621355-nSXThj2nEsFNUu35fPPD","object":"chat.completion.chunk","created":1785621355,"model":"anthropic/claude-haiku-4.5","provider":"Google","service_tier":null,"choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"length","native_finish_reason":"max_tokens"}],"usage":{"prompt_tokens":26,"completion_tokens":120,"total_tokens":146,"cost":0.000626,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.000626,"upstream_inference_prompt_cost":0.000026,"upstream_inference_completions_cost":0.0006},"completion_tokens_details":{"reasoning_tokens":0,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

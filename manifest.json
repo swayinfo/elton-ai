@@ -1,0 +1,10 @@
+{
+  "id": "elton-ai",
+  "name": "Elton AI",
+  "version": "2.0.0",
+  "minAppVersion": "1.8.7",
+  "description": "Voice and text assistant for your vault. Searches, reads, writes and edits notes through your own AI provider — Elton AI, OpenRouter, a local model or OpenAI.",
+  "author": "Elton",
+  "authorUrl": "https://github.com/swayinfo",
+  "isDesktopOnly": false
+}

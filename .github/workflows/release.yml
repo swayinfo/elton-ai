@@ -1,0 +1,67 @@
+# Cut a release BRAT and the Obsidian catalogue can both install.
+#
+# Both of them fetch exactly three files from the release assets —
+# main.js, manifest.json, styles.css — and ignore everything else in
+# the repository. So the release carries those three and nothing more:
+# the waiting sound and the Piper server are optional extras people
+# download by hand, and the plugin works without either.
+#
+# Tag must match the version in manifest.json, with no "v" prefix:
+#   git tag 2.0.0 && git push origin 2.0.0
+#
+# versions.json is read by the catalogue from the repository, not from the
+# release, so it needs the new version in it before the tag is pushed.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build main.js from src/
+        run: sh build.sh
+
+      - name: Check the tag matches manifest.json and versions.json
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "Tag $TAG does not match manifest version $VERSION" >&2
+            exit 1
+          fi
+          MIN=$(node -p "require('./versions.json')['$TAG'] || ''")
+          if [ "$MIN" != "$(node -p "require('./manifest.json').minAppVersion")" ]; then
+            echo "versions.json has no matching entry for $TAG" >&2
+            exit 1
+          fi
+
+      - name: Run the tests
+        run: node test/run.js
+
+      # Attestation is what the catalogue's Scorecard looks for; it costs
+      # one step and it is the difference between "unverified build" and not.
+      - name: Attest the build
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "main.js"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            --title "${GITHUB_REF#refs/tags/}" \
+            --generate-notes \
+            main.js manifest.json styles.css

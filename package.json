@@ -1,0 +1,23 @@
+{
+  "name": "elton-ai",
+  "version": "2.0.0",
+  "description": "Voice and text assistant for your Obsidian vault.",
+  "main": "main.js",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "sh build.sh",
+    "lint": "npm run build && eslint .",
+    "test": "node test/run.js",
+    "check": "npm run lint && npm test"
+  },
+  "author": "Elton (swayinfo)",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.1",
+    "globals": "^17.8.0",
+    "obsidian": "^1.13.1"
+  }
+}

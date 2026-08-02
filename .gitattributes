@@ -1,0 +1,6 @@
+# The repository stores LF. The release runner is Linux and runs build.sh
+# through sh — a stray CRLF in a shell script fails there with an error that
+# names a line rather than the line ending, which is a bad hour to spend.
+* text=auto eol=lf
+*.vbs text eol=crlf
+*.wav binary

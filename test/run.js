@@ -1,0 +1,461 @@
+/* ============================================================
+ *  Tests
+ *
+ *      node test/run.js
+ *
+ *  No framework: the plugin has no build step and no dependencies,
+ *  and a test runner would be the first. Assertions here are about
+ *  behaviour that is easy to break by accident and expensive to
+ *  notice — what a trigger phrase matches, which pane a note lands
+ *  in, what the model is allowed to reach.
+ * ========================================================== */
+
+const H = require("./harness");
+
+let passed = 0, failed = 0, group = "";
+const results = [];
+
+function describe(name) { group = name; results.push({ head: name }); }
+function ok(cond, name, detail) {
+  if (cond) { passed++; results.push({ pass: true, name }); }
+  else { failed++; results.push({ pass: false, name, detail }); }
+}
+function eq(actual, expected, name) {
+  const a = JSON.stringify(actual), e = JSON.stringify(expected);
+  ok(a === e, name, `ждали ${e}, получили ${a}`);
+}
+
+(async () => {
+  const T = H.load();
+  T.setLang("ru");
+
+  /* ── 1. Scenario matching ──────────────────────────────── */
+  describe("Сценарии: распознавание фразы");
+  {
+    const list = [
+      { enabled: true, prompt: "P-мысли", name: "Мысли", triggers: "мысли, о чём я думал, последние мысли" },
+      { enabled: true, prompt: "P-связи", name: "Связи", triggers: "найди связи, с чем это связано" },
+      { enabled: true, prompt: "P-день", name: "День", triggers: "что сегодня, план на день" },
+      { enabled: false, prompt: "P-выкл", name: "Выключен", triggers: "выключенный сценарий" },
+      { enabled: true, prompt: "", name: "Пустой", triggers: "пустой" },
+    ];
+    const hit = (s) => { const m = T.matchScenario(s, list); return m ? m.scenario.name : null; };
+
+    eq(hit("Мысли"), "Мысли", "одно слово целой фразой — срабатывает");
+    eq(hit("мысли."), "Мысли", "пунктуация не мешает");
+    eq(hit("МЫСЛИ"), "Мысли", "регистр не мешает");
+    eq(hit("о чем я думал"), "Мысли", "«е» вместо «ё» не мешает");
+    eq(hit("Запиши мои мысли о проекте"), null, "одно слово внутри фразы — НЕ срабатывает");
+    eq(hit("Слушай, а о чём я думал вчера?"), "Мысли", "фраза из двух слов ловится внутри предложения");
+    eq(hit("поговорим о связистах"), null, "часть слова не считается совпадением");
+    eq(hit("найди связи с этой заметкой"), "Связи", "триггер в начале");
+    eq(hit("выключенный сценарий"), null, "выключенный сценарий не срабатывает");
+    eq(hit("пустой"), null, "сценарий без задания не срабатывает");
+    eq(hit("открой заметку про Париж"), null, "обычный вопрос не перехватывается");
+
+    const m = T.matchScenario("найди связи с этой заметкой", list);
+    eq(m.rest, "с этой заметкой", "остаток фразы сохраняется как уточнение");
+    ok(T.scenarioPrompt(m.scenario, m.rest).includes("с этой заметкой"), "остаток попадает в задание");
+    eq(T.scenarioPrompt(m.scenario, "ну"), "P-связи", "мусорный остаток отбрасывается");
+
+    // Самый длинный триггер должен побеждать более общий.
+    const overlap = [
+      { enabled: true, prompt: "p", name: "Общий", triggers: "что сегодня" },
+      { enabled: true, prompt: "p", name: "Точный", triggers: "что сегодня по проекту" },
+    ];
+    eq(T.matchScenario("что сегодня по проекту", overlap).scenario.name, "Точный",
+      "длинный триггер выигрывает у короткого");
+  }
+
+  describe("Сценарии: пресеты");
+  {
+    const d = T.defaultScenarios();
+    eq(d.length, 3, "из коробки три сценария");
+    ok(d.every((x) => x.prompt && x.triggers && x.emoji), "у каждого есть задание, фразы и эмодзи");
+    ok(d.every((x) => T.matchScenario(x.triggers.split(",")[0].trim(), d)), "первая фраза каждого действительно его находит");
+    const ids = new Set(d.map((x) => x.id));
+    eq(ids.size, 3, "идентификаторы не повторяются");
+  }
+
+  /* ── 2. Tabs ───────────────────────────────────────────── */
+  describe("Вкладки: чтение и поиск");
+  {
+    const app = H.fakeApp({ tabs: [
+      { title: "Проект", path: "1. Projects/Проект.md" },
+      { title: "Проект — архив", path: "4. Archive/Проект — архив.md" },
+      { title: "Ассистент", type: T.VIEW_TYPE },
+      { title: "obsidian.md", type: "webviewer" },
+    ] });
+    const p = H.fakePlugin(app);
+    const V = p.vault;
+
+    eq(V.listTabs().length, 4, "видит все вкладки основной области");
+    eq(V.listTabs()[0].active, true, "первая помечена активной");
+    eq(V.matchTabs("Проект").map((x) => x.title), ["Проект"],
+      "точное имя выигрывает у вкладки, которая его содержит");
+    eq(V.matchTabs("проект").map((x) => x.title), ["Проект"], "регистр не мешает");
+    eq(V.matchTabs("архив").map((x) => x.title), ["Проект — архив"], "поиск по части имени");
+    eq(V.matchTabs("Archive").map((x) => x.title), ["Проект — архив"], "поиск по пути");
+    eq(V.matchTabs("нет такого").length, 0, "несуществующее не находится");
+    eq(V.matchTabs("").length, 4, "пустой запрос — это «все»");
+  }
+
+  describe("Вкладки: закрытие");
+  {
+    const app = H.fakeApp({ tabs: [
+      { title: "Заметка", path: "a.md" },
+      { title: "Ассистент", type: T.VIEW_TYPE },
+    ] });
+    const V = H.fakePlugin(app).vault;
+
+    const closed = V.closeTabs(V.matchTabs(""));
+    eq(closed, ["Заметка"], "закрывает заметку, но НЕ панель ассистента");
+    eq(V.listTabs().map((x) => x.title), ["Ассистент"], "панель ассистента осталась");
+    eq(V.closeTabs(V.matchTabs("")), [], "повторное закрытие ничего не ломает");
+  }
+
+  /* ── 3. Web pages ──────────────────────────────────────── */
+  describe("Веб-страницы: что открывается, а что нет");
+  {
+    const V = H.fakePlugin(H.fakeApp({ webviewer: true })).vault;
+    const rejected = async (url, why) => {
+      try { await V.openUrl(url); ok(false, why, "открылось, хотя не должно"); }
+      catch { ok(true, why); }
+    };
+    await rejected("javascript:alert(1)", "javascript: отклоняется");
+    await rejected("file:///C:/Windows/System32", "file: отклоняется");
+    await rejected("obsidian://open?vault=x", "obsidian: отклоняется");
+    await rejected("не адрес вовсе", "мусор отклоняется");
+    await rejected("", "пустая строка отклоняется");
+
+    const r = await V.openUrl("https://obsidian.md/plugins");
+    eq(r.where, "obsidian", "https открывается внутри хранилища");
+    eq(r.url, "https://obsidian.md/plugins", "адрес не искажается");
+    const st = V.app.workspace.created.viewState;
+    eq(st.type, "webviewer", "открывается именно во «Веб-просмотре»");
+    eq(st.state.url, "https://obsidian.md/plugins", "адрес уходит во view state");
+
+    const off = H.fakePlugin(H.fakeApp({ webviewer: false })).vault;
+    const r2 = await off.openUrl("http://example.com/");
+    eq(r2.where, "browser", "с выключенным веб-просмотром уходит в системный браузер");
+  }
+
+  /* ── 4. Which pane ─────────────────────────────────────── */
+  describe("Куда открывается заметка");
+  {
+    const app = H.fakeApp({ tabs: [{ title: "Открытая", path: "a.md" }] });
+    const V = H.fakePlugin(app).vault;
+    const file = new H.TFile("b.md");
+
+    await V.openNote(file);
+    eq(app.workspace.leaves[0].opened, file, "заметка попадает в основную область, не в панель ассистента");
+
+    await V.openNoteSplit(file);
+    eq(app.workspace.created.created, "split", "«рядом» — это split, а не новая вкладка поверх");
+    eq(app.workspace.created.opened, file, "и в него открывается нужный файл");
+  }
+
+  /* ── 5. Permissions decide the toolset ─────────────────── */
+  describe("Права: выключенное право = отсутствие инструмента");
+  {
+    const names = (s) => T.buildTools(Object.assign({}, T.DEFAULT_SETTINGS, s)).map((x) => x.function.name);
+    const all = names({});
+    for (const n of ["list_tabs", "open_url", "close_tab", "open_beside"]) {
+      ok(all.includes(n), `${n} есть, когда управление вкладками включено`);
+    }
+    const off = names({ canControlUI: false });
+    for (const n of ["list_tabs", "open_url", "close_tab", "open_beside"]) {
+      ok(!off.includes(n), `${n} исчезает, когда выключено`);
+    }
+    ok(!names({ canDelete: false }).includes("delete_note"), "delete_note исчезает без права на удаление");
+    ok(names({ canDelete: true }).includes("delete_note"), "и появляется с ним");
+    ok(!names({ canRead: false }).includes("search_notes"), "без чтения нет и поиска");
+    ok(!names({ webSearch: false }).includes("search_web"), "без веб-поиска нет search_web");
+    ok(!names({ webSearch: true, provider: "openai" }).includes("search_web"),
+      "у OpenAI-напрямую веб-поиска нет даже с включённым тумблером");
+  }
+
+  /* ── 6. The tools themselves ───────────────────────────── */
+  describe("Инструменты агента: поведение");
+  {
+    const mk = (opts, settings) => {
+      const app = H.fakeApp(opts);
+      const p = H.fakePlugin(app, settings);
+      const agent = new T.Agent(p);
+      const events = [];
+      const run = (name, args, confirmAnswer = true) =>
+        agent.runTool(name, args, { onEvent: (e) => events.push(e.text), confirm: async () => confirmAnswer });
+      return { app, p, agent, events, run };
+    };
+
+    {
+      const { run } = mk({ tabs: [] });
+      const r = await run("list_tabs", {});
+      ok(/empty|nothing/i.test(r), "list_tabs на пустой области отвечает честно");
+    }
+    {
+      const { run } = mk({ tabs: [{ title: "Проект", path: "a.md" }, { title: "Идеи", path: "b.md" }] });
+      const r = await run("list_tabs", {});
+      ok(r.includes("Проект") && r.includes("Идеи"), "list_tabs перечисляет открытое");
+    }
+    {
+      // Одна названная вкладка — без подтверждения.
+      const { app, run } = mk({ tabs: [{ title: "Проект", path: "a.md" }, { title: "Идеи", path: "b.md" }] });
+      const r = await run("close_tab", { name: "Идеи" }, false);
+      ok(r.includes("Идеи"), "одна названная вкладка закрывается без вопроса");
+      eq(app.workspace.listAlive === undefined ? app.workspace.leaves.filter((l) => !l.detached).length : 0, 1,
+        "осталась одна вкладка");
+    }
+    {
+      // Всё сразу — только с подтверждения.
+      const { app, run } = mk({ tabs: [{ title: "A", path: "a.md" }, { title: "B", path: "b.md" }] });
+      const r = await run("close_tab", { all: true }, false);
+      ok(/declined/i.test(r), "отказ пользователя останавливает закрытие всего");
+      eq(app.workspace.leaves.filter((l) => !l.detached).length, 2, "вкладки на месте после отказа");
+    }
+    {
+      const { app, run } = mk({ tabs: [{ title: "A", path: "a.md" }, { title: "B", path: "b.md" }] });
+      await run("close_tab", { all: true }, true);
+      eq(app.workspace.leaves.filter((l) => !l.detached).length, 0, "с подтверждением закрываются все");
+    }
+    {
+      const { run } = mk({ tabs: [{ title: "Проект", path: "a.md" }] });
+      const r = await run("close_tab", { name: "чего нет" });
+      ok(r.includes("list_tabs"), "на несуществующую вкладку отвечает подсказкой посмотреть список");
+    }
+    {
+      const { run } = mk({});
+      const bad = await run("open_url", { url: "javascript:alert(1)" });
+      ok(/could not open/i.test(bad), "open_url отказывает на javascript:");
+      const good = await run("open_url", { url: "https://obsidian.md" });
+      ok(/Opened https:\/\/obsidian\.md/.test(good), "и открывает обычный адрес");
+    }
+    {
+      // Выключённое право должно отбиваться и на уровне исполнения, не только
+      // в списке инструментов — модель могла запомнить инструмент из прошлого хода.
+      const { run } = mk({ tabs: [{ title: "A", path: "a.md" }] }, { canControlUI: false });
+      for (const n of ["list_tabs", "open_url", "close_tab", "open_beside"]) {
+        const r = await run(n, { url: "https://obsidian.md", name: "A", path: "a.md" });
+        ok(/switched off/i.test(r), `${n} отказывает при выключенном праве`);
+      }
+    }
+  }
+
+  /* ── 7. Models ─────────────────────────────────────────── */
+  describe("Список моделей");
+  {
+    ok(T.modelChoices("obsimind").length > 0, "у Elton AI есть список моделей");
+    eq(T.modelChoices("openrouter"), T.modelChoices("obsimind"), "у OpenRouter тот же список");
+    eq(T.modelChoices("local").length, 0, "у локальной модели списка нет — там работает опрос сервера");
+    eq(T.canListModels("obsimind"), false, "у прокси кнопка обновления скрыта (он отвечает 405)");
+    eq(T.canListModels("local"), true, "у локальной — доступна");
+    const def = T.DEFAULT_SETTINGS.models.obsimind;
+    ok(T.modelChoices("obsimind").some((m) => m.id === def), "модель по умолчанию есть в списке");
+  }
+
+  /* ── 8. The embedded sound ─────────────────────────────── */
+  describe("Встроенный звук ожидания");
+  {
+    const bytes = T.base64ToBytes(T.WAITING_WAV_B64);
+    const head = Buffer.from(bytes.slice(0, 12)).toString("ascii");
+    ok(head.startsWith("RIFF") && head.includes("WAVE"), "декодируется в настоящий WAV");
+    const fs = require("fs"), path = require("path"), crypto = require("crypto");
+    const orig = fs.readFileSync(path.join(__dirname, "..", "waiting.wav"));
+    const h = (b) => crypto.createHash("sha1").update(Buffer.from(b)).digest("hex");
+    eq(h(bytes), h(orig), "совпадает с waiting.wav побайтово");
+  }
+
+  /* ── 9. Mobile ─────────────────────────────────────────── */
+  describe("Мобилка: формат записи");
+  {
+    // Что каждая платформа реально умеет. Списки — то, что возвращает
+    // MediaRecorder.isTypeSupported в этих браузерах.
+    const DESKTOP = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+    const ANDROID = ["audio/webm;codecs=opus", "audio/webm"];
+    const IOS = ["audio/mp4", "audio/mp4;codecs=mp4a.40.2", "audio/aac"];
+
+    const on = (list) => T.pickRecordingType((m) => list.includes(m));
+
+    eq(on(DESKTOP).format, "webm", "десктоп пишет в webm/opus");
+    eq(on(ANDROID).format, "webm", "Android пишет в webm");
+    eq(on(IOS).format, "mp4", "iOS пишет в mp4 — И ЭТО ГЛАВНОЕ: раньше отдавалось как webm");
+    eq(on(IOS).mime, "audio/mp4", "и mime у него честный");
+    eq(on([]), null, "если ничего не поддерживается — решает сам MediaRecorder");
+    eq(T.pickRecordingType(null), null, "без MediaRecorder не падает");
+
+    // Ярлык формата выводится из того, что вернул сам браузер, а не из надежд.
+    eq(T.formatFromMime("audio/webm;codecs=opus"), "webm", "webm распознаётся");
+    eq(T.formatFromMime("audio/mp4"), "mp4", "mp4 распознаётся");
+    eq(T.formatFromMime("audio/x-m4a"), "mp4", "m4a — это тот же mp4");
+    eq(T.formatFromMime("audio/aac"), "aac", "aac распознаётся");
+    eq(T.formatFromMime("audio/ogg; codecs=opus"), "ogg", "ogg распознаётся");
+    eq(T.formatFromMime(""), "webm", "пустой mime — разумное умолчание");
+
+    // Порядок предпочтений: opus раньше mp4, иначе десктоп зря льёт AAC.
+    const iOpus = T.RECORDING_TYPES.findIndex((x) => x.mime.includes("opus"));
+    const iMp4 = T.RECORDING_TYPES.findIndex((x) => x.mime.includes("mp4"));
+    ok(iOpus >= 0 && iOpus < iMp4, "opus предпочитается mp4, где есть выбор");
+  }
+
+  /* ── 10. The selected passage ──────────────────────────── */
+  describe("Выделенный текст");
+  {
+    const mk = (x) => T.EltonAI.selectionPrompt(x);
+    eq(mk(""), "", "пустое выделение не даёт задания");
+    eq(mk("   \n  "), "", "одни пробелы — то же самое");
+
+    const p = mk("Выгорание наступает не от нагрузки, а от бессмысленности.");
+    ok(p.includes("Выгорание наступает не от нагрузки"), "выделенный текст попадает в задание целиком");
+    ok(p.includes("именно про этот фрагмент"), "задание требует отвечать про фрагмент, а не про заметку");
+    ok(!p.includes("{0}"), "плейсхолдер подставлен, а не оставлен как есть");
+
+    // Ловушка: выделенное слово, совпадающее с триггером сценария, — это
+    // текст заметки, а не команда. Оно обязано уехать цитатой внутри задания.
+    const trap = mk("мысли");
+    ok(trap.includes("«мысли»"), "слово-триггер уходит цитатой, а не как команда");
+    ok(trap.length > 100, "и задание вокруг него длиннее, чем сам триггер");
+    // askAbout передаёт готовый бриф как scenario, поэтому сопоставитель
+    // триггеров вообще не смотрит на текст — проверяем это прямо.
+    eq(T.matchScenario("мысли", T.defaultScenarios()).scenario.name, "О чём я думал",
+      "для сравнения: то же слово, сказанное голосом, сценарий запускает");
+  }
+
+  /* ── 11. Streaming, on real captured traffic ───────────── */
+  describe("Стриминг: разбор реального потока");
+  {
+    const fs = require("fs"), path = require("path");
+    const fx = (n) => fs.readFileSync(path.join(__dirname, "fixtures", n), "utf8");
+    const TEXT = fx("sse-text.txt");
+    const TOOL = fx("sse-tool.txt");
+
+    // Обычный текстовый ответ.
+    {
+      const { msg, deltas, acc } = H.replaySSE(TEXT);
+      ok(msg.content.length > 100, "текст собирается целиком");
+      ok(msg.content.includes("заметки"), "и это осмысленный текст, а не куски");
+      ok(!msg.tool_calls, "инструментов в текстовом ответе нет");
+      // Захват делался с max_tokens: 120, и ответ в него упёрся — поэтому тут
+      // именно "length". Это ценнее, чем "stop": сигнал обрыва обязан пережить
+      // стриминг, иначе finishAnswer не узнает, что надо дозапросить остаток.
+      eq(msg.finishReason, "length", "сигнал обрыва по лимиту токенов переживает стриминг");
+      ok(deltas.length > 10, "ответ отдавался частями, а не одним куском (" + deltas.length + ")");
+      eq(deltas.join(""), msg.content, "склейка кусков даёт ровно итоговый текст");
+      ok(acc.usage && acc.usage.cost > 0, "стоимость выловлена из хвоста потока");
+    }
+
+    // Тот же поток, порезанный по-другому: границы чанков не должны ничего менять.
+    for (const size of [1, 7, 100, 5000]) {
+      const r = H.replaySSE(TEXT, size);
+      eq(r.msg.content, H.replaySSE(TEXT).msg.content,
+        "результат не зависит от размера сетевого чанка (" + size + " байт)");
+    }
+
+    // Вызов инструмента — самое хрупкое: имя в одном событии, аргументы по кускам.
+    {
+      const { msg, acc } = H.replaySSE(TOOL);
+      ok(msg.tool_calls && msg.tool_calls.length === 1, "вызов инструмента собран");
+      const call = msg.tool_calls[0];
+      eq(call.function.name, "search_notes", "имя инструмента восстановлено");
+      ok(call.id.startsWith("toolu_"), "идентификатор вызова сохранён");
+      let args = null;
+      try { args = JSON.parse(call.function.arguments); } catch {}
+      ok(args !== null, "аргументы — валидный JSON после склейки из 4 кусков");
+      eq(args && args.query, "выгорание", "и значение собралось верно, включая кириллицу");
+      eq(msg.finishReason, "tool_calls", "причина остановки — вызов инструмента");
+      ok(acc.usage && acc.usage.cost > 0, "стоимость есть и в потоке с инструментом");
+    }
+    // Резать посреди UTF-8 нельзя было бы на байтах, но на строках проверим,
+    // что склейка аргументов не зависит от границ.
+    for (const size of [3, 11, 250]) {
+      const r = H.replaySSE(TOOL, size);
+      eq(JSON.parse(r.msg.tool_calls[0].function.arguments).query, "выгорание",
+        "аргументы целы при нарезке по " + size + " байт");
+    }
+
+    // Мусор в потоке не должен ронять разбор.
+    {
+      const T2 = H.load();
+      const acc = T2.newStreamAcc();
+      let buf = "";
+      const junk = ": keep-alive\n\ndata: {битый json\n\ndata: [DONE]\n\n";
+      buf = T2.readStreamChunk(buf + junk, (j) => T2.foldStreamEvent(acc, j));
+      ok(true, "битое событие и keep-alive не роняют разбор");
+      eq(T2.finishStreamAcc(acc).content, "", "и ничего не выдумывают");
+    }
+  }
+
+  /* ── 12. Cost ──────────────────────────────────────────── */
+  describe("Стоимость ответа");
+  {
+    eq(T.formatMoney(0, "₽"), "0 ₽", "ноль — просто ноль");
+    eq(T.formatMoney(0.0000047, "₽"), "0 ₽", "неразличимо малое не притворяется числом");
+    eq(T.formatMoney(0.0085, "₽"), "0.0085 ₽", "копейки показываются с точностью");
+    eq(T.formatMoney(0.5, "₽"), "0.5 ₽", "хвостовые нули отброшены");
+    eq(T.formatMoney(12.3456, "₽"), "12.35 ₽", "рубли — до копеек");
+    eq(T.formatMoney(524.925163, "₽"), "525 ₽", "сотни — без дробей");
+    eq(T.formatMoney(0.000047, ""), "0", "доллары OpenRouter тоже сжимаются");
+
+    const mk = (provider) => {
+      const p = H.fakePlugin(H.fakeApp(), { provider, showCost: true });
+      p.spend = new T.SpendTracker(p);
+      return p;
+    };
+
+    // Через Elton AI показывается списание с баланса, не цена OpenRouter.
+    {
+      const p = mk("obsimind");
+      p.spend.add({ prompt_tokens: 17, completion_tokens: 6, cost: 0.000047 });
+      p.spend.add({ prompt_tokens: 900, completion_tokens: 300, cost: 0.004 });
+      p.spend.turn.charged = 0.73;
+      p.spend.balance = 524.925163;
+      const line = p.spend.line();
+      ok(line.includes("0.73"), "показано списание с баланса");
+      ok(line.includes("525"), "и остаток");
+      ok(line.includes("1223"), "токены сложены по всем вызовам хода");
+      ok(!line.includes("0.004"), "СЫРАЯ ЦЕНА OpenRouter НЕ показывается — маржа не видна");
+      ok(line.includes("2"), "число шагов есть");
+    }
+    // Со своим ключом OpenRouter скрывать нечего — там это ваши же деньги.
+    {
+      const p = mk("openrouter");
+      p.spend.add({ prompt_tokens: 100, completion_tokens: 50, cost: 0.0031 });
+      ok(p.spend.line().includes("$"), "со своим ключом показывается цена в долларах");
+    }
+    // Локальная модель денег не стоит — только токены.
+    {
+      const p = mk("local");
+      p.spend.add({ prompt_tokens: 10, completion_tokens: 5 });
+      const line = p.spend.line();
+      ok(!line.includes("$") && !line.includes("₽"), "у локальной модели денег нет");
+      ok(line.includes("15"), "но токены посчитаны");
+    }
+    // Пополнение посреди хода не должно рисовать отрицательный расход.
+    {
+      const p = mk("obsimind");
+      p.spend._before = 100;
+      p.spend.viaBalanceStub = true;
+      p.spend.add({ prompt_tokens: 5, completion_tokens: 5, cost: 0.001 });
+      p.spend.readBalance = async () => { p.spend.balance = 500; return 500; };
+      const turn = await p.spend.closeTurn();
+      eq(turn.charged, null, "баланс вырос — расход не показывается вместо вранья");
+    }
+    // Пустой ход не рисует строчку вообще.
+    {
+      const p = mk("obsimind");
+      eq(p.spend.line(), "", "без вызовов строки нет");
+    }
+  }
+
+  /* ── report ────────────────────────────────────────────── */
+  console.log();
+  for (const r of results) {
+    if (r.head) { console.log(`\n  ${r.head}`); continue; }
+    if (r.pass) console.log(`    ✓ ${r.name}`);
+    else console.log(`    ✗ ${r.name}\n        ${r.detail || ""}`);
+  }
+  console.log(`\n  ${passed} прошло, ${failed} упало\n`);
+  process.exit(failed ? 1 : 0);
+})().catch((e) => {
+  console.error("\nхарнесс упал:", e);
+  process.exit(1);
+});
