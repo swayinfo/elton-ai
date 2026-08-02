@@ -6,6 +6,17 @@ A voice and text assistant that works on the notes you already have. It searches
 
 The plugin ships no key of its own: every request goes to the provider you configured. With a local model, nothing leaves your machine at all.
 
+> [!IMPORTANT]
+> **This plugin sends note text to a remote service, and needs an account somewhere to work at all.**
+>
+> To answer a question it sends the fragments of your notes that the question needs — plus, in voice mode, the recording of what you said — to whichever of these four you pick:
+>
+> - **OpenRouter** or **OpenAI** — your own account and key, paid to them.
+> - **A local model** (Ollama or LM Studio) — nothing leaves your machine, and no payment at all.
+> - **Elton AI** — a proxy run by the author of this plugin at `api.eltonlabs.org`, forwarding to OpenRouter models. **It is a paid service**, sold separately through a Telegram bot; the address is fixed and cannot be changed in settings. It is the default choice in the setup guide, but the plugin is fully usable without it.
+>
+> No request is made until you have chosen a provider and entered a key. The plugin collects no analytics and sends nothing anywhere else. The exact list of addresses it can contact is in [Privacy and external services](#privacy-and-external-services) below.
+
 ## Two modes
 
 Switched from the button in the panel header, at any time — the conversation survives the switch. Both run on the same engine: the same tools, the same permissions, the same search.
