@@ -64,6 +64,23 @@ class AssistantView extends ItemView {
       this.syncVoiceBtn();
       if (!this.plugin.settings.voiceEnabled) this.plugin.speaker.stop();
     };
+    // Barge-in belongs here rather than three tabs deep in settings: it is the
+    // switch you want the moment it misfires, and when it misfires the symptom
+    // is an assistant that goes quiet — not something you would think to look
+    // for under "Voice". Desktop only, because a phone cannot do it at all.
+    if (!isMobile()) {
+      this.bargeBtn = bar.createEl("button", { cls: "oa-iconbtn" });
+      this.syncBargeBtn();
+      this.bargeBtn.onclick = async () => {
+        this.plugin.settings.allowInterrupt = !this.plugin.settings.allowInterrupt;
+        await this.plugin.saveSettings();
+        this.syncBargeBtn();
+        // Takes effect on the next hands-free session, so say so rather than
+        // leaving a switch that appears to do nothing.
+        if (this.mode === "conversation") new Notice(t("Applies to the next conversation"));
+      };
+    }
+
     const gear = bar.createEl("button", { cls: "oa-iconbtn" });
     gear.setAttr("aria-label", t("Settings"));
     setIcon(gear, "settings");
@@ -100,15 +117,6 @@ class AssistantView extends ItemView {
     /* readouts */
     this.statusEl = hud.createDiv({ cls: "oa-status" });
     this.heardEl = hud.createDiv({ cls: "oa-heard" });
-    this.replyEl = hud.createDiv({ cls: "oa-reply" });
-    // The answer is folded away by default. Reading it while waiting for the
-    // voice to catch up means hearing the same thing twice, so revealing it
-    // is a deliberate act.
-    this.replyToggle = hud.createEl("button", { cls: "oa-reply-toggle" });
-    this.replyToggle.onclick = () => {
-      this._replyOpen = !this._replyOpen;
-      this.paintReply();
-    };
     this.noteEl = hud.createDiv({ cls: "oa-note-chip" });
 
     // One tap for the thing you ask for every day. Only while idle: mid-answer
@@ -143,6 +151,19 @@ class AssistantView extends ItemView {
     setIcon(send, "arrow-up");
     send.setAttr("aria-label", t("Send"));
     send.onclick = () => this.sendTyped();
+
+    /* The written answer, folded away at the bottom.
+       It used to sit under the reactor and unfold in step with the speech,
+       which still meant a wall of text in the middle of a panel whose point
+       is that you are listening to it. Down here it is a closed drawer: the
+       answer is on the record, and reading it is something you ask for. */
+    const dock = stage.createDiv({ cls: "oa-reply-dock" });
+    this.replyToggle = dock.createEl("button", { cls: "oa-reply-toggle" });
+    this.replyToggle.onclick = () => {
+      this._replyOpen = !this._replyOpen;
+      this.paintReply();
+    };
+    this.replyEl = dock.createDiv({ cls: "oa-reply" });
 
     this.updateNoteChip();
     // Paint the readouts before showing them. Without this the toggle button
@@ -216,6 +237,19 @@ class AssistantView extends ItemView {
     setIcon(this.voiceBtn, this.plugin.settings.voiceEnabled ? "volume-2" : "volume-x");
   }
 
+  syncBargeBtn() {
+    if (!this.bargeBtn) return;
+    const on = this.plugin.settings.allowInterrupt;
+    setIcon(this.bargeBtn, on ? "ear" : "ear-off");
+    this.bargeBtn.toggleClass("is-on", !!on);
+    // The label carries the warning, because the failure is not obvious: with
+    // speakers rather than headphones it hears itself and stops mid-sentence.
+    const label = on ? t("Listening while it speaks is on — headphones recommended")
+      : t("Talk over it to interrupt: off. Click the reactor to stop it.");
+    this.bargeBtn.setAttr("aria-label", label);
+    this.bargeBtn.setAttr("title", label);
+  }
+
   /** The reactor/chat switch, in both layouts' headers. */
   addModeButton(bar, cls = "oa-iconbtn") {
     const chat = this.plugin.settings.viewMode === "chat";
@@ -243,7 +277,12 @@ class AssistantView extends ItemView {
     this.reactor = null;
     // The reactor's chips are gone with it; the chat grows its own in the
     // empty state, and a stale reference here would be styled into nothing.
+    // Same for the answer drawer and the barge-in switch: root.empty() has
+    // detached them, and writing to a detached node is a change nobody sees.
     this.scenRow = null;
+    this.replyEl = null;
+    this.replyToggle = null;
+    this.bargeBtn = null;
 
     const wrap = root.createDiv({ cls: "oa-chat" });
 
@@ -376,7 +415,9 @@ class AssistantView extends ItemView {
       idle: this.plugin.ai.isConfigured() ? t("At your service") : t("Set up the plugin first"),
       listening: t("Listening…"),
       thinking: t("Thinking…"),
-      speaking: t("Answering…"),
+      // Says how to stop it, because with barge-in off there is no other way
+      // to and nothing on screen would ever have told you.
+      speaking: t("Answering… click to stop"),
       confirm: t("Waiting for your confirmation"),
     };
     if (this.statusEl) this.statusEl.setText(label != null ? label : (DEFAULT[phase] || ""));
@@ -413,21 +454,18 @@ class AssistantView extends ItemView {
   paintReply() {
     if (!this.replyEl || !this.replyToggle) return;
     const has = !!this._replyFull;
-    // Three states, in priority order: the setting wins, then an explicit
-    // click, then the default — text trailing the voice instead of racing it.
+    // Two states now, not three. With the setting on the text keeps pace with
+    // the voice, the way it always did. With it off — the default — there is
+    // no text at all until it is asked for: an answer you can read while it is
+    // being read to you is an answer you end up taking in twice.
     const always = this.plugin.settings.showReplyText;
 
-    // The button is only honest while the voice is behind the text. With the
-    // setting on it never is; once speaking has finished it no longer is
-    // either, and "Show answer" under the answer it would show was the whole
-    // complaint. Both cases are the same test: is anything still hidden.
-    const hidden = this._replyFull !== this._replySpoken;
-    const showToggle = has && !always && hidden;
+    const showToggle = has && !always;
     this.replyToggle.toggleClass("is-hidden", !showToggle);
     // Emptying it as well as hiding it, so a stale label can never flash
     // through on the next render before paintReply runs.
     this.replyToggle.setText(showToggle ? (this._replyOpen ? t("Hide answer") : t("Show answer")) : "");
-    this.replyEl.setText(always || this._replyOpen ? this._replyFull : this._replySpoken);
+    this.replyEl.setText(always ? this._replySpoken : (this._replyOpen ? this._replyFull : ""));
   }
 
   /** Clicking the reactor starts a conversation, or cuts off a long answer. */

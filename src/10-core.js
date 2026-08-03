@@ -74,6 +74,10 @@ const RU = {
   "Blank, or start from one of the ready-made briefs.": "Пустой — или на основе одного из готовых.",
   "already added": "уже есть",
   "Empty — write what it should ask for": "Пустой — впишите, что он должен просить",
+  "Answering… click to stop": "Отвечаю… клик — прервать",
+  "Listening while it speaks is on — headphones recommended": "Перебивание голосом включено — лучше в наушниках",
+  "Talk over it to interrupt: off. Click the reactor to stop it.": "Перебивание голосом выключено. Прервать — клик по реактору.",
+  "Applies to the next conversation": "Подействует со следующего разговора",
   "Voice": "Голос",
   "Notes access": "Доступ к заметкам",
   "Search": "Поиск",
@@ -226,8 +230,8 @@ const RU = {
     "Голос не отозвался, говорю системным: {0}",
   "Speech speed": "Скорость речи",
   "Let me interrupt": "Разрешить перебивать",
-  "Start talking while it's speaking and it stops immediately to listen. Needs a microphone.":
-    "Начните говорить, пока он отвечает — он тут же замолчит и станет слушать. Нужен микрофон.",
+  "Start talking while it's speaking and it stops immediately to listen. Off by default: it keeps a microphone open while it talks, and through speakers rather than headphones it hears itself and stops on its own first sentence. Clicking the reactor stops it either way.":
+    "Начните говорить, пока он отвечает — он тут же замолчит и станет слушать. По умолчанию выключено: пока он говорит, микрофон держится открытым, и через динамики (а не наушники) он слышит сам себя и замолкает на первой же фразе. Прервать его в любом случае можно кликом по реактору.",
   "Interrupt sensitivity": "Чувствительность перебивания",
   "Lower means it gives up the floor sooner. Raise it if background noise keeps cutting it off.":
     "Ниже — быстрее уступает слово. Поднимите, если его обрывает фоновый шум.",
@@ -621,7 +625,12 @@ const DEFAULT_SETTINGS = {
   piperUrl: "http://localhost:5000",
   cloudVoice: "Puck",
   speechSpeed: 1.1,
-  allowInterrupt: true,
+  // Off. Barge-in needs a microphone open while the assistant is talking, and
+  // on any machine without headphones that microphone hears the speakers —
+  // so the assistant interrupts itself on its own first sentence and the whole
+  // answer arrives as silence. Clicking the reactor stops it, which is what
+  // people reach for anyway. Anyone in headphones can switch it back on.
+  allowInterrupt: false,
   interruptSensitivity: 8,
   micMode: "handsfree",
 

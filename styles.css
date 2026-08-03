@@ -97,6 +97,9 @@
   .oa-iconbtn:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
 }
 .oa-iconbtn:active { transform: scale(0.92); }
+/* Barge-in on: the one top-bar button whose state is worth seeing at a glance,
+   because when it misfires the assistant simply stops talking. */
+.oa-iconbtn.is-on { color: var(--interactive-accent); }
 .oa-iconbtn:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 1px; }
 .oa-iconbtn svg { width: 15px; height: 15px; }
 
@@ -239,15 +242,33 @@
    on screen with nothing between them, which read as a rendering bug. */
 .oa-heard:empty, .oa-reply:empty, .oa-note-chip:empty { display: none; }
 
+/* The written answer, as a drawer at the foot of the panel. Closed, it is one
+   faint line; open, it scrolls inside itself and never pushes the reactor
+   off the top. */
+.oa-reply-dock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
 .oa-reply {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
-  text-align: center;
-  padding: 0 24px;
-  max-width: 500px;
-  max-height: 28vh;
+  text-align: left;
+  padding: 10px 14px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 30vh;
   overflow-y: auto;
-  line-height: 1.5;
+  line-height: 1.55;
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  animation: oaRise var(--oa-fast) var(--oa-ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .oa-reply { animation: none; }
 }
 
 /* Which note is on screen is context, not an announcement. As a filled pill

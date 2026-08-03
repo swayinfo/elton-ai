@@ -561,8 +561,10 @@ class AssistantSettingTab extends PluginSettingTab {
     this.advanced(c, "voice", (a) => {
       new Setting(a).setName(t("Let me interrupt")).setHeading();
       new Setting(a)
-        .setDesc(t("Start talking while it's speaking and it stops immediately to listen. Needs a microphone."))
-        .addToggle((x) => x.setValue(s.allowInterrupt).onChange(async (v) => { s.allowInterrupt = v; await this.plugin.saveSettings(); this.display(); }));
+        .setDesc(t("Start talking while it's speaking and it stops immediately to listen. Off by default: it keeps a microphone open while it talks, and through speakers rather than headphones it hears itself and stops on its own first sentence. Clicking the reactor stops it either way."))
+        .addToggle((x) => x.setValue(s.allowInterrupt).onChange(async (v) => {
+          s.allowInterrupt = v; await this.plugin.saveSettings(); this.plugin.refreshViews(); this.display();
+        }));
 
       if (s.allowInterrupt) {
         new Setting(a)
