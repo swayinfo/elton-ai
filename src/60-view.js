@@ -664,7 +664,7 @@ class AssistantView extends ItemView {
       full = full ? full + " " + text : text;
       this.setReply(full, said);
 
-      await this.plugin.speaker.sayAll(speechChunks(text), {
+      const out = await this.plugin.speaker.sayAll(speechChunks(text), {
         shouldStop: () => this.interrupted,
         onFirstSound: () => this.plugin.ambience.stop(),
         onChunk: (part) => {
@@ -674,11 +674,26 @@ class AssistantView extends ItemView {
         onWaiting: () => { if (fill && !this.interrupted) this.plugin.ambience.start(this.plugin.settings.waitingVolume * 0.5); },
         onSpeaking: () => this.plugin.ambience.stop(),
       });
+      if (out && out.mute) this.revealUnspoken();
     }
 
     this.plugin.ambience.stop();
     // Interrupted or finished, the written answer can now stand in full.
     this.setReply(full, full);
+  }
+
+  /**
+   * The voice produced nothing, so put the answer on screen.
+   *
+   * The panel hides the text because the voice is carrying it. When the voice
+   * carries nothing, that arrangement leaves an answer that arrived, cost
+   * money and is visible nowhere — which is exactly what a mute assistant
+   * looked like from the outside for a week.
+   */
+  revealUnspoken() {
+    if (this.plugin.settings.showReplyText) return;
+    this._replyOpen = true;
+    this.paintReply();
   }
 
   async speak(raw) {
@@ -690,7 +705,7 @@ class AssistantView extends ItemView {
     // screen then matches what is actually being said.
     const text = stripMarkdown(raw);
     let said = "";
-    await this.plugin.speaker.sayAll(speechChunks(text), {
+    const out = await this.plugin.speaker.sayAll(speechChunks(text), {
       shouldStop: () => this.interrupted,
       onFirstSound: () => this.plugin.ambience.stop(),
       onChunk: (part) => {
@@ -707,6 +722,7 @@ class AssistantView extends ItemView {
     // Once it has finished talking there is nothing left to spoil, so the
     // whole answer can stand — including the part cut off by an interruption.
     this.setReply(text, text);
+    if (out && out.mute) this.revealUnspoken();
   }
 
   /* ── hands-free session ─────────────────────────────────── */

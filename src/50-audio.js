@@ -387,10 +387,21 @@ class Speaker {
    * again, so cutting an answer into scraps buys a quick first word and then
    * stalls forever. The splitter aims for clauses, not words.
    */
-  async sayAll(parts, { shouldStop, onFirstSound, onWaiting, onSpeaking, onChunk, window = 4 } = {}) {
+  /* NOT named "window". It was, and the linter's popout-window autofix then
+     rewrote a bare setTimeout in here into window.setTimeout — which resolved
+     to the number 4. Every call threw on its first fragment, so the assistant
+     went completely mute, and the answer text on screen hid it. */
+  async sayAll(parts, { shouldStop, onFirstSound, onWaiting, onSpeaking, onChunk, lookahead = 4 } = {}) {
     if (!parts.length) return;
     this.cancelled = false;
     const stop = () => this.cancelled || (shouldStop && shouldStop());
+    // Counted, because the interesting case is all of them. A per-fragment
+    // console.warn is how an assistant stays mute for a week: every fragment
+    // failed, every failure was logged where nobody was looking, and on
+    // screen it was indistinguishable from an answer nobody asked to hear.
+    let lost = 0;
+    let firstFailure = null;
+    let spoken = 0;
 
     const queue = new Array(parts.length).fill(null);
     const start = (i) => {
@@ -402,14 +413,15 @@ class Speaker {
       queue[i] = p;
     };
 
-    // Fill the window immediately: the first chunks all wait out their
+    // Fill the lookahead immediately: the first chunks all wait out their
     // latency together instead of in series.
-    for (let i = 0; i < Math.min(window, parts.length); i++) start(i);
+    for (let i = 0; i < Math.min(lookahead, parts.length); i++) start(i);
 
     for (let i = 0; i < parts.length; i++) {
       if (stop()) break;
 
       let desc = null;
+      let failure = null;
       try {
         // If the next fragment is not back yet, this is dead air. Say so, so
         // the caller can fill it — the service's latency swings by 2x from
@@ -420,11 +432,16 @@ class Speaker {
         if ((await settled) === "__slow__" && onWaiting) { waiting = true; onWaiting(); }
         desc = await pending;
         if (waiting && onSpeaking) onSpeaking();
-      } catch (e) { console.warn("[Elton AI] could not synthesise a fragment:", e.message); }
+      } catch (e) {
+        failure = e.message;
+        lost++;
+        console.warn("[Elton AI] could not synthesise a fragment:", e.message);
+      }
+      if (failure && !firstFailure) firstFailure = failure;
       queue[i] = null;        // let the audio be collected once played
       // Refill only now that this slot has actually freed, so the number in
-      // flight stays at the window rather than one over it.
-      start(i + window);
+      // flight stays at the lookahead rather than one over it.
+      start(i + lookahead);
       if (stop()) break;
       if (!desc) continue;
 
@@ -432,8 +449,14 @@ class Speaker {
       // Announce the fragment as its sound starts, so a caller showing text
       // can keep it level with the voice instead of racing ahead of it.
       if (onChunk) onChunk(parts[i], i);
+      spoken++;
       await this.playPrepared(desc);
     }
+
+    // Nothing came out at all, and it was not because you stopped it.
+    const mute = !spoken && lost > 0 && !stop();
+    if (mute) new Notice(t("Nothing could be spoken: {0}", firstFailure || ""), 10000);
+    return { spoken, lost, mute };
   }
 
   playBuffer(arrayBuffer, mime) {

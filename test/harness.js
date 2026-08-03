@@ -55,7 +55,9 @@ class Setting {
 const OBSIDIAN_STUB = {
   Plugin, PluginSettingTab, Setting, ItemView, Modal, Component,
   TFile, TFolder,
-  Notice: class { constructor(msg) { this.message = msg; } },
+  // Remembers what it was told, so a test can assert that a failure actually
+  // reached the screen rather than only the console.
+  Notice: class { constructor(msg) { this.message = msg; (OBSIDIAN_STUB.Notice.seen ||= []).push(String(msg)); } },
   normalizePath: (p) => String(p).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
   requestUrl: async () => { throw new Error("network is not available in tests"); },
   setIcon: () => {},
@@ -100,6 +102,7 @@ const EXPOSED = [
   "pickRecordingType", "formatFromMime", "RECORDING_TYPES", "EltonAI",
   "newStreamAcc", "foldStreamEvent", "readStreamChunk", "finishStreamAcc",
   "SpendTracker", "formatMoney",
+  "Speaker", "speechChunks", "sentences",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */

@@ -78,6 +78,7 @@ const RU = {
   "Listening while it speaks is on — headphones recommended": "Перебивание голосом включено — лучше в наушниках",
   "Talk over it to interrupt: off. Click the reactor to stop it.": "Перебивание голосом выключено. Прервать — клик по реактору.",
   "Applies to the next conversation": "Подействует со следующего разговора",
+  "Nothing could be spoken: {0}": "Озвучить не вышло совсем: {0}",
   "Voice": "Голос",
   "Notes access": "Доступ к заметкам",
   "Search": "Поиск",

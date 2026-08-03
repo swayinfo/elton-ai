@@ -489,6 +489,96 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── 9. The speaker actually gets through the whole answer ─
+   * Written after sayAll spent a week throwing on its first fragment: a
+   * parameter called `window` shadowed the global one, so window.setTimeout
+   * inside the loop resolved to a number. Nothing caught it because nothing
+   * had ever driven this loop end to end. */
+  describe("Озвучка: весь ответ проговаривается, а не первый кусок");
+  {
+    /**
+     * A speaker whose synthesis is slow, the way the real one is.
+     *
+     * The delay is the test, not decoration. sayAll races each fragment
+     * against a 250ms timer to decide whether to fill the silence; with an
+     * instant stub the fragment always wins that race and the timer is never
+     * built — which is exactly why the shadowed `window` went unnoticed.
+     * Synthesis takes seconds in life, so here it takes a few milliseconds.
+     */
+    const mkSpeaker = (opts = {}) => {
+      const played = [];
+      const sp = new T.Speaker({ settings: Object.assign({}, T.DEFAULT_SETTINGS), ai: {} });
+      sp.prepare = async (text) => {
+        await new Promise((r) => setTimeout(r, opts.slow ? 300 : 3));
+        if (opts.failOn && opts.failOn(text)) throw new Error("синтез не вышел");
+        return { spoken: text };
+      };
+      sp.playPrepared = async (desc) => { if (desc) played.push(desc.spoken); };
+      return { sp, played };
+    };
+
+    {
+      // The one that reproduces it: synthesis slower than the 250ms the loop
+      // is willing to wait, so the timer really does get built.
+      const { sp, played } = mkSpeaker({ slow: true });
+      const waited = [];
+      await sp.sayAll(["Первая фраза.", "Вторая фраза."], { onWaiting: () => waited.push(1) });
+      eq(played.join(" | "), "Первая фраза. | Вторая фраза.",
+        "медленный синтез: куски всё равно проговариваются, а не отбрасываются");
+      ok(waited.length > 0, "и о паузе сообщено, чтобы её было чем заполнить");
+    }
+
+    {
+      const { sp, played } = mkSpeaker();
+      const parts = ["Первая фраза.", "Вторая фраза.", "Третья фраза.", "Четвёртая.", "Пятая.", "Шестая."];
+      const said = [];
+      await sp.sayAll(parts, { onChunk: (p) => said.push(p) });
+      eq(played.join(" | "), parts.join(" | "), "проговорены все шесть кусков по порядку");
+      eq(said.length, parts.length, "и о каждом сообщено через onChunk");
+    }
+    {
+      // The lookahead is more than the number of parts: the loop must not
+      // read past the end of its own queue.
+      const { sp, played } = mkSpeaker();
+      await sp.sayAll(["Одна фраза."]);
+      eq(played.length, 1, "один кусок — тоже один кусок, а не падение");
+    }
+    {
+      // One bad fragment is skipped, the rest still get said.
+      const { sp, played } = mkSpeaker({ failOn: (t2) => t2.includes("Вторая") });
+      await sp.sayAll(["Первая.", "Вторая.", "Третья."]);
+      eq(played.join(" | "), "Первая. | Третья.", "неудачный кусок пропускается, ответ не обрывается");
+    }
+    {
+      // Every fragment failing is the case that has to be said out loud.
+      const { sp, played } = mkSpeaker({ failOn: () => true });
+      const before = H.OBSIDIAN_STUB.Notice.seen ? H.OBSIDIAN_STUB.Notice.seen.length : 0;
+      await sp.sayAll(["Раз.", "Два."]);
+      eq(played.length, 0, "не сыграно ничего");
+      const after = H.OBSIDIAN_STUB.Notice.seen || [];
+      ok(after.length > before && /Озвучить не вышло/.test(after[after.length - 1]),
+        "и об этом сказано на экране, а не только в консоли");
+    }
+    {
+      // Stopping means stopping — the rest of the queue is not played.
+      const { sp, played } = mkSpeaker();
+      let n = 0;
+      await sp.sayAll(["А.", "Б.", "В.", "Г."], { shouldStop: () => ++n > 2 });
+      ok(played.length < 4, `остановка обрывает очередь (сыграно ${played.length})`);
+    }
+    {
+      // The reactor speaks whatever speechChunks hands it, so the two have to
+      // agree: a real answer must come out in one piece.
+      const { sp, played } = mkSpeaker();
+      const answer = "Привет, Элтон. Последние пару дней ты правил плагин. "
+        + "Тридцать первого июля разбирался с кнопками, первого августа — со сценариями. "
+        + "Осталось выложить релиз.";
+      await sp.sayAll(T.speechChunks(answer));
+      eq(played.join(" ").replace(/\s+/g, " "), answer.replace(/\s+/g, " "),
+        "нарезанный ответ склеивается обратно в тот же текст");
+    }
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {
