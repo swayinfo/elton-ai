@@ -587,10 +587,11 @@ class AssistantSettingTab extends PluginSettingTab {
           .addSlider((sl) => sl.setLimits(0.05, 1, 0.05).setValue(s.waitingVolume).setDynamicTooltip()
             .onChange(async (v) => { s.waitingVolume = v; await this.plugin.saveSettings(); }))
           .addExtraButton((b) => b.setIcon("play").setTooltip(t("Play it")).onClick(() => {
-            // Two passes is enough to judge both the sound and its repeat.
+            // One pass. Passes are fifteen seconds apart now, so waiting for
+            // a second one would be a preview that is mostly silence.
             this.plugin.ambience.stop();
             this.plugin.ambience.start(s.waitingVolume);
-            window.setTimeout(() => this.plugin.ambience.stop(), 5200);
+            window.setTimeout(() => this.plugin.ambience.stop(), 2400);
           }));
 
         this.fileField(

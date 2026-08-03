@@ -102,7 +102,7 @@ const EXPOSED = [
   "pickRecordingType", "formatFromMime", "RECORDING_TYPES", "EltonAI",
   "newStreamAcc", "foldStreamEvent", "readStreamChunk", "finishStreamAcc",
   "SpendTracker", "formatMoney",
-  "Speaker", "speechChunks", "sentences",
+  "Speaker", "speechChunks", "sentences", "Ambience", "AMBIENCE_REPEAT_MS",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */

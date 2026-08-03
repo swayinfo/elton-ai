@@ -579,6 +579,48 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── 10. The waiting sound is a signal, not a metronome ── */
+  describe("Звук ожидания: не долбит и не остаётся включённым");
+  {
+    // The clip is 1.9s long, so the gap between passes is what decides
+    // whether this reads as "still working" or as a noise.
+    ok(T.AMBIENCE_REPEAT_MS >= 10000,
+      `между повторами не меньше 10 с (сейчас ${T.AMBIENCE_REPEAT_MS / 1000} с, клип длится 1.9 с)`);
+
+    // A custom file is read from the vault, and the answer can arrive while
+    // it is still being read. The sound must not start after that.
+    {
+      let started = 0;
+      let release;
+      const held = new Promise((r) => { release = r; });
+      const plugin = {
+        settings: Object.assign({}, T.DEFAULT_SETTINGS, { waitingSoundFile: "звук.wav" }),
+        app: { vault: { adapter: { readBinary: async () => { await held; return new ArrayBuffer(8); } } } },
+      };
+      const amb = new T.Ambience(plugin);
+      amb.startClip = () => { started++; };
+      amb.startSynth = () => { started++; };
+
+      const pending = amb.startFile("звук.wav", 0.3);
+      amb.stop();          // the answer arrived while the file was loading
+      release();
+      await pending;
+      eq(started, 0, "звук не включается уже после остановки");
+    }
+    {
+      // And the ordinary case still plays.
+      let started = 0;
+      const plugin = {
+        settings: Object.assign({}, T.DEFAULT_SETTINGS, { waitingSoundFile: "звук.wav" }),
+        app: { vault: { adapter: { readBinary: async () => new ArrayBuffer(8) } } },
+      };
+      const amb = new T.Ambience(plugin);
+      amb.startClip = () => { started++; };
+      await amb.startFile("звук.wav", 0.3);
+      eq(started, 1, "без остановки — играет как обычно");
+    }
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {

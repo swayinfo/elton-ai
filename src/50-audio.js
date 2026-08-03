@@ -11,6 +11,11 @@ const SPEECH_THRESHOLD = 5;     // RMS above which we call it speech
 const MIN_SPEECH_MS = 300;      // shorter than this is a cough, not a phrase
 const SILENCE_HANG = 1100;      // pause that ends a turn — long enough to think mid-sentence
 const TICK_MS = 100;
+/* How long between passes of the waiting sound. Long on purpose: the clip
+   lasts 1.9s, so anything under about ten seconds runs it almost back to
+   back for the whole time an answer takes. */
+const AMBIENCE_REPEAT_MS = 15000;
+
 const BARGE_GRACE_MS = 700;     // don't hear our own first syllable as an interruption
 const BARGE_TICK_MS = 60;
 const BARGE_SUSTAIN_MS = 360;   // sustained speech required to take the floor
@@ -511,6 +516,9 @@ class Ambience {
     this.clip = null;        // object URL for the shipped sample
     this.audio = null;
     this.loop = null;
+    // Bumped by every stop(), so anything that was still loading when the
+    // wait ended knows not to start playing.
+    this._gen = 0;
   }
 
   get running() { return !!this.ctx || !!this.loop; }
@@ -546,19 +554,33 @@ class Ambience {
   }
 
   async startFile(vaultPath, volume) {
+    // Reading the file takes a moment, and the answer can arrive inside it.
+    // Without this the sound starts AFTER the stop that was meant to end it,
+    // and nothing comes along to stop it a second time — it just plays on.
+    const gen = this._gen;
     try {
       const p = normalizePath(vaultPath);
       const buf = await this.plugin.app.vault.adapter.readBinary(p);
+      if (gen !== this._gen) return;
       const url = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
       this._custom = url;
       this.startClip(url, volume);
     } catch (e) {
+      if (gen !== this._gen) return;
       console.warn("[Elton AI] could not play the chosen waiting sound:", e.message);
       this.startSynth(volume * 0.2);
     }
   }
 
-  /** Repeat the clip with a breath between passes, rather than back to back. */
+  /**
+   * Play the clip, then again only if the wait really drags.
+   *
+   * The clip is 1.9 seconds and it used to repeat every 2.6, which is a
+   * seven-tenths-of-a-second gap — twenty-three of them in a minute of
+   * thinking. That is not "the assistant is still there", that is a noise.
+   * One sound says the request landed; the rest is for a wait long enough
+   * that you would otherwise start wondering.
+   */
   startClip(url, volume) {
     this._wanted = true;
     const play = () => {
@@ -569,7 +591,7 @@ class Ambience {
       a.play().catch(() => {});
     };
     play();
-    this.loop = window.setInterval(play, 2600);
+    this.loop = window.setInterval(play, AMBIENCE_REPEAT_MS);
   }
 
   startSynth(volume = 0.05) {
@@ -596,8 +618,9 @@ class Ambience {
         this.nodes.push(o);
       }
 
-      // A soft blip every 1.4s, riding on top. Scheduled ahead of time so
-      // the rhythm does not drift with timer jitter.
+      // A soft blip on top of the drone. Rare, for the same reason the clip
+      // is: the drone already says something is happening, and a chirp every
+      // second and a half is the part people reach for the mute button over.
       const blip = () => {
         if (!this.ctx) return;
         const now = ctx.currentTime;
@@ -613,7 +636,7 @@ class Ambience {
         o.start(now); o.stop(now + 0.3);
       };
       blip();
-      this.timer = window.setInterval(blip, 1400);
+      this.timer = window.setInterval(blip, AMBIENCE_REPEAT_MS);
     } catch (e) {
       console.warn("[Elton AI] waiting sound unavailable:", e.message);
       this.ctx = null;
@@ -621,6 +644,7 @@ class Ambience {
   }
 
   stop() {
+    this._gen++;
     this._wanted = false;
     if (this.loop) { window.clearInterval(this.loop); this.loop = null; }
     if (this.audio) { try { this.audio.pause(); } catch {} this.audio = null; }
