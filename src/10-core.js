@@ -69,6 +69,11 @@ const RU = {
   "Collapse": "Свернуть",
   "All scenarios": "Все сценарии",
   "Open the panel": "Открыть панель",
+  "Looking at the last {0} days": "Смотрю последние дни: {0}",
+  "Add": "Добавить",
+  "Blank, or start from one of the ready-made briefs.": "Пустой — или на основе одного из готовых.",
+  "already added": "уже есть",
+  "Empty — write what it should ask for": "Пустой — впишите, что он должен просить",
   "Voice": "Голос",
   "Notes access": "Доступ к заметкам",
   "Search": "Поиск",
@@ -253,8 +258,10 @@ const RU = {
   "Folder for new notes": "Папка для новых заметок",
   "Where notes the assistant creates end up.": "Куда попадают заметки, созданные ассистентом.",
   "Daily notes folder": "Папка ежедневных заметок",
-  "Lets it answer \"what did I do yesterday\". Leave empty if you don't keep daily notes.":
-    "Позволяет отвечать на «что я вчера делал». Оставьте пустым, если не ведёте ежедневные заметки.",
+  "Lets it answer \"what did I do yesterday\". Taken from your Obsidian daily notes settings: {0}":
+    "Позволяет отвечать на «что я вчера делал». Взята из настроек ежедневных заметок Obsidian: {0}",
+  "Lets it answer \"what did I do yesterday\". Empty means the folder from your Obsidian daily notes settings.":
+    "Позволяет отвечать на «что я вчера делал». Пусто — берётся папка из настроек ежедневных заметок Obsidian.",
   "Confirm every edit": "Подтверждать каждую правку",
   "Ask before writing anything, not just before deleting. Safer, slower.":
     "Спрашивать перед любой записью, а не только перед удалением. Надёжнее, но медленнее.",

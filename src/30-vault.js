@@ -587,8 +587,42 @@ class VaultBridge {
     this.app.workspace.setActiveLeaf(leaf, { focus: false });
   }
 
+  /**
+   * Notes changed in the last `days` days, newest first.
+   *
+   * The one thing the assistant had no way to ask. Every other lookup is by
+   * topic or by name, and "what was I doing over the last couple of days" is
+   * neither — so it went to search_notes, which is blind to time, and came
+   * back with whatever matched best in the whole vault. In August it answered
+   * with February and had no way to know it was wrong.
+   */
+  recentNotes(days = 3, limit = 30) {
+    const since = Date.now() - Math.max(1, Number(days) || 3) * 86400000;
+    return this.files()
+      .filter((f) => f.stat.mtime >= since)
+      .sort((a, b) => b.stat.mtime - a.stat.mtime)
+      .slice(0, limit);
+  }
+
+  /**
+   * Where the daily notes live.
+   *
+   * Falls back to Obsidian's own daily-notes settings when ours is empty,
+   * which it is for anyone who never opened our Notes tab. The tool was
+   * simply absent for them, and "what did I do yesterday" then became a
+   * topic search — the same failure as above, from a blank field.
+   */
+  dailyFolder() {
+    if (this.s.dailyFolder) return this.s.dailyFolder;
+    const core = this.app.internalPlugins && this.app.internalPlugins.getPluginById
+      ? this.app.internalPlugins.getPluginById("daily-notes")
+      : null;
+    const folder = core && core.instance && core.instance.options && core.instance.options.folder;
+    return folder ? String(folder).replace(/^\/+|\/+$/g, "") : "";
+  }
+
   dailyNote(when) {
-    const folder = this.s.dailyFolder;
+    const folder = this.dailyFolder();
     if (!folder) return null;
     const d = new Date();
     const w = String(when || "").toLowerCase().trim();

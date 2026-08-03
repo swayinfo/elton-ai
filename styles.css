@@ -512,6 +512,19 @@
 }
 .oa-index-detail.is-hidden,
 .oa-index-problem.is-hidden { display: none; }
+/* The last thing on the interface tab: version and the one-line promise about
+   where notes go. Used to be a tab of its own. */
+.oa-set-foot {
+  margin-top: 26px;
+  padding-top: 14px;
+  border-top: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  line-height: 1.6;
+  max-width: 60ch;
+}
+.oa-set-foot-title { color: var(--text-muted); font-weight: 500; margin-bottom: 3px; }
+
 .oa-about-text {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
@@ -861,7 +874,8 @@
 /* No text means no button. This is the empty white rectangle that used to
    sit under "At your service" on a fresh panel: the element was built at
    render time and only hidden once an answer existed to toggle. */
-.oa-reply-toggle:empty { display: none; }
+.oa-reply-toggle:empty,
+.oa-reply-toggle.is-hidden { display: none; }
 @media (hover: hover) and (pointer: fine) {
   .oa-reply-toggle:hover { color: var(--text-muted); background: none; }
 }

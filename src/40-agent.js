@@ -36,7 +36,7 @@ function webSearchOK(s) {
   return !!s.webSearch && (s.provider === "obsimind" || s.provider === "openrouter");
 }
 
-function buildTools(s) {
+function buildTools(s, plugin) {
   const tools = [];
   const fn = (name, description, properties, required) =>
     tools.push({ type: "function", function: { name, description, parameters: { type: "object", properties, required: required || [] } } });
@@ -62,9 +62,14 @@ function buildTools(s) {
       { query: { type: "string", description: "Text or a regular expression" },
         pattern: { type: "string", description: "Optional: limit to paths matching this pattern" } },
       ["query"]);
-    if (s.dailyFolder) {
+    fn("recent_notes",
+      "What the user has written or changed lately, newest first, with the date of each. This is the ONLY way to answer anything about a period of time — \"the last few days\", \"this week\", \"lately\", \"recently\". search_notes ranks by topic and ignores dates entirely, so it will happily return something from six months ago.",
+      { days: { type: "number", description: "How far back to look. 3 for \"the last few days\", 7 for \"this week\"." } }, []);
+    // Registered whether or not the setting was ever filled in: the folder is
+    // read from Obsidian's own daily-notes settings when ours is empty.
+    if (plugin.vault.dailyFolder()) {
       fn("daily_note",
-        "The user's daily note for a date. Needed for questions like \"what did I do yesterday\" — ordinary search does not find these reliably.",
+        "The user's daily note for one date. Needed for questions like \"what did I do yesterday\" — ordinary search does not find these reliably. For a span of days use recent_notes instead of calling this once per day.",
         { when: { type: "string", description: "today, yesterday, or a date as DD-MM-YYYY" } }, ["when"]);
     }
   }
@@ -185,7 +190,15 @@ async function buildSystemPrompt(plugin, { written = false } = {}) {
     } catch {}
   }
 
-  lines.push("", `Reply in the same language the user speaks to you in. Today is ${todayKey()}.`);
+  lines.push("", `Reply in the same language the user speaks to you in.`);
+  // Spelled out rather than mentioned in passing. One clause at the end of a
+  // long prompt was not enough to stop "the last couple of days" being served
+  // from February: the model had the date and no reason to connect it to the
+  // fact that its only search tool cannot see dates at all.
+  lines.push("",
+    `Today is ${todayKey()} (DD-MM-YYYY).`,
+    "Anything about a stretch of time — \"the last few days\", \"this week\", \"lately\", \"recently\" — is answered with recent_notes, never with search_notes. search_notes ranks by topic alone and cannot tell this month from last year.",
+    "Before you say when something happened, check the date you were actually given for it. Do not date anything from memory, and do not present an old note as recent.");
   return lines.join("\n");
 }
 
@@ -252,7 +265,7 @@ class Agent {
       try { s._skillIndex = await plugin.ai.skillIndex(); }
       catch { s._skillIndex = []; }
     }
-    const tools = buildTools(s);
+    const tools = buildTools(s, plugin);
 
     const messages = [
       { role: "system", content: await buildSystemPrompt(plugin, { written }) },
@@ -436,6 +449,18 @@ class Agent {
         if (!hits.length) return `"${args.query}" does not appear in any note.`;
         for (const h of hits.slice(0, 8)) { const f = V.resolve(h.path); if (f) this.noteSource(f); }
         return hits.map((h) => `${h.path}:${h.line}  ${h.text}`).join("\n");
+      }
+
+      case "recent_notes": {
+        const days = Math.min(60, Math.max(1, Number(args.days) || 3));
+        onEvent({ kind: "action", text: t("Looking at the last {0} days", days) });
+        const files = V.recentNotes(days, 30);
+        if (!files.length) return `Nothing was written or changed in the last ${days} days.`;
+        for (const f of files.slice(0, 8)) this.noteSource(f);
+        // The date goes on every line: without it the model has the notes but
+        // still no idea which of them is yesterday's.
+        const lines = files.map((f) => `${todayKey(new Date(f.stat.mtime))}  ${f.path}`);
+        return `Notes changed in the last ${days} days, newest first (today is ${todayKey()}):\n${lines.join("\n")}\n\nRead the ones that matter with read_note.`;
       }
 
       case "daily_note": {

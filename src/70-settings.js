@@ -146,7 +146,6 @@ class AssistantSettingTab extends PluginSettingTab {
       { id: "scenarios", label: t("Scenarios") },
       { id: "automations", label: t("Automations") },
       { id: "ui", label: t("Interface") },
-      { id: "about", label: t("About") },
     ];
     if (!TABS.some((x) => x.id === this._tab)) this._tab = "connection";
     const bar = c.createDiv({ cls: "oa-set-tabs" });
@@ -171,7 +170,6 @@ class AssistantSettingTab extends PluginSettingTab {
       scenarios: () => this.tabScenarios(body),
       automations: () => this.tabAutomations(body),
       ui: () => this.tabUI(body),
-      about: () => this.tabAbout(body),
     })[this._tab]();
   }
 
@@ -682,11 +680,17 @@ class AssistantSettingTab extends PluginSettingTab {
           "Inbox");
       }
 
+      // Empty no longer means "off" — it means "wherever Obsidian keeps them".
+      // Say which folder that turned out to be, or the field reads as a
+      // feature nobody switched on.
+      const found = this.plugin.vault.dailyFolder();
       this.folderField(
         new Setting(a).setName(t("Daily notes folder"))
-          .setDesc(t("Lets it answer \"what did I do yesterday\". Leave empty if you don't keep daily notes.")),
+          .setDesc(!s.dailyFolder && found
+            ? t("Lets it answer \"what did I do yesterday\". Taken from your Obsidian daily notes settings: {0}", found)
+            : t("Lets it answer \"what did I do yesterday\". Empty means the folder from your Obsidian daily notes settings.")),
         () => s.dailyFolder,
-        async (v) => { s.dailyFolder = v; await this.plugin.saveSettings(); },
+        async (v) => { s.dailyFolder = v; await this.plugin.saveSettings(); this.display(); },
         "Daily");
     });
   }
@@ -845,16 +849,26 @@ class AssistantSettingTab extends PluginSettingTab {
     }
     s.scenarios.forEach((sc) => this.scenarioCard(c, sc));
 
-    let pick = "thoughts";
-    const add = new Setting(c).setName(t("Add scenario"));
+    // Blank first, and selected. The list used to open on "What I was
+    // thinking" — which every vault already has, because it is one of the
+    // three it starts with. Pressing add then produced a second copy of a
+    // card already on screen, which reads as the button not working rather
+    // than as a scenario being created.
+    let pick = "custom";
+    const have = new Set(s.scenarios.map((x) => (x.name || "").trim()));
+    const add = new Setting(c).setName(t("Add scenario"))
+      .setDesc(t("Blank, or start from one of the ready-made briefs."));
     add.addDropdown((d) => {
       const p = scenarioPresets();
-      for (const key of ["thoughts", "today", "wrapup", "week", "inbox", "loose", "explain", "links", "quiz", "forgotten", "draft", "custom"]) {
-        d.addOption(key, `${p[key].emoji} ${p[key].name}`);
+      for (const key of ["custom", "thoughts", "today", "wrapup", "week", "inbox", "loose", "explain", "links", "quiz", "forgotten", "draft"]) {
+        // Say so rather than hide it: a second copy is a fair thing to want,
+        // and a preset vanishing from the list looks like a bug of its own.
+        const seen = key !== "custom" && have.has((p[key].name || "").trim());
+        d.addOption(key, `${p[key].emoji} ${p[key].name}` + (seen ? ` · ${t("already added")}` : ""));
       }
       d.setValue(pick).onChange((v) => { pick = v; });
     });
-    add.addButton((b) => b.setCta().setButtonText("+").onClick(async () => {
+    add.addButton((b) => b.setCta().setButtonText(t("Add")).onClick(async () => {
       const fresh = newScenario(pick);
       s.scenarios.push(fresh);
       // Open the one just added — a new card that appears folded looks like
@@ -872,7 +886,10 @@ class AssistantSettingTab extends PluginSettingTab {
     const card = this.foldCard(c, {
       id: sc.id,
       title: scenarioLabel(sc),
-      subtitle: sc.triggers || t("No trigger phrase — button only"),
+      // A blank scenario does nothing at all yet — neither a phrase nor a
+      // button — and saying "button only" would be a straight lie.
+      subtitle: !sc.prompt ? t("Empty — write what it should ask for")
+        : (sc.triggers || t("No trigger phrase — button only")),
       enabled: sc.enabled,
       onToggle: async (v) => {
         sc.enabled = v; await this.plugin.saveSettings(); this.plugin.refreshViews(); this.display();
@@ -1103,13 +1120,13 @@ class AssistantSettingTab extends PluginSettingTab {
         .addText((tx) => tx.setPlaceholder("Conversations").setValue(s.conversationFolder)
           .onChange(async (v) => { s.conversationFolder = v.trim().replace(/^\/+|\/+$/g, ""); await this.plugin.saveSettings(); }));
     }
-  }
 
-  /* ── about ──────────────────────────────────────────────── */
-  tabAbout(c) {
-    c.createDiv({ cls: "oa-note", text: t("Version {0}", this.plugin.manifest.version) });
-    c.createDiv({ cls: "oa-about-text", text: t("Your notes stay in your vault. Only the text needed to answer a question is sent to the provider you chose — and with a local model, nothing leaves your machine at all.") });
-    new Setting(c).addButton((b) => b.setButtonText(t("Show the setup guide again"))
-      .onClick(() => new OnboardingModal(this.app, this.plugin).open()));
+    // What used to be a ninth tab. Two sentences and a version number did not
+    // earn a tab of their own — one that then sat alone past the right edge of
+    // the strip — and the setup guide is already a button at the top of every
+    // tab. It reads better as the last thing on the page than as a place to go.
+    const foot = c.createDiv({ cls: "oa-set-foot" });
+    foot.createDiv({ cls: "oa-set-foot-title", text: `Elton AI ${this.plugin.manifest.version}` });
+    foot.createDiv({ text: t("Your notes stay in your vault. Only the text needed to answer a question is sent to the provider you chose — and with a local model, nothing leaves your machine at all.") });
   }
 }

@@ -149,10 +149,12 @@ class AutomationScheduler {
     } else {
       // Into today's daily note — creating it if the day hasn't one yet.
       file = V.dailyNote("today");
-      if (!file && plugin.settings.dailyFolder) {
-        await V.ensureFolder(plugin.settings.dailyFolder);
-        file = await plugin.app.vault.create(
-          normalizePath(plugin.settings.dailyFolder + "/" + stamp + ".md"), "");
+      // Same folder the daily_note tool uses, which falls back to
+      // Obsidian's own daily-notes settings when ours was never filled in.
+      const daily = V.dailyFolder();
+      if (!file && daily) {
+        await V.ensureFolder(daily);
+        file = await plugin.app.vault.create(normalizePath(daily + "/" + stamp + ".md"), "");
       }
       if (file) await V.appendToNote(file, body, a.heading || title);
       else file = await V.createNote(`${title} ${stamp}`, body, plugin.settings.newNoteFolder || "");

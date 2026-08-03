@@ -417,10 +417,13 @@ class AssistantView extends ItemView {
     // click, then the default — text trailing the voice instead of racing it.
     const always = this.plugin.settings.showReplyText;
 
-    // With the setting on the text is always there, so a toggle would be a
-    // button that does nothing.
-    const showToggle = has && !always;
-    this.replyToggle.style.display = showToggle ? "" : "none";
+    // The button is only honest while the voice is behind the text. With the
+    // setting on it never is; once speaking has finished it no longer is
+    // either, and "Show answer" under the answer it would show was the whole
+    // complaint. Both cases are the same test: is anything still hidden.
+    const hidden = this._replyFull !== this._replySpoken;
+    const showToggle = has && !always && hidden;
+    this.replyToggle.toggleClass("is-hidden", !showToggle);
     // Emptying it as well as hiding it, so a stale label can never flash
     // through on the next render before paintReply runs.
     this.replyToggle.setText(showToggle ? (this._replyOpen ? t("Hide answer") : t("Show answer")) : "");

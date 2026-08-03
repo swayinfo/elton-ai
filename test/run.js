@@ -158,8 +158,19 @@ function eq(actual, expected, name) {
   /* ── 5. Permissions decide the toolset ─────────────────── */
   describe("Права: выключенное право = отсутствие инструмента");
   {
-    const names = (s) => T.buildTools(Object.assign({}, T.DEFAULT_SETTINGS, s)).map((x) => x.function.name);
+    // buildTools asks the vault where the daily notes live, so that the
+    // daily_note tool exists for people who never filled the setting in.
+    const withDaily = (folder) => ({ vault: { dailyFolder: () => folder || "" } });
+    const names = (s, plugin) =>
+      T.buildTools(Object.assign({}, T.DEFAULT_SETTINGS, s), plugin || withDaily("")).map((x) => x.function.name);
     const all = names({});
+
+    ok(all.includes("recent_notes"), "recent_notes есть — без него «за последние дни» отвечать нечем");
+    ok(!all.includes("daily_note"), "daily_note нет, пока папка ежедневных заметок не найдена");
+    ok(names({}, withDaily("Daily")).includes("daily_note"),
+      "и появляется, когда папку удалось взять из настроек Obsidian, даже если своё поле пустое");
+    ok(!names({ canRead: false }).includes("recent_notes"), "без права на чтение нет и recent_notes");
+
     for (const n of ["list_tabs", "open_url", "close_tab", "open_beside"]) {
       ok(all.includes(n), `${n} есть, когда управление вкладками включено`);
     }
@@ -173,6 +184,37 @@ function eq(actual, expected, name) {
     ok(!names({ webSearch: false }).includes("search_web"), "без веб-поиска нет search_web");
     ok(!names({ webSearch: true, provider: "openai" }).includes("search_web"),
       "у OpenAI-напрямую веб-поиска нет даже с включённым тумблером");
+  }
+
+  /* ── 5b. Recent notes: the assistant's only sense of time ─ */
+  describe("Свежие заметки: единственный способ понять «за последние дни»");
+  {
+    const day = 86400000;
+    const mk = (path, daysAgo) => {
+      const f = new H.TFile(path);
+      f.stat = { mtime: Date.now() - daysAgo * day };
+      return f;
+    };
+    const files = [
+      mk("вчера.md", 1),
+      mk("позавчера.md", 2),
+      mk("сегодня.md", 0),
+      mk("в феврале.md", 170),
+      mk("неделю назад.md", 7),
+    ];
+    const app = H.fakeApp();
+    app.vault.getMarkdownFiles = () => files;
+    const p = H.fakePlugin(app, {});
+
+    const three = p.vault.recentNotes(3).map((f) => f.path);
+    eq(three.join(", "), "сегодня.md, вчера.md, позавчера.md",
+      "за три дня — только эти три, свежая первой");
+    ok(!three.includes("в феврале.md"),
+      "февральская заметка в «последние дни» не попадает — это и был баг");
+
+    eq(p.vault.recentNotes(10).length, 4, "за десять дней добавляется недельная");
+    eq(p.vault.recentNotes(365).length, 5, "за год — все");
+    eq(p.vault.recentNotes(3, 2).length, 2, "предел на количество соблюдается");
   }
 
   /* ── 6. The tools themselves ───────────────────────────── */
