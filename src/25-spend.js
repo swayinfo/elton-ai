@@ -70,10 +70,17 @@ class SpendTracker {
     }
   }
 
-  /** Before a turn: note where the balance stood, so the drop can be measured. */
-  async openTurn() {
+  /**
+   * Before a turn: note where the balance stood, so the drop can be measured.
+   *
+   * Started, not waited for. The reading takes about half a second, and it was
+   * half a second of silence in front of every answer — spent on a number
+   * nobody sees until the answer is over. Nothing before the first model call
+   * needs it; closeTurn does, and by then it has long since arrived.
+   */
+  openTurn() {
     this.reset();
-    this._before = this.viaBalance ? await this.readBalance() : null;
+    this._beforeAt = this.viaBalance ? this.readBalance() : Promise.resolve(null);
   }
 
   /**
@@ -86,9 +93,10 @@ class SpendTracker {
   async closeTurn() {
     const t = this.turn;
     if (this.viaBalance) {
+      const before = await (this._beforeAt || Promise.resolve(null));
       const after = await this.readBalance();
-      if (this._before != null && after != null && after <= this._before) {
-        t.charged = this._before - after;
+      if (before != null && after != null && after <= before) {
+        t.charged = before - after;
       }
     }
     const s = this.session;

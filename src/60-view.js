@@ -532,7 +532,9 @@ class AssistantView extends ItemView {
     if (willSpeak && this.plugin.settings.waitingSound) this.plugin.ambience.start(this.plugin.settings.waitingVolume);
 
     // Note where the balance stood before anything is spent.
-    if (this.plugin.spend) await this.plugin.spend.openTurn();
+    // Not awaited: it reads the balance in the background and closeTurn picks
+    // it up. Waiting here put half a second of silence before every answer.
+    if (this.plugin.spend) this.plugin.spend.openTurn();
 
     this.agent = new Agent(this.plugin);
     // A long answer is fetched in rounds, and each round costs tens of seconds.

@@ -474,7 +474,8 @@ function eq(actual, expected, name) {
     // Пополнение посреди хода не должно рисовать отрицательный расход.
     {
       const p = mk("obsimind");
-      p.spend._before = 100;
+      // openTurn no longer waits for the reading, it hands closeTurn a promise.
+      p.spend._beforeAt = Promise.resolve(100);
       p.spend.viaBalanceStub = true;
       p.spend.add({ prompt_tokens: 5, completion_tokens: 5, cost: 0.001 });
       p.spend.readBalance = async () => { p.spend.balance = 500; return 500; };
