@@ -1108,12 +1108,43 @@
 /* A finger is not a mouse pointer. Obsidian stamps .is-mobile on the body,
    which is a truer signal than a width query — a narrow desktop pane is still
    driven by a cursor. */
+/* ── phones ──────────────────────────────────────────────────
+   A finger is about 44px across, and on a desktop these are all sized for a
+   cursor: the icons in the header are 30, send is 32, a settings tab is 30
+   tall. Each one is hittable with a mouse and a coin-flip with a thumb. */
+body.is-mobile .oa-iconbtn { width: 44px; height: 44px; }
+body.is-mobile .oa-send { width: 44px; height: 44px; }
+body.is-mobile .oa-set-tab { padding: 13px 12px; }
+body.is-mobile .oa-day { min-width: 44px; min-height: 44px; }
+body.is-mobile .oa-reply-toggle { padding: 12px 10px; }
+body.is-mobile .oa-textrow { max-width: none; }
+body.is-mobile .oa-textrow input { min-height: 44px; }
+/* 16px or iOS zooms the whole page in the moment the field takes focus. */
+body.is-mobile .oa-textrow input,
+body.is-mobile .oa-chat-input { font-size: 16px; }
+
 body.is-mobile .oa-scen-chip {
   min-height: 44px;
   padding: 10px 14px;
   font-size: var(--font-ui-small);
 }
 body.is-mobile .oa-scen-row { gap: 8px; }
+
+/* A short screen: a phone with the keyboard up, or a narrow window in
+   landscape. The stage centred its contents and clipped what did not fit —
+   and what does not fit is the bottom of the column, which is the text field
+   you were about to type into. Start from the top and let it scroll. */
+@media (max-height: 620px) {
+  .oa-stage {
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 12px;
+    overflow-y: auto;
+  }
+  .oa-reactor { width: 96px; height: 96px; }
+  .oa-core { inset: 40px; }
+  .oa-reply { max-height: 22vh; }
+}
 
 .oa-scen-picker .oa-scen-item {
   display: flex;

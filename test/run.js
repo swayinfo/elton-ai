@@ -814,6 +814,69 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── 16. The phone ────────────────────────────────────────
+   * Nothing here can press a button on a real phone. What it CAN do is hold
+   * the stylesheet to the rule a thumb imposes, so the next restyle does not
+   * quietly shrink a control back below it. */
+  describe("Телефон: до чего можно дотянуться пальцем");
+  {
+    const css = require("fs").readFileSync(require("path").join(__dirname, "..", "styles.css"), "utf8");
+    /** The declarations of one selector, last one wins. */
+    const rule = (sel) => {
+      const out = {};
+      const re = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*(?:,[^{]*)?\\{([^}]*)\\}", "g");
+      let m;
+      while ((m = re.exec(css))) {
+        for (const decl of m[1].split(";")) {
+          const [k, v] = decl.split(":");
+          if (k && v) out[k.trim()] = v.trim();
+        }
+      }
+      return out;
+    };
+    const px = (v) => (v && /^(\d+)px$/.test(v) ? Number(RegExp.$1) : 0);
+
+    // Every control the reactor and the settings put under a thumb.
+    const targets = [
+      ["body.is-mobile .oa-iconbtn", "иконки в шапке панели"],
+      ["body.is-mobile .oa-send", "кнопка отправки"],
+      ["body.is-mobile .oa-day", "дни недели в автоматизациях"],
+    ];
+    for (const [sel, what] of targets) {
+      const r = rule(sel);
+      const size = Math.max(px(r.width), px(r["min-width"]));
+      const tall = Math.max(px(r.height), px(r["min-height"]));
+      ok(size >= 44 && tall >= 44, `${what}: ${size}×${tall} — не меньше 44 на телефоне`);
+    }
+
+    // These are already big enough everywhere, so they need no mobile rule —
+    // but if someone shrinks them, this says so.
+    for (const [sel, what] of [[".oa-mic", "микрофон"], [".oa-cbtn", "да/нет при удалении"]]) {
+      const r = rule(sel);
+      ok(px(r.width) >= 44 && px(r.height) >= 44, `${what}: ${px(r.width)}×${px(r.height)} — крупный и без мобильного правила`);
+    }
+    {
+      const r = rule("body.is-mobile .oa-scen-chip");
+      ok(px(r["min-height"]) >= 44, `кнопки сценариев: ${px(r["min-height"])} в высоту`);
+    }
+    {
+      // iOS zooms the page when a focused field is under 16px. That zoom does
+      // not come back on its own.
+      const r = rule("body.is-mobile .oa-textrow input");
+      ok(r["font-size"] === "16px" || px(r["font-size"]) >= 16,
+        "поле ввода 16px — иначе iOS зумит страницу при фокусе");
+      ok(px(r["min-height"]) >= 44, "и само поле не меньше 44");
+    }
+    {
+      // With the keyboard up the panel is short, and the stage used to clip
+      // rather than scroll — losing the very field being typed into.
+      ok(/@media \(max-height: \d+px\)/.test(css), "есть правило для низкого экрана");
+      const short = css.split("@media (max-height:")[1] || "";
+      ok(/overflow-y:\s*auto/.test(short), "на низком экране сцена прокручивается, а не обрезает");
+      ok(/justify-content:\s*flex-start/.test(short), "и выкладывается сверху, а не по центру");
+    }
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {
