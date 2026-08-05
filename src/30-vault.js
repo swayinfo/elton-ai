@@ -420,6 +420,49 @@ class VaultBridge {
     return await this.app.vault.create(path, String(content || ""));
   }
 
+  /** Is the Kanban plugin there to render a board at all? */
+  kanbanReady() {
+    const p = this.app.plugins;
+    return !!(p && ((p.plugins && p.plugins["obsidian-kanban"])
+      || (p.enabledPlugins && p.enabledPlugins.has && p.enabledPlugins.has("obsidian-kanban"))));
+  }
+
+  /**
+   * A real Kanban board, not a note that looks like one.
+   *
+   * Asked for a board, the model wrote headings and checkboxes and left it at
+   * that — which opens as ordinary text, because the board view is chosen by
+   * `kanban-plugin: board` in the frontmatter and nothing else. The other two
+   * things it cannot guess are that columns must be `##` headings and that the
+   * trailing settings block has to hold real JSON, one list-collapse flag per
+   * column. Miss any of the three and the file is a note about a board.
+   */
+  async createBoard(title, columns, folder) {
+    const cols = (Array.isArray(columns) ? columns : [])
+      .map((c) => ({
+        name: String((c && c.name) || "").trim(),
+        cards: (Array.isArray(c && c.cards) ? c.cards : []).map((x) => String(x || "").trim()).filter(Boolean),
+      }))
+      .filter((c) => c.name);
+    if (!cols.length) throw new Error("a board needs at least one column");
+
+    const body = cols
+      .map((c) => `## ${c.name}\n\n` + c.cards.map((x) => `- [ ] ${x}`).join("\n") + "\n")
+      .join("\n");
+
+    const settings = JSON.stringify({
+      "kanban-plugin": "board",
+      "list-collapse": cols.map(() => false),
+    });
+    // The settings live in a fenced block inside a comment, so the fence is
+    // built rather than typed — a literal one here would end this file's own.
+    const fence = "`".repeat(3);
+    const tail = `%% kanban:settings\n${fence}\n${settings}\n${fence}\n%%`;
+
+    const text = `---\nkanban-plugin: board\n---\n\n${body}\n\n${tail}\n`;
+    return await this.createNote(title, text, folder);
+  }
+
   /** Snapshot before every write, so "undo that" is always available. */
   async remember(file) {
     try {

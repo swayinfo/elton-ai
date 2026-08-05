@@ -195,9 +195,15 @@ class EltonAI extends ObsidianPlugin {
     try {
       const folder = this.settings.conversationFolder || "";
       if (folder) await this.vault.ensureFolder(folder);
+      let announce = false;
       if (!this._convPath) {
         const stamp = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "-");
         this._convPath = normalizePath((folder ? folder + "/" : "") + `${this.settings.assistantName} ${stamp}.md`);
+        // Once, when the file for this conversation is decided. Saving that
+        // nobody can find is the same as not saving: the setting is off by
+        // default, the folder is usually blank, and the note then lands in the
+        // vault root under a name nobody went looking for.
+        announce = true;
       }
       const body = messages.map((m) =>
         (m.role === "user" ? "**" + (this.settings.userName || "You") + ":** " : "**" + this.settings.assistantName + ":** ") + m.content
@@ -205,6 +211,7 @@ class EltonAI extends ObsidianPlugin {
       const existing = this.app.vault.getAbstractFileByPath(this._convPath);
       if (existing instanceof TFile) await this.app.vault.modify(existing, body);
       else await this.app.vault.create(this._convPath, body);
+      if (announce) new Notice(t("Conversation is being saved: {0}", this._convPath), 8000);
     } catch (e) { console.warn("[Elton AI] could not save the conversation:", e.message); }
   }
 }

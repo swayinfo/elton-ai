@@ -160,7 +160,9 @@ function eq(actual, expected, name) {
   {
     // buildTools asks the vault where the daily notes live, so that the
     // daily_note tool exists for people who never filled the setting in.
-    const withDaily = (folder) => ({ vault: { dailyFolder: () => folder || "" } });
+    const withDaily = (folder, kanban) => ({
+      vault: { dailyFolder: () => folder || "", kanbanReady: () => !!kanban },
+    });
     const names = (s, plugin) =>
       T.buildTools(Object.assign({}, T.DEFAULT_SETTINGS, s), plugin || withDaily("")).map((x) => x.function.name);
     const all = names({});
@@ -170,6 +172,11 @@ function eq(actual, expected, name) {
     ok(names({}, withDaily("Daily")).includes("daily_note"),
       "и появляется, когда папку удалось взять из настроек Obsidian, даже если своё поле пустое");
     ok(!names({ canRead: false }).includes("recent_notes"), "без права на чтение нет и recent_notes");
+
+    ok(!all.includes("create_board"), "без плагина Kanban доску предлагать нечем");
+    ok(names({}, withDaily("", true)).includes("create_board"), "с плагином Kanban инструмент появляется");
+    ok(!names({ canCreate: false }, withDaily("", true)).includes("create_board"),
+      "и исчезает без права создавать заметки");
 
     for (const n of ["list_tabs", "open_url", "close_tab", "open_beside"]) {
       ok(all.includes(n), `${n} есть, когда управление вкладками включено`);
@@ -618,6 +625,72 @@ function eq(actual, expected, name) {
       amb.startClip = () => { started++; };
       await amb.startFile("звук.wav", 0.3);
       eq(started, 1, "без остановки — играет как обычно");
+    }
+  }
+
+  /* ── 11. A board has to BE a board ────────────────────────
+   * Asked for one, the model wrote plain headings and checkboxes. That file
+   * opens as text: the board view is chosen by the frontmatter and nothing
+   * else. All three things it got wrong are asserted here. */
+  describe("Канбан-доска: файл, который Obsidian откроет доской");
+  {
+    const app = H.fakeApp();
+    let written = null;
+    app.vault.create = async (p, content) => { written = { path: p, content }; return new H.TFile(p); };
+    app.vault.getAbstractFileByPath = () => null;
+    app.vault.createFolder = async () => {};
+    app.vault.getAllLoadedFiles = () => [];
+    app.vault.getRoot = () => ({ path: "/", children: [] });
+    const p = H.fakePlugin(app, {});
+
+    const f = await p.vault.createBoard("Проект на ESP32", [
+      { name: "Идея", cards: ["Изучить ESP32", "Собрать список деталей"] },
+      { name: "В процессе", cards: [] },
+      { name: "Готово" },
+    ], "1. Projects");
+
+    const c = written.content;
+    ok(/^---\nkanban-plugin: board\n---/.test(c),
+      "свойство kanban-plugin: board стоит первым — без него это обычная заметка");
+    ok(c.includes("## Идея") && c.includes("## В процессе") && c.includes("## Готово"),
+      "колонки — заголовки второго уровня, а не жирный текст");
+    ok(c.includes("- [ ] Изучить ESP32"), "карточки — чекбоксы под своей колонкой");
+
+    const m = c.match(/%% kanban:settings\n```\n([\s\S]*?)\n```\n%%/);
+    ok(!!m, "блок настроек на месте и с настоящим ограждением кода");
+    const cfg = m ? JSON.parse(m[1]) : {};
+    eq(cfg["kanban-plugin"], "board", "в настройках лежит валидный JSON");
+    eq((cfg["list-collapse"] || []).length, 3, "по одному флагу свёрнутости на колонку");
+
+    eq(f.path, "1. Projects/Проект на ESP32.md", "файл лёг в названную папку");
+
+    let threw = false;
+    try { await p.vault.createBoard("Пустая", []); } catch { threw = true; }
+    ok(threw, "доска без колонок — это не доска, а ошибка");
+  }
+
+  /* ── 12. The guides ship inside the plugin ─────────────── */
+  describe("Встроенные знания: внутри main.js, без докачки");
+  {
+    const withPlugins = (...ids) => ({ plugins: { plugins: Object.fromEntries(ids.map((i) => [i, {}])) } });
+
+    const bare = T.builtinSkillsFor(withPlugins()).map((x) => x.name);
+    ok(bare.includes("obsidian-notes"), "заметки Obsidian — знание для всех, плагин не нужен");
+    ok(bare.includes("diagrams-mermaid"), "как и mermaid: он встроен в Obsidian");
+    ok(!bare.includes("kanban-boards"), "а гайда по канбану нет, пока плагин не стоит");
+    ok(!bare.includes("dataview-queries"), "и по dataview тоже");
+
+    const rich = T.builtinSkillsFor(withPlugins("obsidian-kanban", "dataview")).map((x) => x.name);
+    ok(rich.includes("kanban-boards") && rich.includes("dataview-queries"),
+      "с установленными плагинами гайды появляются");
+
+    ok(T.builtinSkillText("kanban-boards").includes("kanban-plugin: board"),
+      "в гайде по канбану есть то самое свойство");
+    eq(T.builtinSkillText("нет такого"), "", "несуществующий гайд возвращает пусто, а не мусор");
+
+    for (const s2 of T.builtinSkillsFor(withPlugins("obsidian-kanban", "dataview", "templater-obsidian",
+      "obsidian-excalidraw-plugin", "obsidian-charts", "obsidian-meta-bind-plugin"))) {
+      ok(T.builtinSkillText(s2.name).length > 200, `гайд «${s2.name}» не пустой`);
     }
   }
 

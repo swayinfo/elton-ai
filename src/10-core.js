@@ -79,6 +79,8 @@ const RU = {
   "Talk over it to interrupt: off. Click the reactor to stop it.": "Перебивание голосом выключено. Прервать — клик по реактору.",
   "Applies to the next conversation": "Подействует со следующего разговора",
   "Nothing could be spoken: {0}": "Озвучить не вышло совсем: {0}",
+  "Board created: {0}": "Доска создана: {0}",
+  "Conversation is being saved: {0}": "Разговор сохраняется сюда: {0}",
   "Voice": "Голос",
   "Notes access": "Доступ к заметкам",
   "Search": "Поиск",
@@ -453,7 +455,10 @@ const RU = {
   "Print each search and edit in the conversation, so you can see how it got there.":
     "Печатать каждый поиск и правку в диалоге, чтобы видеть, как он пришёл к ответу.",
   "Save conversations": "Сохранять разговоры",
-  "Keep a note per conversation.": "Держать по заметке на разговор.",
+  "Off, nothing is written down and a conversation is gone when you close the panel. On, each one becomes a note you can search and link to.":
+    "Выключено — ничего не записывается, и разговор пропадает вместе с закрытой панелью. Включено — каждый становится заметкой, которую можно найти поиском и на которую можно сослаться.",
+  "One note per conversation, named after the assistant and the time. Empty means the root of your vault.":
+    "По заметке на разговор, в названии имя ассистента и время. Пусто — корень хранилища.",
   "Conversations folder": "Папка разговоров",
 
   // ── view ──

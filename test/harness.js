@@ -103,6 +103,7 @@ const EXPOSED = [
   "newStreamAcc", "foldStreamEvent", "readStreamChunk", "finishStreamAcc",
   "SpendTracker", "formatMoney",
   "Speaker", "speechChunks", "sentences", "Ambience", "AMBIENCE_REPEAT_MS",
+  "builtinSkillsFor", "builtinSkillText", "BUILTIN_SKILLS",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */

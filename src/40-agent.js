@@ -104,6 +104,30 @@ function buildTools(s, plugin) {
     fn("create_note", "Create a new note.",
       { title: { type: "string" }, content: { type: "string", description: "Body, in markdown" }, folder: { type: "string", description: "Optional folder" } },
       ["title", "content"]);
+    // Only when the board can actually be rendered. Without the Kanban plugin
+    // the same file opens as ordinary text, and "here is your board" would be
+    // a note with headings in it.
+    if (plugin.vault.kanbanReady()) {
+      fn("create_board",
+        "Create a Kanban board: a project laid out as columns with cards you drag between them. Use this — NOT create_note — whenever the user asks for a board, a kanban, or a project broken into stages. A note with headings and checkboxes is not a board; it opens as plain text.",
+        {
+          title: { type: "string" },
+          folder: { type: "string", description: "Optional folder" },
+          columns: {
+            type: "array",
+            description: "The columns, in order. Three or four is usual — e.g. Idea, In progress, Done.",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string", description: "Column heading" },
+                cards: { type: "array", items: { type: "string" }, description: "Cards in this column. May be empty." },
+              },
+              required: ["name"],
+            },
+          },
+        },
+        ["title", "columns"]);
+    }
   }
   if (s.canEdit) {
     fn("append_note",
@@ -161,10 +185,11 @@ async function buildSystemPrompt(plugin, { written = false } = {}) {
 
   // Индекс скиллов — короткие описания, полный текст модель тянет сама.
   if (s._skillIndex && s._skillIndex.length) {
-    lines.push("", "Guides to how this vault is built (load with load_skill before you write or change anything in that area):");
+    lines.push("", "Guides to Obsidian and to how this vault is built. Load the relevant one with load_skill BEFORE writing or changing anything in that area — these describe file formats you cannot reliably guess, and a file in the wrong shape opens as plain text instead of what the user asked for:");
     for (const sk of s._skillIndex) {
       lines.push(`• ${sk.name} — ${sk.description || ""}`.trim());
     }
+    lines.push("Only the guides listed above exist here. A format that has no guide listed means the plugin for it is not installed — say so instead of writing a block that will not render.");
   }
 
   if (s.canEdit || s.canCreate) {
@@ -261,9 +286,15 @@ class Agent {
     const V = plugin.vault;
     // Индекс скиллов подтягиваем один раз за сессию: он нужен и инструментам,
     // и системному промпту. Нет прокси или сети — просто работаем без них.
+    // Built-in guides first, then whatever the proxy adds for subscribers.
+    // The built-in ones ship inside main.js, so they are there for everyone
+    // who installed the plugin, with no key and no second download.
     if (s._skillIndex === undefined) {
-      try { s._skillIndex = await plugin.ai.skillIndex(); }
-      catch { s._skillIndex = []; }
+      let remote = [];
+      try { remote = await plugin.ai.skillIndex(); } catch { remote = []; }
+      const builtin = builtinSkillsFor(plugin.app);
+      const taken = new Set(remote.map((x) => x.name));
+      s._skillIndex = remote.concat(builtin.filter((x) => !taken.has(x.name)));
     }
     const tools = buildTools(s, plugin);
 
@@ -404,6 +435,10 @@ class Agent {
       case "load_skill": {
         const name = String(args.name || "").trim();
         onEvent({ kind: "action", text: t("Reading the guide: {0}", name) });
+        // A built-in guide needs no network, so it also works with a local
+        // model, with no key, and offline.
+        const own = builtinSkillText(name);
+        if (own) return `Skill "${name}":\n\n${own}`;
         try {
           const text = await plugin.ai.skillText(name);
           if (!text) return `No skill called "${name}". Available: ${(s._skillIndex || []).map((x) => x.name).join(", ")}`;
@@ -537,6 +572,20 @@ class Agent {
         onEvent({ kind: "action", text: t("Created: {0}", f.basename) });
         await V.openNote(f);
         return `Created "${f.basename}" at ${f.path} and opened it.`;
+      }
+
+      case "create_board": {
+        if (!s.canCreate) return "Creating notes is switched off in settings.";
+        if (!V.kanbanReady()) return "The Kanban plugin is not enabled, so a board cannot be rendered. Offer an ordinary note instead.";
+        if (s.confirmEveryEdit) {
+          const ok = await confirm({ title: t("Confirm change"), body: `${t("Created: {0}", safeTitle(args.title))}`, danger: false });
+          if (!ok) return "The user declined. Do not retry.";
+        }
+        const f = await V.createBoard(args.title, args.columns, args.folder);
+        onEvent({ kind: "action", text: t("Board created: {0}", f.basename) });
+        await V.openNote(f);
+        const names = (args.columns || []).map((c) => c && c.name).filter(Boolean).join(", ");
+        return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. It is open and rendering as a board.`;
       }
 
       case "append_note": {

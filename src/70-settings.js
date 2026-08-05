@@ -1115,13 +1115,16 @@ class AssistantSettingTab extends PluginSettingTab {
 
     new Setting(c)
       .setName(t("Save conversations"))
-      .setDesc(t("Keep a note per conversation."))
+      .setDesc(t("Off, nothing is written down and a conversation is gone when you close the panel. On, each one becomes a note you can search and link to."))
       .addToggle((x) => x.setValue(s.saveConversations).onChange(async (v) => { s.saveConversations = v; await this.plugin.saveSettings(); this.display(); }));
 
     if (s.saveConversations) {
-      new Setting(c).setName(t("Conversations folder"))
-        .addText((tx) => tx.setPlaceholder("Conversations").setValue(s.conversationFolder)
-          .onChange(async (v) => { s.conversationFolder = v.trim().replace(/^\/+|\/+$/g, ""); await this.plugin.saveSettings(); }));
+      this.folderField(
+        new Setting(c).setName(t("Conversations folder"))
+          .setDesc(t("One note per conversation, named after the assistant and the time. Empty means the root of your vault.")),
+        () => s.conversationFolder,
+        async (v) => { s.conversationFolder = v.trim().replace(/^\/+|\/+$/g, ""); await this.plugin.saveSettings(); },
+        "Conversations");
     }
 
     // What used to be a ninth tab. Two sentences and a version number did not
