@@ -80,6 +80,11 @@ const RU = {
   "Applies to the next conversation": "Подействует со следующего разговора",
   "Nothing could be spoken: {0}": "Озвучить не вышло совсем: {0}",
   "Board created: {0}": "Доска создана: {0}",
+  "Quick model for searching": "Быстрая модель для поиска",
+  "Finding the right notes is a lot of small decisions, and a quick model makes them just as well as a clever one — about three times faster. The answer itself is still written by the model above.":
+    "Найти нужные заметки — это много мелких решений, и быстрая модель принимает их не хуже умной, но примерно втрое быстрее. Сам ответ по-прежнему пишет модель, выбранная выше.",
+  "Automatic ({0})": "Автоматически ({0})",
+  "Off — one model for everything": "Выключено — одна модель на всё",
   "Conversation is being saved: {0}": "Разговор сохраняется сюда: {0}",
   "Voice": "Голос",
   "Notes access": "Доступ к заметкам",
@@ -593,6 +598,24 @@ const MODEL_CATALOG = {
 };
 MODEL_CATALOG.openrouter = MODEL_CATALOG.obsimind;
 
+/**
+ * The model that runs the searching, per provider, for `fastModel: "auto"`.
+ *
+ * Chosen by measurement through the proxy, on the same tool-calling request:
+ * gemini-2.5-flash 0.9s, gpt-4.1-mini 1.0s, haiku-4.5 1.1s, sonnet-4.5 2.6s —
+ * and every one of them picked the same tool. Note that a newer name is not
+ * automatically quicker: gemini-3.5-flash took 3.1s on the same call.
+ *
+ * Local is deliberately empty. There is one small model on the machine
+ * already; a second would compete for the same GPU rather than overlap.
+ */
+const FAST_MODELS = {
+  obsimind: "google/gemini-2.5-flash",
+  openrouter: "google/gemini-2.5-flash",
+  openai: "gpt-4.1-mini",
+  local: "",
+};
+
 /** Does this provider have a list worth showing instead of a text box? */
 function modelChoices(providerId) {
   return MODEL_CATALOG[providerId] || [];
@@ -624,6 +647,8 @@ const DEFAULT_SETTINGS = {
   // 900 was the old hard-coded ceiling and it guillotined long explanations
   // mid-word. Truncation is now recovered from, so this is a budget, not a cliff.
   replyTokens: 2000,
+  // "auto" picks the quick model for the provider; "" runs everything on one.
+  fastModel: "auto",
   contextNote: "",
 
   voiceEnabled: true,

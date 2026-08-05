@@ -433,6 +433,24 @@ class AssistantSettingTab extends PluginSettingTab {
         } finally { b.setDisabled(false); }
       }));
     }
+
+    // A second, quicker model for the searching. Measured through the proxy on
+    // the same request: choosing a tool takes Sonnet 2.6s and Gemini Flash
+    // 0.9s, and both choose the same tool. That step repeats two to four times
+    // a turn, so it is most of the wait before the assistant starts talking.
+    const auto = FAST_MODELS[s.provider];
+    if (auto) {
+      new Setting(c)
+        .setName(t("Quick model for searching"))
+        .setDesc(t("Finding the right notes is a lot of small decisions, and a quick model makes them just as well as a clever one — about three times faster. The answer itself is still written by the model above."))
+        .addDropdown((d) => {
+          d.addOption("auto", t("Automatic ({0})", auto));
+          for (const m of modelChoices(s.provider)) d.addOption(m.id, `${m.id} — ${m.note}`);
+          d.addOption("", t("Off — one model for everything"));
+          d.setValue(s.fastModel == null ? "auto" : s.fastModel)
+            .onChange(async (v) => { s.fastModel = v; await this.plugin.saveSettings(); });
+        });
+    }
   }
 
   /* ── persona ────────────────────────────────────────────── */

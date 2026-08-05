@@ -104,6 +104,7 @@ const EXPOSED = [
   "SpendTracker", "formatMoney",
   "Speaker", "speechChunks", "sentences", "Ambience", "AMBIENCE_REPEAT_MS",
   "builtinSkillsFor", "builtinSkillText", "BUILTIN_SKILLS",
+  "fastModelFor", "FAST_MODELS",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */

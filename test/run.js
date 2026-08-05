@@ -694,6 +694,26 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── 13. Two models: quick one searches, chosen one answers ── */
+  describe("Быстрая модель: ищет она, отвечает выбранная");
+  {
+    const S = (over) => Object.assign({}, T.DEFAULT_SETTINGS, over);
+
+    eq(T.fastModelFor(S({ provider: "obsimind" })), T.FAST_MODELS.obsimind,
+      "по умолчанию поиск идёт быстрой моделью провайдера");
+    eq(T.fastModelFor(S({ provider: "obsimind", fastModel: "" })), "",
+      "выключить можно — тогда всё на одной модели");
+    eq(T.fastModelFor(S({ provider: "obsimind", fastModel: "openai/gpt-4.1-mini" })), "openai/gpt-4.1-mini",
+      "или назначить свою");
+    eq(T.fastModelFor(S({ provider: "local" })), "",
+      "у локальной модели второй нет — она бы дралась за ту же видеокарту");
+
+    // Same model twice is a handover that buys nothing and costs a round trip.
+    const same = S({ provider: "obsimind", fastModel: "anthropic/claude-sonnet-4.5" });
+    same.models = Object.assign({}, same.models, { obsimind: "anthropic/claude-sonnet-4.5" });
+    eq(T.fastModelFor(same), "", "если быстрая совпала с основной — переключаться не на что");
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {

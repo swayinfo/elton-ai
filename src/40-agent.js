@@ -16,6 +16,21 @@ const MAX_STEPS = 6;
 // serving a sentence that stops mid-word — but bounded, so a model that has
 // forgotten how to stop can't bill forever.
 const MAX_CONTINUATIONS = 3;
+/**
+ * The turn from gathering to answering.
+ *
+ * It has to go out WITH the tools still declared, even though the point is to
+ * stop using them. Measured against the proxy: drop `tools` from a request
+ * whose history contains tool calls and Anthropic returns an empty message
+ * with finish_reason "stop" — no error, no text. So this line is what asks for
+ * the answer, and the tools stay only to keep the history valid.
+ */
+const HANDOVER = {
+  role: "user",
+  content: "Enough searching. Answer now, from what you have already gathered. "
+    + "Do not call any more tools; if something is missing, say so in the answer.",
+};
+
 const CONTINUE_PROMPT =
   "Your answer was cut off at the point shown. Carry straight on from there. " +
   "Do not repeat anything you already wrote, do not start over, and do not add " +
@@ -34,6 +49,20 @@ function wholeSentences(text) {
 /** Web search only works through a provider that routes to OpenRouter. */
 function webSearchOK(s) {
   return !!s.webSearch && (s.provider === "obsimind" || s.provider === "openrouter");
+}
+
+/**
+ * The model that drives the tool loop, or "" for one model doing everything.
+ *
+ * Off when it would be the same model twice — that buys nothing and costs an
+ * extra round trip at the handover.
+ */
+function fastModelFor(s) {
+  const chosen = String(s.fastModel || "").trim();
+  if (!chosen) return "";                       // one model does everything
+  const fast = chosen === "auto" ? (FAST_MODELS[s.provider] || "") : chosen;
+  const main = String((s.models && s.models[s.provider]) || "").trim();
+  return fast && fast !== main ? fast : "";
 }
 
 function buildTools(s, plugin) {
@@ -316,17 +345,36 @@ class Agent {
 
     const budget = { maxTokens: plugin.settings.replyTokens };
 
+    /* Two models, split by what the step is actually for.
+       Measured through the proxy on the same request: picking a tool takes
+       Sonnet 2.6s and Gemini Flash 0.6s, and they pick the SAME tool — the
+       decision is "which of these seventeen", not a judgement call. That step
+       repeats two to four times a turn, so it is most of the wait before the
+       first word. Writing the answer is the one step where the strong model
+       earns its keep, and it happens once. */
+    const fast = fastModelFor(s);
+    const search = fast ? { tools, ...budget, model: fast } : { tools, ...budget };
+
     for (let step = 0; step < MAX_STEPS; step++) {
       if (this.cancelled) return null;
       // Deltas are only worth showing for the step that turns out to be the
       // answer, and which step that is only becomes clear once it arrives with
       // no tool calls. So they go out as they come and the view discards them
       // if the step turns out to have been a search after all.
-      const msg = await this.ask(messages, { tools, ...budget }, onDelta);
+      const msg = await this.ask(messages, search, fast ? null : onDelta);
       if (this.cancelled) return null;
 
       const calls = msg.tool_calls || [];
-      if (!calls.length) return await this.finishAnswer(messages, msg, budget, onSegment);
+      if (!calls.length) {
+        // The fast model has stopped reaching for tools, which means it thinks
+        // it has enough. Everything it gathered is in `messages`; the answer
+        // itself is written by the model the user chose.
+        if (!fast) return await this.finishAnswer(messages, msg, budget, onSegment);
+        if (onDelta) onDelta(null, "");
+        const handed = await this.ask(messages.concat([HANDOVER]), { tools, ...budget }, onDelta);
+        if (this.cancelled) return null;
+        return await this.finishAnswer(messages, handed, budget, onSegment);
+      }
       if (onDelta) onDelta(null, "");   // that step was tool use — clear the draft
 
       messages.push(msg);
@@ -343,9 +391,10 @@ class Agent {
       }
     }
 
-    // Out of steps — ask for a plain answer with whatever it has.
-    messages.push({ role: "user", content: "Stop using tools and answer now with what you have." });
-    const final = await plugin.ai.chat(messages, budget);
+    // Out of steps — ask for a plain answer with whatever it has. `tools` goes
+    // with it for the reason in HANDOVER: dropping it here returned an empty
+    // message, so running out of steps produced no answer at all.
+    const final = await this.ask(messages.concat([HANDOVER]), { tools, ...budget }, onDelta);
     return await this.finishAnswer(messages, final, budget, onSegment);
   }
 
