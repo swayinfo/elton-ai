@@ -223,6 +223,10 @@ async function buildSystemPrompt(plugin, { written = false } = {}) {
 
   if (s.canEdit || s.canCreate) {
     lines.push("• When you change a note, do it — do not ask permission first, and do not describe what you would do. The user can always say \"undo that\".");
+    // The convention lives in the neighbours and nowhere else, so a note made
+    // without looking at them comes out orphaned — no link back to its MOC, no
+    // tags, filed nowhere.
+    lines.push("• A new note has to fit the folder it lands in. Creating one tells you which properties the other notes there carry; add the same ones straight away, including any link back to a parent or index note. Do not leave a note that nothing points at.");
   }
   if (s.canControlUI) {
     lines.push("• You control what is on their screen as well as what is in their notes. Put the thing you are talking about in front of them: open the note you are describing, open a source worth reading, open two notes side by side when you are comparing them. Close what is finished with when they ask.");
@@ -620,7 +624,7 @@ class Agent {
         const f = await V.createNote(args.title, args.content, args.folder);
         onEvent({ kind: "action", text: t("Created: {0}", f.basename) });
         await V.openNote(f);
-        return `Created "${f.basename}" at ${f.path} and opened it.`;
+        return `Created "${f.basename}" at ${f.path} and opened it. ${V.folderConventions(f.parent && f.parent.path)}`.trim();
       }
 
       case "create_board": {
@@ -634,7 +638,7 @@ class Agent {
         onEvent({ kind: "action", text: t("Board created: {0}", f.basename) });
         await V.openNote(f);
         const names = (args.columns || []).map((c) => c && c.name).filter(Boolean).join(", ");
-        return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. It is open and rendering as a board.`;
+        return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. It is open and rendering as a board. ${V.folderConventions(f.parent && f.parent.path)}`.trim();
       }
 
       case "append_note": {

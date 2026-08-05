@@ -714,6 +714,106 @@ function eq(actual, expected, name) {
     eq(T.fastModelFor(same), "", "если быстрая совпала с основной — переключаться не на что");
   }
 
+  /* ── 14. Stopping stays stopped ───────────────────────────
+   * Press stop, say the next thing, and two voices talked over each other:
+   * stopping set a flag, and every new turn began by clearing it, so the
+   * turn that had been stopped simply resumed. */
+  describe("Остановка держится: старый ход не оживает под новым");
+  {
+    /** The two halves of the view this actually depends on. */
+    const mkView = () => ({
+      _gen: 0,
+      interrupted: false,
+      agent: null,
+      plugin: { speaker: { stop() {} }, ambience: { stop() {} } },
+      stopTurn: T.AssistantView.prototype.stopTurn,
+    });
+
+    {
+      const v = mkView();
+      const gen = ++v._gen;                       // turn A starts
+      const staleA = () => v.interrupted || gen !== v._gen;
+      ok(!staleA(), "пока идёт свой ход — говорить можно");
+
+      v.stopTurn.call(v);                         // stop
+      ok(staleA(), "после остановки ход А замолкает");
+
+      const genB = ++v._gen;                      // turn B starts
+      v.interrupted = false;                      // as turn() does
+      const staleB = () => v.interrupted || genB !== v._gen;
+      ok(staleA(), "и НЕ оживает от того, что начался ход Б — вот это и было дублирование");
+      ok(!staleB(), "а новый ход при этом говорит нормально");
+    }
+    {
+      // Stopping the current turn must not silence the one started after it.
+      const v = mkView();
+      const genA = ++v._gen;
+      v.stopTurn.call(v);
+      const genB = ++v._gen;
+      v.interrupted = false;
+      ok(genA !== v._gen && genB === v._gen, "номер хода растёт, старый уже не совпадает");
+    }
+  }
+
+  /* ── 15. Notes fit the folder they land in ────────────────
+   * The created project was filed nowhere: nothing linked to it, because the
+   * convention lives in the neighbours and the model had no way to look.
+   * Nothing here is hard-coded — every vault has its own shape and this reads
+   * whichever one it finds. */
+  describe("Соглашения папки: читаются из хранилища, а не зашиты");
+  {
+    const vaultWith = (byPath) => {
+      const files = Object.keys(byPath).map((p) => {
+        const f = new H.TFile(p);
+        f.stat = { mtime: Date.now() };
+        return f;
+      });
+      const app = H.fakeApp();
+      app.vault.getMarkdownFiles = () => files;
+      app.metadataCache.getFileCache = (f) => ({ frontmatter: byPath[f.path] });
+      return H.fakePlugin(app, {});
+    };
+
+    {
+      // One person's vault: projects carry a link back to their MOC.
+      const p = vaultWith({
+        "1. Projects/А.md": { "MOC-родитель": ["[[MOC - Projects]]"], "Статус": "активен" },
+        "1. Projects/Б.md": { "MOC-родитель": ["[[MOC - Projects]]"], "Статус": "пауза" },
+        "1. Projects/В.md": { "MOC-родитель": ["[[MOC - Projects]]"], "Статус": "активен" },
+      });
+      const hint = p.vault.folderConventions("1. Projects");
+      ok(hint.includes("MOC-родитель"), "нашёл свойство со ссылкой на MOC");
+      ok(hint.includes("MOC - Projects"), "и показал пример значения, чтобы было что подставить");
+    }
+    {
+      // Another person's, in English and with entirely different keys.
+      const p = vaultWith({
+        "Projects/One.md": { area: "work", status: "doing", parent: ["[[Index]]"] },
+        "Projects/Two.md": { area: "home", status: "done", parent: ["[[Index]]"] },
+      });
+      const hint = p.vault.folderConventions("Projects");
+      ok(hint.includes("area") && hint.includes("status") && hint.includes("parent"),
+        "у другого хранилища — другие свойства, ничего не зашито");
+      ok(!hint.includes("MOC-родитель"), "и чужие соглашения к нему не липнут");
+    }
+    {
+      // A property only one note has is not a convention.
+      const p = vaultWith({
+        "Notes/A.md": { tags: ["a"], oddity: 1 },
+        "Notes/B.md": { tags: ["b"] },
+        "Notes/C.md": { tags: ["c"] },
+      });
+      const hint = p.vault.folderConventions("Notes");
+      ok(hint.includes("tags"), "общее свойство попадает в подсказку");
+      ok(!hint.includes("oddity"), "а случайное у одной заметки — нет");
+    }
+    {
+      const p = vaultWith({ "Пусто/Одна.md": { tags: ["x"] } });
+      eq(p.vault.folderConventions("Пусто"), "", "по одной заметке соглашения не выводятся");
+      eq(p.vault.folderConventions(""), "", "без папки — молчание, а не догадки");
+    }
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {

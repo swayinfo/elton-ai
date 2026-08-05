@@ -27,6 +27,21 @@ class AssistantView extends ItemView {
     this.stopMonitor = null;
     this.agent = null;
     this.pressed = false;
+    /* Which turn is the current one.
+       Stopping used to be a boolean, and every new turn began by clearing it —
+       so a turn that had been told to stop resumed the moment the next one
+       started, and two voices talked over each other. A number cannot be
+       cleared by whoever comes next: an old turn compares and gives up. */
+    this._gen = 0;
+  }
+
+  /** End whatever is running and make anything still in flight give up. */
+  stopTurn() {
+    this._gen++;
+    this.interrupted = true;
+    if (this.agent) this.agent.cancel();
+    this.plugin.speaker.stop();
+    this.plugin.ambience.stop();
   }
 
   getViewType() { return VIEW_TYPE; }
@@ -470,8 +485,16 @@ class AssistantView extends ItemView {
 
   /** Clicking the reactor starts a conversation, or cuts off a long answer. */
   onReactorClick() {
-    if (this.phase === "speaking") { this.interrupted = true; this.plugin.speaker.stop(); return; }
-    if (this.phase === "thinking" && this.agent) { this.agent.cancel(); this.setPhase("idle"); this.busy = false; return; }
+    // Interrupting means the turn is over, not that this sentence is. Stopping
+    // only the voice left the agent running: the panel stayed busy for the
+    // rest of an answer nobody was listening to, and the click read as having
+    // done nothing.
+    if (this.phase === "speaking" || this.phase === "thinking") {
+      this.stopTurn();
+      this.busy = false;
+      this.setPhase(this.mode === "conversation" ? "listening" : "idle");
+      return;
+    }
     if (this.mode === "idle") this.toggleTalk();
   }
 
@@ -546,6 +569,11 @@ class AssistantView extends ItemView {
       return;
     }
     this.busy = true;
+    // This turn's number. Everything below checks it before it speaks, so a
+    // turn that was stopped stays stopped even after this one has cleared the
+    // flags — which is how two answers ended up talking at once.
+    const gen = ++this._gen;
+    this.interrupted = false;
 
     // A scenario turns the two words you said into the brief they stand for.
     // Recognised here rather than by the model: it costs nothing and it means
@@ -598,7 +626,7 @@ class AssistantView extends ItemView {
         // However the run ends — answer, cancel or throw — the speaker must be
         // let go, or it waits on a queue nobody will ever push to again.
         running.then(() => queue.close(), () => queue.close());
-        await this.speakStream(queue);
+        await this.speakStream(queue, gen);
       }
       reply = await running;
     } catch (e) {
@@ -638,7 +666,7 @@ class AssistantView extends ItemView {
     }
 
     // When streaming, speakStream has already said it all.
-    if (speak && !streaming) await this.speak(reply);
+    if (speak && !streaming) await this.speak(reply, gen);
     else if (!speak) this.plugin.ambience.stop();
     if (!inChat) this.setPhase(this.mode === "conversation" ? "listening" : "idle");
     this.busy = false;
@@ -650,28 +678,31 @@ class AssistantView extends ItemView {
    * soon as it settles, so the wait for the rest happens behind the voice
    * rather than in front of it.
    */
-  async speakStream(queue) {
+  async speakStream(queue, gen) {
+    // No "interrupted = false" here any more: this line is where a turn that
+    // had been stopped came back to life, because the NEXT turn ran it.
+    const stale = () => this.interrupted || (gen !== undefined && gen !== this._gen);
+    if (stale()) return;
     this.setPhase("speaking");
-    this.interrupted = false;
     const fill = this.plugin.settings.waitingSound;
     let full = "";
     let said = "";
 
     for await (const segment of queue) {
-      if (this.interrupted) break;
+      if (stale()) break;
       const text = stripMarkdown(segment);
       if (!text) continue;
       full = full ? full + " " + text : text;
       this.setReply(full, said);
 
       const out = await this.plugin.speaker.sayAll(speechChunks(text), {
-        shouldStop: () => this.interrupted,
+        shouldStop: stale,
         onFirstSound: () => this.plugin.ambience.stop(),
         onChunk: (part) => {
           said = said ? said + " " + part : part;
           this.setReply(full, said);
         },
-        onWaiting: () => { if (fill && !this.interrupted) this.plugin.ambience.start(this.plugin.settings.waitingVolume * 0.5); },
+        onWaiting: () => { if (fill && !stale()) this.plugin.ambience.start(this.plugin.settings.waitingVolume * 0.5); },
         onSpeaking: () => this.plugin.ambience.stop(),
       });
       if (out && out.mute) this.revealUnspoken();
@@ -696,9 +727,10 @@ class AssistantView extends ItemView {
     this.paintReply();
   }
 
-  async speak(raw) {
+  async speak(raw, gen) {
+    const stale = () => this.interrupted || (gen !== undefined && gen !== this._gen);
+    if (stale()) return;
     this.setPhase("speaking");
-    this.interrupted = false;
     const fill = this.plugin.settings.waitingSound;
     // The reactor shows plain text, not rendered markdown, so "**Про идею:**"
     // would be read out and printed with its asterisks. Strip once, and the
@@ -706,7 +738,7 @@ class AssistantView extends ItemView {
     const text = stripMarkdown(raw);
     let said = "";
     const out = await this.plugin.speaker.sayAll(speechChunks(text), {
-      shouldStop: () => this.interrupted,
+      shouldStop: stale,
       onFirstSound: () => this.plugin.ambience.stop(),
       onChunk: (part) => {
         said = said ? said + " " + part : part;
@@ -715,7 +747,7 @@ class AssistantView extends ItemView {
       // Mid-answer the next fragment can still be in flight. Carrying the
       // waiting sound across the gap keeps it sounding like one continuous
       // reply instead of a stall.
-      onWaiting: () => { if (fill && !this.interrupted) this.plugin.ambience.start(this.plugin.settings.waitingVolume * 0.5); },
+      onWaiting: () => { if (fill && !stale()) this.plugin.ambience.start(this.plugin.settings.waitingVolume * 0.5); },
       onSpeaking: () => this.plugin.ambience.stop(),
     });
     this.plugin.ambience.stop();
@@ -763,10 +795,9 @@ class AssistantView extends ItemView {
   teardown() {
     this.mode = "idle";
     this.talking = false;
-    this.interrupted = true;
-    this.plugin.ambience.stop();
-    if (this.agent) this.agent.cancel();
-    this.plugin.speaker.stop();
+    // Through stopTurn, so the turn number moves. Setting the flag alone was
+    // not enough: the next turn cleared it and the old one carried on talking.
+    this.stopTurn();
     this.plugin.recorder.stop();
     if (this.stopMonitor) { this.stopMonitor(); this.stopMonitor = null; }
     if (this._io) { this._io.disconnect(); this._io = null; }

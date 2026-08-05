@@ -420,6 +420,61 @@ class VaultBridge {
     return await this.app.vault.create(path, String(content || ""));
   }
 
+  /**
+   * What the notes already in a folder have in common.
+   *
+   * A vault's conventions are not written down anywhere — that a project note
+   * carries a link back to its MOC lives only in the other project notes. The
+   * model cannot guess it and had no way to look, so every note it created
+   * came out orphaned. This reads a handful of neighbours and reports the
+   * properties they share, which is the convention, stated by the vault itself
+   * rather than hard-coded for one person's setup.
+   */
+  folderConventions(dir, sample = 8) {
+    try { return this._folderConventions(dir, sample); }
+    // Nothing here is worth failing a created note over: this is a hint on
+    // the end of a tool result, not the result itself.
+    catch { return ""; }
+  }
+
+  _folderConventions(dir, sample) {
+    const folder = normalizePath(dir || "");
+    if (!folder) return "";
+    const near = this.files()
+      .filter((f) => f.path.startsWith(folder + "/"))
+      .sort((a, b) => b.stat.mtime - a.stat.mtime)
+      .slice(0, sample);
+    if (near.length < 2) return "";
+
+    // Frontmatter is already parsed for every file; reading it again here
+    // would mean opening eight notes to answer a question about their shape.
+    const seen = new Map();
+    let withFm = 0;
+    for (const f of near) {
+      const fm = (this.app.metadataCache.getFileCache(f) || {}).frontmatter;
+      if (!fm) continue;
+      withFm++;
+      for (const [k, v] of Object.entries(fm)) {
+        if (k === "position") continue;
+        if (!seen.has(k)) seen.set(k, { n: 0, example: v });
+        seen.get(k).n++;
+      }
+    }
+    if (!withFm) return "";
+
+    // Shared by most of them, not merely present once.
+    const common = [...seen.entries()]
+      .filter(([, v]) => v.n >= Math.max(2, Math.ceil(withFm * 0.6)))
+      .map(([k, v]) => {
+        const ex = Array.isArray(v.example) ? v.example[0] : v.example;
+        const shown = typeof ex === "string" || typeof ex === "number" ? String(ex).slice(0, 60) : "";
+        return shown ? `${k} (e.g. ${shown})` : k;
+      });
+    if (!common.length) return "";
+    return `Notes in "${folder}" almost all carry these properties: ${common.join(", ")}. `
+      + `Add the same ones here unless the user said otherwise — a note without them is not filed the way the rest of the folder is.`;
+  }
+
   /** Is the Kanban plugin there to render a board at all? */
   kanbanReady() {
     const p = this.app.plugins;

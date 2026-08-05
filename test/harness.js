@@ -104,7 +104,7 @@ const EXPOSED = [
   "SpendTracker", "formatMoney",
   "Speaker", "speechChunks", "sentences", "Ambience", "AMBIENCE_REPEAT_MS",
   "builtinSkillsFor", "builtinSkillText", "BUILTIN_SKILLS",
-  "fastModelFor", "FAST_MODELS",
+  "fastModelFor", "FAST_MODELS", "AssistantView",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */
@@ -191,7 +191,7 @@ function fakeApp({ tabs = [], webviewer = true } = {}) {
   return {
     workspace: fakeWorkspace(tabs),
     vault: { getFiles: () => [], getAbstractFileByPath: () => null, on: () => ({}), adapter: {} },
-    metadataCache: { getFirstLinkpathDest: () => null },
+    metadataCache: { getFirstLinkpathDest: () => null, getFileCache: () => null },
     internalPlugins: { getPluginById: (id) => (id === "webviewer" ? { enabled: webviewer } : null) },
     fileManager: { async trashFile() {} },
   };
