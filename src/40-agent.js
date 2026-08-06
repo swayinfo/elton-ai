@@ -85,17 +85,20 @@ const B = "(?:^|[^\\p{L}\\p{N}])";
 const E = "(?![\\p{L}\\p{N}])";
 const PROMISE_RE = new RegExp(
   [
-    // English: "I'll create", "let me open", "I am going to add", "one moment"
-    `${B}(i'?ll|i will|i'?m going to|i am going to|let me|i'?m about to)\\s+\\p{L}`,
-    `${B}(one moment|hold on|give me a (?:second|moment))${E}`,
-    // Russian, first person future: "создам", "открою", "запишу"
-    `${B}(созда[юм]|создадим|откро[юем]|открою|запишу|запишем|добавлю|добавим|напишу|напишем|сделаю|сделаем|отредактирую|исправлю|удалю|проверю|посмотрю|поищу|найду|соберу|оформлю)${E}`,
-    // "сейчас <что-нибудь> сделаю", "давай запишем"
-    `${B}(сейчас|щас|давай(?:те)?)\\s+(?:\\S+\\s+)?(созда|откр|запиш|добав|напиш|сдела|провер|отред|удал|поищ|найд|собер|оформ)`,
-    `${B}(секунд(?:у|очку)?|минут(?:у|очку)?|момент)${E}`,
+    // English, and only about writing or opening: "I'll create that note".
+    `${B}(i'?ll|i will|i'?m going to|i am going to|let me|i'?m about to)\\s+(create|make|write|add|open|edit|update|append|put|save|delete|remove)${E}`,
+    // Russian, first person future, verbs that CHANGE something.
+    `${B}(созда[юм]|создадим|откро[юем]|открою|запишу|запишем|добавлю|добавим|напишу|напишем|отредактирую|исправлю|удалю|оформлю|перепишу|дополню)${E}`,
+    // "сейчас создам", "давай запишем" — the same verbs behind a filler word.
+    `${B}(сейчас|щас|давай(?:те)?)\\s+(?:\\S+\\s+)?(созда|откр|запиш|добав|напиш|отред|исправ|удал|оформ|перепиш|дополн)`,
   ].join("|"),
   "iu",
 );
+/* Deliberately narrow, after a live run on a real vault showed the cost of a
+ * wide one. "Посмотрю", "поищу", "проверю", "секунду" all describe reading,
+ * which the assistant does constantly and which needs no tool call to be
+ * honest — and a whole good answer was thrown away because it contained one.
+ * Only verbs that change a note or the screen count as promises. */
 
 /** Tools that change something or put something on screen. */
 const ACTION_TOOLS = new Set([
@@ -411,6 +414,9 @@ class Agent {
     this.acted = false;
     // The promise check fires once per turn, never in a loop.
     this.checked = false;
+    // What the model said before being sent back, in case the second attempt
+    // comes back emptier than the first.
+    this.firstAnswer = "";
   }
 
   cancel() {
@@ -528,10 +534,22 @@ class Agent {
           // behind it goes back to the model once, with its own words quoted.
           if (this.brokenPromise(msg.content) && !this.checked) {
             this.checked = true;
+            // Kept, because the second attempt can come back worse. Seen on a
+            // real vault: a good three-paragraph answer was replaced by "I
+            // read your notes and answered, no action was needed" — the check
+            // fired, the model had nothing to do, and the answer was lost.
+            this.firstAnswer = String(msg.content || "");
             if (onDelta) onDelta(null, "");
-            messages.push({ role: "assistant", content: String(msg.content || "") });
+            messages.push({ role: "assistant", content: this.firstAnswer });
             messages.push(KEEP_PROMISE);
             continue;
+          }
+          /* Nothing came of the second pass — no tool call, and an answer
+             that is now about the checking rather than about the question.
+             The first one was the real one. */
+          if (this.checked && !this.acted && this.firstAnswer
+            && String(msg.content || "").length < this.firstAnswer.length) {
+            return await this.finishAnswer(messages, { content: this.firstAnswer }, budget, onSegment);
           }
           return await this.finishAnswer(messages, msg, budget, onSegment);
         }

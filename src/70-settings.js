@@ -134,7 +134,7 @@ class OnboardingModal extends Modal {
       .setDesc(t("One folder per line, relative to the vault root. Subfolders are covered too."))
       .addTextArea((tx) => {
         tx.inputEl.rows = 3;
-        tx.setPlaceholder("2. Areas/Здоровье")
+        tx.setPlaceholder(t("2. Areas/Health"))
           .setValue(s.privateFolders || "")
           .onChange(async (v) => {
             s.privateFolders = v;
@@ -983,7 +983,9 @@ class AssistantSettingTab extends PluginSettingTab {
       .setDesc(t("One folder per line, relative to the vault root. Subfolders are covered too."))
       .addTextArea((tx) => {
         tx.inputEl.rows = 4;
-        tx.setPlaceholder("2. Areas/Здоровье\n3. Resources/Финансы")
+        // Translated like everything else: an example folder is only an
+        // example if it is written in a language the reader uses.
+        tx.setPlaceholder(t("2. Areas/Health") + "\n" + t("3. Resources/Finances"))
           .setValue(s.privateFolders || "")
           .onChange(async (v) => {
             s.privateFolders = v;
@@ -1181,7 +1183,7 @@ class AssistantSettingTab extends PluginSettingTab {
       .setDesc(t("Folders that are not indexed. The assistant can still open these notes when you ask for one by name — they are just never sent away in bulk. Private folders are already excluded and do not need repeating here."))
       .addTextArea((tx) => {
         tx.inputEl.rows = 3;
-        tx.setPlaceholder("4. Archive\n2. Areas/Дневники")
+        tx.setPlaceholder(t("4. Archive") + "\n" + t("2. Areas/Journals"))
           .setValue(s.noIndexFolders || "")
           .onChange(async (v) => { s.noIndexFolders = v; await this.plugin.saveSettings(); });
       });

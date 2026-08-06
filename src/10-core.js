@@ -661,6 +661,12 @@ const RU = {
   "room for a lot of context": "большой контекст",
   "the cheapest": "самая дешёвая",
 
+  // ── example folder names in placeholders ──
+  "2. Areas/Health": "2. Areas/Здоровье",
+  "3. Resources/Finances": "3. Resources/Финансы",
+  "2. Areas/Journals": "2. Areas/Дневники",
+  "4. Archive": "4. Archive",
+
   // ── privacy ──
   "Private folders": "Личные папки",
   "⚠ Answering a question sends parts of your notes to your AI provider. Anything in the folders below is never read, never searched, never indexed and never sent — even when it is the note open on your screen. This is the place for medical records, finances, passwords, other people's information, anything under an agreement.":

@@ -985,6 +985,18 @@ function eq(actual, expected, name) {
       ok(told && /no content/i.test(told.content), "и модель узнаёт, почему");
     }
 
+    {
+      /* The check must not cost a good answer.
+         Live on a real vault: a three-paragraph answer about the week was
+         replaced by "I read your notes and answered, no action was needed" —
+         the check fired on a stray word, the model had nothing to do, and the
+         answer was gone. The first one is kept and used. */
+      const good = { content: "Сейчас напишу, о чём ты думал. За три дня всплыли три темы, и вот они по порядку: первая про плагин, вторая про ролики, третья про ESP32." };
+      const empty = { content: "Я прочитал заметки и ответил, действий не требовалось." };
+      const r = await turn([good, empty]);
+      ok(r.reply.includes("три темы"), "содержательный ответ не теряется, если по второму заходу дела не нашлось");
+    }
+
     // The wording check itself, on the sentences that actually appear.
     const A = new T.Agent({ settings: {}, app: {}, vault: {} });
     for (const said of [
@@ -1390,6 +1402,29 @@ function eq(actual, expected, name) {
     while ((k = kre.exec(table))) known.add(k[1]);
     const missing = [...keys].filter((s) => !known.has(s));
     eq(missing.slice(0, 5), [], "каждая строка интерфейса переведена на русский");
+
+    /* And the other half of the problem: text that reaches the screen without
+       going through `t` at all. The first version of this test only read
+       `t("…")` calls, so it passed while three placeholders sat there with
+       Russian folder names in them — invisible to a Russian reader by
+       definition. These are the calls that put words in front of someone. */
+    const onScreen = [];
+    for (const [rx, where] of [
+      [/\.setName\(\s*"([^"]{2,})"/g, "setName"],
+      [/\.setDesc\(\s*"([^"]{2,})"/g, "setDesc"],
+      [/\.setPlaceholder\(\s*"([^"]{2,})"/g, "setPlaceholder"],
+      [/\.setButtonText\(\s*"([^"]{2,})"/g, "setButtonText"],
+      [/new Notice\(\s*"([^"]{3,})"/g, "Notice"],
+    ]) {
+      let hit;
+      while ((hit = rx.exec(src))) {
+        const s = hit[1];
+        // Not words: paths, ids, formats, the sample bot token.
+        if (/^[\w./:@-]+$/.test(s) || /^\d/.test(s)) continue;
+        onScreen.push(`${where}: ${s.slice(0, 60)}`);
+      }
+    }
+    eq(onScreen.slice(0, 5), [], "всё, что показывается на экране, идёт через перевод");
 
     // And the switch itself works in both directions.
     T.setLang("en");
