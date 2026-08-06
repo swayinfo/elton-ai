@@ -306,8 +306,10 @@ class AssistantView extends ItemView {
     this.micModeBtn.toggleClass("is-on", push);
     const label = push ? t("Push to talk — hold the button while you speak.")
       : t("Hands-free — it listens until you go quiet.");
+    // `aria-label` only. Obsidian draws its own tooltip from it, and the
+    // browser draws a second one from `title` — so setting both stacks two
+    // copies of the same sentence on top of each other.
     this.micModeBtn.setAttr("aria-label", label);
-    this.micModeBtn.setAttr("title", label);
   }
 
   syncBargeBtn() {
@@ -320,7 +322,6 @@ class AssistantView extends ItemView {
     const label = on ? t("Listening while it speaks is on — headphones recommended")
       : t("Talk over it to interrupt: off. Click the reactor to stop it.");
     this.bargeBtn.setAttr("aria-label", label);
-    this.bargeBtn.setAttr("title", label);
   }
 
   /** The reactor/chat switch, in both layouts' headers. */
@@ -329,7 +330,6 @@ class AssistantView extends ItemView {
     const b = bar.createEl("button", { cls });
     setIcon(b, chat ? "audio-lines" : "message-square");
     b.setAttr("aria-label", chat ? t("Switch to voice") : t("Switch to text"));
-    b.setAttr("title", chat ? t("Switch to voice") : t("Switch to text"));
     b.onclick = async () => {
       // Leaving voice mode must not leave a microphone open behind it.
       this.teardown();
@@ -499,7 +499,6 @@ class AssistantView extends ItemView {
     const refresh = this.noteEl.createEl("button", { cls: "oa-note-refresh" });
     setIcon(refresh, "refresh-cw");
     refresh.setAttr("aria-label", t("Re-read the note on screen"));
-    refresh.setAttr("title", t("Re-read the note on screen"));
     refresh.onclick = () => {
       const now = this.syncActiveNote();
       this.updateNoteChip();

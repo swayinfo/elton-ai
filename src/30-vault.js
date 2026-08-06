@@ -44,8 +44,33 @@ class VaultBridge {
       .split("\n").map((x) => x.trim().replace(/^\/+|\/+$/g, "")).filter(Boolean);
   }
 
+  /** Folders the assistant must never read, whatever else is configured. */
+  privateList() {
+    return String(this.s.privateFolders || "")
+      .split("\n").map((x) => x.trim().replace(/^\/+|\/+$/g, "")).filter(Boolean);
+  }
+
+  /**
+   * Is this path private?
+   *
+   * Separate from the working scope on purpose. Scope answers "where should it
+   * work" and has three modes that exclude each other — you cannot say "work
+   * only in Projects" AND "never look in Health" with one setting. This answers
+   * a different question, "what must never leave this machine", and it wins
+   * over everything: scope, the note open on screen, search, the index.
+   */
+  isPrivate(path) {
+    const list = this.privateList();
+    if (!list.length) return false;
+    const p = String(path || "");
+    return list.some((f) => p === f || p.startsWith(f + "/"));
+  }
+
   /** Is this path inside what the user allowed the assistant to touch? */
   inScope(path) {
+    // First, and regardless of mode. Everything that reads a note goes through
+    // here, so this one line is what makes "private" mean private.
+    if (this.isPrivate(path)) return false;
     const mode = this.s.scopeMode;
     if (mode === "all") return true;
     const list = this.scopeList();
@@ -174,8 +199,28 @@ class VaultBridge {
   get indexIsBorrowed() { return !!this.s.embedIndexPath; }
 
   /** Notes that have no vector yet, or whose vector is older than the file. */
+  /**
+   * Folders left out of the index.
+   *
+   * Weaker than private, and deliberately so: these notes can still be read
+   * when you ask for them by name. They are simply not swept up wholesale and
+   * sent away one by one, which is what indexing is. Useful for a big archive
+   * you don't want to pay to embed as much as for anything delicate.
+   */
+  noIndexList() {
+    return String(this.s.noIndexFolders || "")
+      .split("\n").map((x) => x.trim().replace(/^\/+|\/+$/g, "")).filter(Boolean);
+  }
+
+  indexable(path) {
+    const list = this.noIndexList();
+    if (!list.length) return true;
+    const p = String(path || "");
+    return !list.some((f) => p === f || p.startsWith(f + "/"));
+  }
+
   pendingEmbeddings(cache) {
-    return this.files().filter((f) => {
+    return this.files().filter((f) => this.indexable(f.path)).filter((f) => {
       const e = cache[f.path];
       if (!e) return true;
       if (e.mtime !== f.stat.mtime) return true;
@@ -508,7 +553,9 @@ class VaultBridge {
     const dir = this.templateFolder();
     if (!dir) return [];
     return this.app.vault.getMarkdownFiles()
-      .filter((f) => f.path.startsWith(dir + "/"))
+      // Scope applies here too. A templates folder inside a private one is
+      // still private, however sensible reading a template usually is.
+      .filter((f) => f.path.startsWith(dir + "/") && this.inScope(f.path))
       .sort((a, b) => a.basename.localeCompare(b.basename))
       .slice(0, limit);
   }
@@ -828,12 +875,17 @@ class VaultBridge {
       d.setFullYear(yy, mm - 1, dd);
     }
     const key = todayKey(d);
+    // Every other way into a note goes through `files()` or `resolve()`, both
+    // of which check the scope. This one reached for a path directly and so
+    // was the one hole in it: a daily-notes folder marked private, or outside
+    // the working scope, was read anyway.
     const direct = this.app.vault.getAbstractFileByPath(normalizePath(folder + "/" + key + ".md"));
-    if (direct instanceof TFile) return direct;
+    if (direct instanceof TFile) return this.inScope(direct.path) ? direct : null;
     // Daily-note naming varies; fall back to any file in the folder whose
     // name carries the same date parts in any order.
     const parts = key.split("-");
     return this.app.vault.getMarkdownFiles().find((f) =>
-      f.path.startsWith(folder + "/") && parts.every((p) => f.basename.includes(p))) || null;
+      f.path.startsWith(folder + "/") && this.inScope(f.path)
+      && parts.every((p) => f.basename.includes(p))) || null;
   }
 }

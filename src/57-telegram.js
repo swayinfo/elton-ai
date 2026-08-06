@@ -652,6 +652,12 @@ class TelegramSetupModal extends Modal {
 
   draw() {
     const c = this.contentEl;
+    // Same slide redrawn (a token checked, an account forgotten) keeps its
+    // place; a new slide starts at the top.
+    const back = keepScroll(c);
+    const same = this.step === this._drawnStep;
+    this._drawnStep = this.step;
+
     c.empty();
     const s = this.steps[this.step];
 
@@ -677,6 +683,8 @@ class TelegramSetupModal extends Modal {
       await this.plugin.saveSettings();
       this.draw();
     };
+
+    if (same) back();
   }
 
   stepToken(c) {

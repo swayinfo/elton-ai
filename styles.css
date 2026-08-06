@@ -474,6 +474,11 @@
 }
 .oa-onb-card-title { font-weight: 600; color: var(--text-normal); margin-bottom: 2px; }
 .oa-onb-card-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); line-height: 1.45; }
+/* Who made this, under the pitch. Quiet on purpose: it is there to be found
+   by someone deciding whether to trust the thing, not to sell anything. */
+.oa-onb-card-by { margin-top: 7px; font-size: var(--font-ui-smaller); color: var(--text-faint); }
+.oa-onb-card-by a { color: var(--text-accent); text-decoration: none; }
+.oa-onb-card-by a:hover { text-decoration: underline; }
 .oa-onb-card button { flex: 0 0 auto; }
 
 /* One line, always. Wrapping put "Interface" and "About" on a row of their
@@ -538,6 +543,17 @@
   white-space: pre-wrap;
 }
 .oa-map-body.is-hidden { display: none; }
+.oa-map-how {
+  padding: 10px 12px;
+  margin-top: 6px;
+  border-radius: var(--radius-s);
+  border-left: 3px solid var(--background-modifier-border-focus);
+  background: var(--background-secondary-alt);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.55;
+}
+.oa-map-how.is-hidden { display: none; }
 .oa-mono {
   font-family: var(--font-monospace);
   font-size: var(--font-ui-smaller);
@@ -1010,6 +1026,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Same reason as the tile: two lines of text inside a themed button. */
+  height: auto;
+  min-height: 0;
+  white-space: normal;
   padding: 8px 8px;
   border: none;
   border-radius: var(--radius-s);
@@ -1070,8 +1090,159 @@
 }
 .oa-settings .oa-row-switch .setting-item-info { display: none; }
 
+/* ── tiles: a group of settings, and its state, in one square ──
+   Two-up on a settings page and one-up on a phone. A row would have left two
+   thirds of the width empty and given the facts nowhere to go. */
+.oa-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.oa-settings .oa-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  /* Stated rather than assumed. This was a <button> and the theme gave every
+     button a fixed height and centred contents, so the tile flattened to one
+     row and its text spilled over the tile below. It is a div now, and these
+     three lines make sure a theme reaching for [role="button"] cannot do the
+     same thing again. */
+  height: auto;
+  min-height: 0;
+  white-space: normal;
+  padding: 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  box-shadow: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font-size: inherit;
+  /* Named properties, never `all`: the tile holds an icon plate and chips that
+     have transitions of their own. */
+  transition: border-color 160ms var(--oa-ease),
+              background 160ms var(--oa-ease),
+              transform 160ms var(--oa-ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .oa-settings .oa-tile:hover {
+    border-color: var(--background-modifier-border-hover);
+    background: var(--background-modifier-hover);
+    box-shadow: none;
+  }
+  .oa-settings .oa-tile:hover .oa-tile-icon { color: var(--text-accent); }
+}
+/* Pressing has to be felt. Barely a scale — the tile is large, and anything
+   more reads as the page moving. */
+.oa-settings .oa-tile:active { transform: scale(0.988); }
+.oa-settings .oa-tile:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+
+.oa-tile-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.oa-tile-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  transition: color 160ms var(--oa-ease);
+}
+.oa-tile-icon .svg-icon { width: 16px; height: 16px; }
+.oa-tile-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: var(--font-ui-medium);
+  color: var(--text-normal);
+  line-height: 1.3;
+}
+.oa-tile-facts { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* A chip is a state, not a label: on carries the accent, off stays muted, and
+   the difference is legible before you have read either. */
+.oa-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+  color: var(--text-faint);
+  background: var(--background-secondary);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.oa-chip.is-on {
+  color: var(--text-accent);
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+}
+
+/* ── a heading inside a group window ──────────────────────────
+   Obsidian's setHeading() draws a full-width rule and dilutes the text to the
+   same grey as the descriptions under it, so in a window it reads as another
+   disabled setting. Small, dark and tight, with the air above doing the
+   separating, reads as a divider. */
+.oa-sec {
+  margin: 20px 0 2px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.oa-group-body > .oa-sec:first-child { margin-top: 2px; }
+
+/* An explanation you read once. Roomier line height than a description and a
+   quiet left rule, so it reads as prose rather than as another setting. */
+.oa-explain {
+  margin: 10px 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  border-left: 3px solid var(--background-modifier-border-focus);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.6;
+}
+.oa-explain div + div { margin-top: 8px; }
+.oa-explain-title {
+  font-weight: 600;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+/* ── the index: state and action in one card ─────────────────── */
+.oa-index {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 14px;
+  margin: 10px 0 6px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+.oa-index-text { flex: 1; min-width: 0; }
+.oa-index-action { flex: 0 0 auto; }
+.oa-index-action button { white-space: nowrap; }
+.oa-index .oa-index-status { font-weight: 600; color: var(--text-normal); font-size: var(--font-ui-small); }
+.oa-index .oa-index-detail { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: 2px; }
+.oa-index-problem.is-hidden { display: none; }
+
 /* Editing happens in a window, so the window gets room to write in. */
 .oa-scen-edit { width: min(680px, 92vw); }
+/* A settings group can be long — the index panel, the map — so the window
+   scrolls inside itself rather than growing past the screen. */
+.oa-group-body { max-height: min(62vh, 640px); overflow-y: auto; padding-right: 4px; }
+.oa-group-body .setting-item:first-child { border-top: none; padding-top: 0; }
+.oa-group-body .oa-map-body { max-height: 220px; }
 .oa-scen-edit .oa-scen-brief { display: block; }
 .oa-scen-edit .oa-scen-brief .setting-item-control { width: 100%; margin-top: 8px; }
 .oa-scen-edit .oa-scen-brief textarea { width: 100%; }

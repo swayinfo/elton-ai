@@ -561,6 +561,8 @@ const RU = {
   "Folds a map of your vault into every request — the folders, what is in them, which templates exist. This is what stops it filing a project note in the root and inventing a shape for it.":
     "Вкладывает карту хранилища в каждый запрос: папки, что в них лежит, какие есть шаблоны. Именно это мешает ему бросить заметку проекта в корень и выдумать ей вид.",
   "What it sees": "Что он видит",
+  "Nothing here was written by hand or asked of a model. The plugin walks the file list Obsidian already keeps: folders with how many notes are under each, the folders one level in, the contents of your templates folder, and the daily-notes folder from your Obsidian settings. It costs nothing, rebuilds itself when the vault changes, and goes into every request as the text below.":
+    "Здесь ничего не написано руками и ничего не спрошено у модели. Плагин проходит по списку файлов, который Obsidian и так ведёт: папки и сколько заметок в каждой, папки на уровень внутрь, содержимое вашей папки шаблонов и папка ежедневных заметок из настроек Obsidian. Это ничего не стоит, пересобирается само при изменениях в хранилище и уходит в каждый запрос ровно в том виде, что ниже.",
   "Anything it should know about your system": "Что ещё стоит знать о вашей системе",
   "Read the map above; whatever it cannot tell from folder names, write here. \"Projects live in 1. Projects, one note each, always linked from the MOC\" is the kind of thing that saves a dozen wrong guesses.":
     "Посмотрите карту выше и допишите то, чего не видно по названиям папок. «Проекты лежат в 1. Projects, по заметке на проект, всегда со ссылкой из MOC» — вот такая строчка экономит десяток неверных догадок.",
@@ -604,6 +606,93 @@ const RU = {
   "No token yet.": "Токена пока нет.",
   "This is a phone — the bot runs on the computer that holds the vault.":
     "Это телефон — бот работает на компьютере, где лежит хранилище.",
+  "Send it to Telegram too": "Прислать ещё и в Telegram",
+  "The result arrives in the chat as well as being written into your vault.":
+    "Результат придёт в чат — и всё так же будет записан в хранилище.",
+  "Connect a bot on the Telegram tab first — then this can send the result to your phone.":
+    "Сначала подключите бота на вкладке Telegram — тогда результат сможет приходить на телефон.",
+  "Written to: {0}": "Записано в: {0}",
+  // ── privacy ──
+  "Private folders": "Личные папки",
+  "⚠ Answering a question sends parts of your notes to your AI provider. Anything in the folders below is never read, never searched, never indexed and never sent — even when it is the note open on your screen. This is the place for medical records, finances, passwords, other people's information, anything under an agreement.":
+    "⚠ Чтобы ответить, ассистент отправляет куски ваших заметок ИИ-провайдеру. Всё, что лежит в папках ниже, он не читает, не ищет, не индексирует и никуда не отправляет — даже если эта заметка открыта у вас на экране. Сюда: медицина, финансы, пароли, сведения о других людях, всё, что под соглашением о неразглашении.",
+  "One folder per line, relative to the vault root. Subfolders are covered too.":
+    "По одной папке в строке, путь от корня хранилища. Вложенные папки тоже закрыты.",
+  "{0} notes are hidden from the assistant right now.": "Сейчас от ассистента скрыто заметок: {0}.",
+  "A narrower question than privacy: which part of the vault it works in day to day. Private folders stay hidden whatever you choose here.":
+    "Вопрос поуже, чем приватность: в какой части хранилища он работает изо дня в день. Личные папки остаются скрытыми при любом выборе здесь.",
+  "Left out of the index": "Не индексировать",
+  "Folders that are not indexed. The assistant can still open these notes when you ask for one by name — they are just never sent away in bulk. Private folders are already excluded and do not need repeating here.":
+    "Папки, которые не попадают в индекс. Ассистент по-прежнему откроет такую заметку, если попросить её по имени, — просто они не уезжают пачкой. Личные папки исключены и так, их здесь повторять не нужно.",
+
+  // ── what indexing is ──
+  "What indexing does, in plain words": "Что такое индексация, простыми словами",
+  "Word search only finds notes containing the words you typed. Ask about «усталость» and a note that says «сил нет совсем» will not come up, though it is exactly what you meant.":
+    "Поиск по словам находит только те заметки, где встречаются написанные вами слова. Спросите про «усталость» — заметка со словами «сил нет совсем» не найдётся, хотя это ровно про то же.",
+  "Indexing fixes that. Each note is sent once to your provider, which returns a long list of numbers describing what the note is about — its meaning, expressed as coordinates. That list is kept in a file inside your vault. When you ask something, your question is turned into the same kind of numbers and compared against them, so notes about the same thing come up whatever words they use.":
+    "Индексация это чинит. Каждая заметка один раз уезжает к провайдеру, а обратно приходит длинный список чисел, описывающий, о чём она, — смысл, записанный координатами. Этот список лежит файлом в вашем хранилище. Когда вы о чём-то спрашиваете, вопрос превращается в такие же числа и сравнивается с ними — поэтому заметки про одно и то же находятся, какими бы словами они ни были написаны.",
+  "Two things to know: the pass costs tokens, roughly a small fraction of a cent per note, and it happens once per note — only notes you change afterwards are done again. And the text of every note that gets indexed is sent to your provider, which is why private folders are excluded from it and why you can leave more folders out below.":
+    "Два важных момента. Проход стоит токенов — доли цента за заметку, и делается он один раз на заметку: заново уезжают только те, которые вы потом изменили. И текст каждой попавшей в индекс заметки уходит провайдеру — именно поэтому личные папки в индекс не берутся, а ниже можно исключить и другие.",
+  "In your notes": "В ваших заметках",
+  "Outside your notes": "За пределами заметок",
+  "Also search by meaning": "Искать ещё и по смыслу",
+  "Finds notes that say the same thing in different words.":
+    "Находит заметки, где та же мысль сказана другими словами.",
+  "Word search is always on: it builds itself from your vault in a second, costs nothing and needs no key.":
+    "Поиск по словам работает всегда: индекс строится по хранилищу за секунду, ничего не стоит и не требует ключа.",
+  "Let the assistant look things up online — news, facts, anything outside your vault. Answers are still grounded in your notes first.":
+    "Разрешить ассистенту смотреть в интернет — новости, факты, всё, чего нет в хранилище. Отвечать он всё равно будет сначала по вашим заметкам.",
+  "Made by Elton": "Сделал Элтон",
+  "Who made this": "Кто это сделал",
+  "Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ":
+    "Элтон — делаю инструменты для Obsidian и этим пользуюсь сам каждый день. Что плагин отправляет, куда именно и чего не трогает никогда — расписано на вкладке «Хранилище» и в описании: ",
+  "What it may do": "Что ему можно",
+  "chosen folders only": "только выбранные папки",
+  "all but some folders": "всё, кроме некоторых папок",
+  "new notes: root": "новые заметки: корень",
+  "no daily notes": "нет ежедневных",
+  "{0} templates": "шаблонов: {0}",
+  "off — it files notes blind": "выключено — создаёт вслепую",
+  "nothing from you": "без ваших пояснений",
+  "by words": "по словам",
+  "by meaning": "по смыслу",
+  "the web": "интернет",
+
+  // ── the vault tab, as four lines ──
+  "What it may do with notes": "Что ему можно делать с заметками",
+  "reads": "читает",
+  "creates": "создаёт",
+  "edits": "правит",
+  "deletes": "удаляет",
+  "runs your tabs": "управляет вкладками",
+  "nothing — it can only chat": "ничего — только разговаривает",
+  "whole vault": "всё хранилище",
+  "only chosen folders": "только выбранные папки",
+  "all but chosen folders": "всё, кроме выбранных папок",
+  "new notes: vault root": "новые заметки: корень хранилища",
+  "no daily notes folder": "папка ежедневных не задана",
+  "no templates": "шаблонов нет",
+  "What it knows about your vault": "Что он знает о хранилище",
+  "switched off — it files notes blind": "выключено — заметки создаются вслепую",
+  "map on": "карта включена",
+  "{0} templates found": "шаблонов найдено: {0}",
+  "no templates found": "шаблонов не найдено",
+  "your notes added": "есть ваши пояснения",
+  "Search and the web": "Поиск и интернет",
+  "word search always on": "по словам — всегда",
+  "meaning search on": "по смыслу — включён",
+  "meaning search off": "по смыслу — выключен",
+  "web on": "интернет включён",
+  "web off": "интернет выключен",
+  "A switched-off permission is not an instruction the assistant is asked to respect — the tool simply stops existing for it. It cannot be talked into using one.":
+    "Выключенное право — это не просьба к ассистенту его соблюдать: инструмент просто перестаёт для него существовать. Уговорить его нельзя.",
+  "Your screen": "Ваш экран",
+  "The restriction applies to search as well: notes outside the scope never appear in results.":
+    "Ограничение действует и на поиск: заметки вне области не появятся даже в выдаче.",
+  "These three decide where a new note lands and what shape it takes. Left empty, the assistant guesses — and a guess is how a project note ends up in the vault root with nothing linking to it.":
+    "Эти три поля решают, куда попадёт новая заметка и какой она будет. Если оставить пусто, ассистент гадает — а гадание и есть та причина, по которой заметка проекта оказывается в корне и на неё ничего не ссылается.",
+  "Templates it can build from: {0}": "Шаблонов, по которым он может создавать: {0}",
+  "No templates in that folder yet.": "В этой папке пока нет шаблонов.",
   "Set this up on your computer": "Настраивается на компьютере",
   "The bot is answered by the computer that holds your vault — that is the whole point of it, and it is why a phone is where you write TO the bot rather than where it runs. These settings are on the Telegram tab there.":
     "Боту отвечает компьютер, на котором лежит хранилище, — в этом весь смысл: с телефона вы боту пишете, а работает он там. Настройки — на вкладке Telegram на компьютере.",
@@ -865,6 +954,12 @@ const DEFAULT_SETTINGS = {
   confirmEveryEdit: false,
   scopeMode: "all",
   scopeFolders: "",
+  // Never read, whatever else is set. Checked before the scope, so it holds
+  // even in "whole vault" mode and even for the note open on screen.
+  privateFolders: "",
+  // Readable when asked for, but never swept into the embedding index — which
+  // is the one operation that sends every note in the vault to a provider.
+  noIndexFolders: "",
   newNoteFolder: "",
   dailyFolder: "",
   // Where this vault keeps its templates. Empty means: ask the Templates core
@@ -963,6 +1058,59 @@ function joinUrl(base, path) {
 function todayKey(d = new Date()) {
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+
+/**
+ * Hold the reader's place across a redraw.
+ *
+ * Half the settings in this plugin decide whether the others exist, so
+ * touching one rebuilds the page or the window it lives on. Every one of those
+ * rebuilds used to start again at the top, which means the control you just
+ * used scrolls out from under your cursor — and in a text field it means you
+ * cannot type a second character.
+ *
+ * Call before emptying the container; call the returned function after
+ * refilling it. Twice, because immediately after a redraw the box can still be
+ * shorter than the position being restored — the frame after, it is not.
+ *
+ *   const back = keepScroll(el);
+ *   el.empty(); rebuild(el);
+ *   back();
+ */
+function keepScroll(el) {
+  const was = el ? el.scrollTop : 0;
+  return () => {
+    if (!el || !was) return;
+    el.scrollTop = was;
+    window.requestAnimationFrame(() => { el.scrollTop = was; });
+  };
+}
+
+/**
+ * Make a plain element behave like a button.
+ *
+ * Used instead of an actual <button> wherever the clickable thing is a layout
+ * — a tile, a row — rather than a control. Themes are entitled to restyle
+ * buttons, and they do: a fixed height, a panel background, centred content.
+ * A two-line tile inside that collapses and spills over its neighbour. A div
+ * inherits nothing, so this hands back the three things a button gave us:
+ * the role, the tab stop, and Enter/Space.
+ */
+function clickable(el) {
+  el.setAttr("role", "button");
+  el.setAttr("tabindex", "0");
+  el.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    el.click();
+  });
+  return el;
+}
+
+/** The last segment of a path — what a folder is actually called. */
+function tail(path) {
+  const p = String(path || "").replace(/\/+$/, "");
+  return p.slice(p.lastIndexOf("/") + 1) || p;
 }
 
 /** Strip characters Obsidian won't accept in a file name. */

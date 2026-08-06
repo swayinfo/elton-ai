@@ -63,6 +63,10 @@ function newAutomation(presetId) {
     folder: "",
     prompt: p.prompt || "",
     notify: true,
+    // Also send the result to Telegram. Off by default — an automation that
+    // starts messaging your phone without being asked is a surprise, not a
+    // feature.
+    telegram: false,
     lastRun: "",
   };
 }
@@ -92,6 +96,8 @@ class AutomationEditModal extends Modal {
 
   draw() {
     const c = this.contentEl;
+    // Clicking a weekday or changing where it writes rebuilds this window.
+    const back = keepScroll(c);
     c.empty();
     const a = this.draft;
     c.createEl("h3", { text: a.name || t("Custom automation") });
@@ -148,6 +154,22 @@ class AutomationEditModal extends Modal {
     new Setting(c).setName(t("Notify me when it's done"))
       .addToggle((x) => x.setValue(a.notify !== false).onChange((v) => { a.notify = v; }));
 
+    /* Send it to the phone as well.
+       The note is still written either way — an automation's job is to leave
+       something in the vault. This is about being told, at eight in the
+       morning, without opening the laptop to find out. */
+    const tg = this.plugin.telegram;
+    const ready = tg && tg.configured() && this.plugin.settings.telegram.userId;
+    new Setting(c)
+      .setName(t("Send it to Telegram too"))
+      .setDesc(ready
+        ? t("The result arrives in the chat as well as being written into your vault.")
+        : t("Connect a bot on the Telegram tab first — then this can send the result to your phone."))
+      .addToggle((x) => {
+        x.setValue(!!a.telegram && !!ready).onChange((v) => { a.telegram = v; });
+        if (!ready) x.setDisabled(true);
+      });
+
     const row = c.createDiv({ cls: "oa-modal-buttons" });
     row.createEl("button", { text: t("Cancel") }).onclick = () => this.close();
     const save = row.createEl("button", { cls: "mod-cta", text: t("Save") });
@@ -157,6 +179,8 @@ class AutomationEditModal extends Modal {
       this.close();
       if (this.onSave) this.onSave();
     };
+
+    back();
   }
 }
 
@@ -258,6 +282,18 @@ class AutomationScheduler {
       if (n.noticeEl) {
         n.noticeEl.addClass("oa-notice-click");
         n.noticeEl.addEventListener("click", () => plugin.app.workspace.getLeaf(false).openFile(file));
+      }
+    }
+
+    // And to the phone, if asked. After the note rather than instead of it:
+    // the vault is where it lives, the chat is only where you are told.
+    if (a.telegram && plugin.telegram) {
+      try {
+        const where = file ? `\n\n_${t("Written to: {0}", file.path)}_` : "";
+        await plugin.telegram.push(`## ${title} · ${stamp}\n\n${text}${where}`);
+      } catch (e) {
+        // A failed message must not make a finished automation look failed.
+        console.warn("[Elton AI] could not send the automation to Telegram:", e && e.message);
       }
     }
     return file;

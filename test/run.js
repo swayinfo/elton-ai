@@ -890,6 +890,55 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── Privacy: what must never leave the machine ────────── */
+  describe("Приватность: личные папки не уходят наружу");
+  {
+    const V = (settings) => H.fakePlugin(H.fakeApp({}), settings).vault;
+
+    // Private wins over everything, including "whole vault".
+    const priv = V({ scopeMode: "all", privateFolders: "2. Areas/Здоровье\n3. Resources/Финансы" });
+    ok(!priv.inScope("2. Areas/Здоровье/Анализы.md"), "личная папка закрыта даже в режиме «всё хранилище»");
+    ok(!priv.inScope("2. Areas/Здоровье/Врачи/Терапевт.md"), "вложенные папки тоже закрыты");
+    ok(!priv.inScope("3. Resources/Финансы/Кредит.md"), "вторая папка из списка закрыта");
+    ok(priv.inScope("1. Projects/ESP32.md"), "остальное хранилище открыто");
+    // A folder whose name merely starts the same is a different folder.
+    ok(priv.inScope("2. Areas/Здоровье питания.md"), "похожее название не считается той же папкой");
+
+    // And over an explicit include-list, which is the case a single
+    // three-mode setting could never express.
+    const both = V({ scopeMode: "include", scopeFolders: "2. Areas", privateFolders: "2. Areas/Здоровье" });
+    ok(both.inScope("2. Areas/Спорт.md"), "внутри рабочей области — читает");
+    ok(!both.inScope("2. Areas/Здоровье/Анализы.md"), "но личное внутри рабочей области — нет");
+    ok(!both.inScope("1. Projects/ESP32.md"), "вне рабочей области — тоже нет");
+
+    const none = V({ scopeMode: "all", privateFolders: "" });
+    ok(none.inScope("что угодно.md"), "без списка ничего не закрывается");
+    ok(!none.isPrivate("что угодно.md"), "и isPrivate честно отвечает «нет»");
+
+    // Leaving folders out of the index is a weaker promise: readable when
+    // asked for, never swept up in bulk.
+    /* The daily note was the one hole in it.
+       Everything else reaches a note through files() or resolve(), which both
+       check the scope; this one built a path and asked for it directly, so a
+       private daily-notes folder was read anyway. */
+    {
+      const files = [new H.TFile("Дневник/06-08-2026.md")];
+      const app = H.fakeApp({});
+      app.vault.getMarkdownFiles = () => files;
+      app.vault.getAbstractFileByPath = (p) => files.find((f) => f.path === p) || null;
+      const open = H.fakePlugin(app, { dailyFolder: "Дневник" }).vault;
+      ok(open.dailyNote("today"), "обычная ежедневная заметка находится");
+
+      const shut = H.fakePlugin(app, { dailyFolder: "Дневник", privateFolders: "Дневник" }).vault;
+      eq(shut.dailyNote("today"), null, "а личная — нет, даже по прямому запросу даты");
+    }
+
+    const noidx = V({ noIndexFolders: "4. Archive" });
+    ok(!noidx.indexable("4. Archive/2019/Старое.md"), "исключённая из индекса папка не индексируется");
+    ok(noidx.indexable("1. Projects/ESP32.md"), "остальное индексируется");
+    ok(noidx.inScope("4. Archive/2019/Старое.md"), "но прочитать её по прямой просьбе всё ещё можно");
+  }
+
   /* ── Telegram: splitting, and who gets answered ────────── */
   describe("Телеграм: длинные ответы и чужие сообщения");
   {
@@ -975,6 +1024,64 @@ function eq(actual, expected, name) {
     ok(help.includes("/new") && help.includes("/help"), "и служебные команды тоже");
   }
 
+  /* ── Automations: when do they fire, and where do they land ─ */
+  describe("Автоматизации: расписание и доставка в телеграм");
+  {
+    const fresh = T.newAutomation("digest");
+    eq(fresh.telegram, false, "новая автоматизация в телеграм молча не пишет");
+
+    // The schedule is forgiving on purpose: Obsidian is not a server, so an
+    // automation fires the first time the vault is open past its hour.
+    const S = new T.AutomationScheduler({ settings: { automations: [] }, saveSettings: async () => {} });
+    const at = (h, m) => { const d = new Date(2026, 7, 6, h, m); return d; };
+    const auto = { enabled: true, time: "08:30", days: [], lastRun: "" };
+    ok(!S.due(auto, at(8, 0)), "до назначенного времени не срабатывает");
+    ok(S.due(auto, at(8, 31)), "сразу после — срабатывает");
+    ok(S.due(auto, at(23, 0)), "и позже в тот же день тоже — волт мог быть закрыт всё утро");
+    ok(!S.due(Object.assign({}, auto, { lastRun: T.todayKey(at(9, 0)) }), at(9, 0)),
+      "но второй раз за день — нет");
+    ok(!S.due(Object.assign({}, auto, { enabled: false }), at(9, 0)), "выключенная не срабатывает");
+    // 6 August 2026 is a Thursday.
+    ok(!S.due(Object.assign({}, auto, { days: [1] }), at(9, 0)), "в чужой день недели не срабатывает");
+    ok(S.due(Object.assign({}, auto, { days: [4] }), at(9, 0)), "в свой — срабатывает");
+
+    // Delivery: the note is always written; the chat is extra.
+    const sent = [];
+    const written = [];
+    const plugin = {
+      settings: { automations: [], newNoteFolder: "", telegram: { enabled: true, token: "x", userId: "1" } },
+      saveSettings: async () => {},
+      telegram: { push: async (text) => { sent.push(text); return true; } },
+      app: { vault: { create: async () => null } },
+      vault: {
+        createNote: async (title, body) => { written.push([title, body]); return { path: "Inbox/" + title + ".md" }; },
+        dailyNote: () => null,
+        dailyFolder: () => "",
+        ensureFolder: async () => {},
+        appendToNote: async () => {},
+      },
+    };
+    const sched = new T.AutomationScheduler(plugin);
+
+    await sched.deliver({ name: "Дайджест", target: "note", notify: false, telegram: false }, "тело ответа", []);
+    eq(sent.length, 0, "без галочки в телеграм ничего не уходит");
+    eq(written.length, 1, "а заметка пишется всё равно");
+
+    await sched.deliver({ name: "Дайджест", target: "note", notify: false, telegram: true }, "тело ответа", []);
+    eq(sent.length, 1, "с галочкой уходит одно сообщение");
+    ok(sent[0].includes("тело ответа"), "и в нём сам ответ");
+    ok(sent[0].startsWith("## Дайджест"), "с заголовком — телеграм теперь умеет их рисовать");
+    ok(sent[0].includes("Inbox/Дайджест"), "и путём заметки, в которую это легло");
+    eq(written.length, 2, "заметка всё так же пишется — чат её не заменяет");
+
+    // A bot that is down must not make a finished automation look failed.
+    plugin.telegram.push = async () => { throw new Error("нет сети"); };
+    let threw = false;
+    try { await sched.deliver({ name: "Д", target: "note", notify: false, telegram: true }, "тело", []); }
+    catch { threw = true; }
+    ok(!threw, "упавшая отправка не роняет автоматизацию");
+  }
+
   /* ── Hold-to-talk: the combination is physical ──────────── */
   describe("Клавиша «зажать и говорить»");
   {
@@ -990,6 +1097,61 @@ function eq(actual, expected, name) {
     // `code`, not `key`: a combination set on a Russian layout has to keep
     // working on an English one.
     ok(T.hotkeyLabel(hk).includes("Ctrl") && T.hotkeyLabel(hk).includes("Space"), "подпись читаемая");
+  }
+
+  /* ── Layout containers must not be <button> ────────────── */
+  describe("Вёрстка: кликабельные блоки — не button");
+  {
+    // This has now broken twice. A theme is entitled to restyle `button` —
+    // this vault's gives it a fixed height and a panel background — and a
+    // multi-line tile or row inside one collapses to a single line with its
+    // contents spilling over the element below.
+    const src = require("fs").readFileSync(require("path").join(__dirname, "..", "main.js"), "utf8");
+    for (const cls of ["oa-tile", "oa-row-main"]) {
+      ok(!src.includes(`createEl("button", { cls: "${cls}"`),
+        `${cls} не создаётся как button — тема ломает такие блоки`);
+      ok(src.includes(`cls: "${cls}"`), `${cls} вообще существует — тест не устарел`);
+    }
+    // And a div has to be given back what a button provided.
+    ok(/function clickable\(el\)[\s\S]*role", "button"[\s\S]*tabindex[\s\S]*keydown/.test(src),
+      "clickable возвращает роль, фокус и Enter/Space");
+  }
+
+  /* ── Redraws must not lose the reader's place ──────────── */
+  describe("Перерисовка не сбрасывает прокрутку");
+  {
+    // Chased one place at a time for two days: the daily-notes field, the
+    // vault map, the scope dropdown. Every redraw of a page that is still the
+    // same page has to hold its scroll position, so this checks all of them at
+    // once — each function that empties a container also keeps the scroll.
+    const fs = require("fs");
+    const path = require("path");
+    const dir = path.join(__dirname, "..", "src");
+    const redrawers = [
+      ["70-settings.js", "display()", "display"],
+      ["70-settings.js", "OnboardingModal", "draw"],
+      ["45-schedule.js", "AutomationEditModal", "draw"],
+      ["57-telegram.js", "TelegramSetupModal", "draw"],
+    ];
+    for (const [file, what, fn] of redrawers) {
+      // Line endings normalised: these files are CRLF on this machine, and
+      // searching for "\n  }" in them silently matches nothing.
+      const text = fs.readFileSync(path.join(dir, file), "utf8").replace(/\r\n/g, "\n");
+      // The whole method: from its signature to the line that closes it at
+      // method indentation. Reading only the first N characters was not
+      // enough — it found the `const back = keepScroll(...)` at the top and
+      // passed even with the call that restores it deleted.
+      const at = text.indexOf(`\n  ${fn}(`);
+      const end = at >= 0 ? text.indexOf("\n  }\n", at) : -1;
+      const body = at >= 0 && end > at ? text.slice(at, end) : "";
+      ok(body.length > 0, `${what}: метод ${fn} найден — тест не устарел`);
+      ok(/keepScroll\(/.test(body), `${what}: позиция запоминается перед перерисовкой`);
+      ok(/\bback\(\)/.test(body), `${what}: и восстанавливается после неё`);
+    }
+    // The group window rebuilds its scrolling box, so it carries the position
+    // across by hand rather than with the helper.
+    const st = fs.readFileSync(path.join(dir, "70-settings.js"), "utf8");
+    ok(/this\.bodyEl\.scrollTop = was/.test(st), "окно группы переносит позицию в новый блок");
   }
 
   /* ── report ────────────────────────────────────────────── */

@@ -249,6 +249,20 @@ English and Russian. The Obsidian interface language is used by default, and can
 
 ## Privacy and external services
 
+### Private folders
+
+Answering a question sends parts of your notes to your provider. So there is a list of folders it never touches: **Settings → Vault → What it may do → Private folders**.
+
+"Never" means: not read, not found by search, not indexed, not sent — and not offered as "the note on screen" even when it is open in front of you. The check runs before every other one and does not depend on the working scope: in "whole vault" mode private folders are still closed. Subfolders are closed with their parent.
+
+This is where medical records, finances, passwords, other people's information and anything under an agreement belong.
+
+It is not the same thing as "where it may work". The scope answers "which part of the vault does it live in day to day" and has three modes that exclude each other — there is no way to say "work everywhere except my medical notes" with it. Private folders answer a different question and apply on top of the scope.
+
+There is also a weaker list, **"Left out of the index"**: those notes can still be opened when you ask for one by name, they are simply never sent away in bulk when the index is built. As useful for a large archive you would rather not pay to embed as for anything delicate.
+
+### Where requests go
+
 The plugin never contacts anything except the provider you chose in settings. It carries no key of its own and no hidden addresses; this list is exhaustive.
 
 | Address | When it is used | What is sent |

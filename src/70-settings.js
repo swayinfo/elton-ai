@@ -21,7 +21,22 @@ class OnboardingModal extends Modal {
 
   get steps() {
     return [
-      { title: t("Meet your assistant"), body: t("It reads and writes the notes you already have. Talk to it or type — it searches your vault, answers from it, and edits notes when you ask."), icon: "sparkles", render: null },
+      {
+        title: t("Meet your assistant"),
+        body: t("It reads and writes the notes you already have. Talk to it or type — it searches your vault, answers from it, and edits notes when you ask."),
+        icon: "sparkles",
+        // The first slide is where someone decides whether to hand this thing
+        // a key and their notes. A name and an address belong here.
+        render: (c) => {
+          const box = c.createDiv({ cls: "oa-note" });
+          box.createDiv({ cls: "oa-note-title", text: t("Who made this") });
+          const line = box.createDiv();
+          line.appendText(t("Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ") );
+          const a = line.createEl("a", { text: "eltonlabs.org", href: "https://eltonlabs.org" });
+          a.setAttr("target", "_blank");
+          a.setAttr("rel", "noopener");
+        },
+      },
       { title: t("Pick where the brains come from"), body: t("Four options: Elton AI, OpenRouter, a local model on your own machine, or OpenAI directly. You bring the key — the plugin stores it only in this vault."), icon: "plug", render: (c) => this.stepProvider(c) },
       { title: t("Give it a name"), body: t("Call it whatever you like. The name is what it answers to and how it introduces itself."), icon: "user", render: (c) => this.stepName(c) },
       { title: t("Decide what it may touch"), body: t("By default it can read the whole vault, and create or edit notes. Deleting always asks you first. You can narrow it to specific folders."), icon: "shield", render: (c) => this.stepPerms(c) },
@@ -32,6 +47,13 @@ class OnboardingModal extends Modal {
 
   draw() {
     const c = this.contentEl;
+    // Choosing a provider redraws this slide to show the fields that provider
+    // needs — the same slide, so the reader's place is kept. Moving to the
+    // next slide is a new page and starts at the top.
+    const back = keepScroll(c);
+    const same = this.step === this._drawnStep;
+    this._drawnStep = this.step;
+
     c.empty();
     const s = this.steps[this.step];
 
@@ -60,6 +82,8 @@ class OnboardingModal extends Modal {
       await this.plugin.saveSettings();
       this.draw();
     };
+
+    if (same) back();
   }
 
   stepProvider(c) {
@@ -100,6 +124,25 @@ class OnboardingModal extends Modal {
     tog(t("Create notes"), "canCreate");
     tog(t("Edit notes"), "canEdit");
     tog(t("Delete notes"), "canDelete", t("Even with this on, every deletion stops and waits for you to confirm from the keyboard. It can never delete anything on its own."));
+
+    /* Asked here rather than left to be found.
+       Answering sends parts of notes to a provider, and the moment to decide
+       which parts may never go is before the first question, not after. */
+    c.createDiv({ cls: "oa-warn", text: t("⚠ Answering a question sends parts of your notes to your AI provider. Anything in the folders below is never read, never searched, never indexed and never sent — even when it is the note open on your screen. This is the place for medical records, finances, passwords, other people's information, anything under an agreement.") });
+    new Setting(c)
+      .setName(t("Private folders"))
+      .setDesc(t("One folder per line, relative to the vault root. Subfolders are covered too."))
+      .addTextArea((tx) => {
+        tx.inputEl.rows = 3;
+        tx.setPlaceholder("2. Areas/Здоровье")
+          .setValue(s.privateFolders || "")
+          .onChange(async (v) => {
+            s.privateFolders = v;
+            await this.plugin.saveSettings();
+            this.plugin.vault.index = null;
+            this.plugin.vault._map = null;
+          });
+      });
   }
 
   /**
@@ -151,6 +194,57 @@ class OnboardingModal extends Modal {
 }
 
 /* ============================================================
+ *  A group of settings, in a window
+ *
+ *  The tab lists what there is and what state it is in; the window
+ *  holds the controls. Used wherever a single tab had grown into a
+ *  page you scroll rather than read.
+ *
+ *  `build` is called again on every redraw, because half of these
+ *  settings decide whether the others exist — turning the map off
+ *  removes the map, choosing a scope adds a folder list.
+ * ========================================================== */
+class SettingsGroupModal extends Modal {
+  constructor(app, title, build, onClose) {
+    super(app);
+    this.title = title;
+    this.build = build;
+    this.done = onClose;
+  }
+
+  onOpen() {
+    this.modalEl.addClass("oa-scen-edit");
+    this.draw();
+  }
+
+  draw() {
+    const c = this.contentEl;
+    const was = this.bodyEl ? this.bodyEl.scrollTop : 0;
+
+    c.empty();
+    c.createEl("h3", { text: this.title });
+    this.bodyEl = c.createDiv({ cls: "oa-group-body" });
+    this.build(this.bodyEl);
+    const row = c.createDiv({ cls: "oa-modal-buttons" });
+    // One button, and it says done rather than save: everything in here is
+    // written the moment it is touched, exactly as on a settings page.
+    row.createEl("button", { cls: "mod-cta", text: t("Done") }).onclick = () => this.close();
+
+    // Not `keepScroll`: the scrolling box itself is rebuilt here, so the
+    // position has to be carried across to the new one by hand.
+    if (was) {
+      this.bodyEl.scrollTop = was;
+      window.requestAnimationFrame(() => { if (this.bodyEl) this.bodyEl.scrollTop = was; });
+    }
+  }
+
+  onClose() {
+    this.contentEl.empty();
+    if (this.done) this.done();
+  }
+}
+
+/* ============================================================
  *  Settings
  *
  *  Split across tabs rather than one long scroll: each tab is a
@@ -165,6 +259,15 @@ class AssistantSettingTab extends PluginSettingTab {
 
   display() {
     const c = this.containerEl;
+
+    /* Hold the reader's place across a redraw.
+       `display()` is called by a couple of dozen controls — every toggle that
+       changes what else belongs on the page — and each one used to throw the
+       scroll position away. The scrolling element is Obsidian's own tab
+       container, not ours, so it is found rather than assumed. */
+    const scroller = c.closest(".vertical-tab-content") || c.parentElement;
+    const back = keepScroll(scroller);
+
     c.empty();
     c.addClass("oa-settings");
 
@@ -173,6 +276,14 @@ class AssistantSettingTab extends PluginSettingTab {
     const left = onb.createDiv();
     left.createDiv({ cls: "oa-onb-card-title", text: t("Getting started") });
     left.createDiv({ cls: "oa-onb-card-sub", text: t("Walks you through the provider, the assistant's name and what it may touch. Two minutes.") });
+    // Who made this, on the first thing anyone reads.
+    // A plugin that asks for a key and reads your notes is asking for trust,
+    // and trust wants a name and an address behind it rather than a username.
+    const by = left.createDiv({ cls: "oa-onb-card-by" });
+    by.appendText(t("Made by Elton") + " · ");
+    const site = by.createEl("a", { text: "eltonlabs.org", href: "https://eltonlabs.org" });
+    site.setAttr("target", "_blank");
+    site.setAttr("rel", "noopener");
     const go = onb.createEl("button", { cls: "mod-cta", text: t("Open the setup guide") });
     go.onclick = () => new OnboardingModal(this.app, this.plugin).open();
 
@@ -216,6 +327,11 @@ class AssistantSettingTab extends PluginSettingTab {
       telegram: () => this.tabTelegram(body),
       ui: () => this.tabUI(body),
     })[this._tab]();
+
+    // Switching tabs is the one case where starting at the top is right —
+    // that is a new page, not the same one redrawn.
+    if (this._tab === this._drawnTab) back();
+    this._drawnTab = this._tab;
   }
 
   save(rerender) {
@@ -673,53 +789,261 @@ class AssistantSettingTab extends PluginSettingTab {
   }
 
   /* ── access ─────────────────────────────────────────────── */
+  /* ── the vault ──────────────────────────────────────────────
+   *
+   * Four groups, each behind its own window.
+   *
+   * Everything here used to sit on one page: eleven toggles, four folder
+   * fields, an index panel and a scrollable map. It was the longest tab by a
+   * distance and read as a pile rather than a set of decisions. Now the tab is
+   * four lines, each summarising what it holds — the state of the whole thing
+   * is visible without opening anything, and you open exactly the one you came
+   * for.
+   * ────────────────────────────────────────────────────────── */
   tabAccess(c) {
     const s = this.s;
-    new Setting(c).setName(t("What the assistant may do")).setHeading();
+    const V = this.plugin.vault;
 
+    const grid = c.createDiv({ cls: "oa-tiles" });
+
+    /* Each tile answers its own question at a glance.
+       The facts are chips rather than one run-on line: "reads · creates ·
+       edits · whole vault" is a sentence you have to read, four chips is a
+       state you can see. On chips carry the accent; off ones stay muted, so
+       what is switched off is legible without being loud. */
+    const may = [
+      [t("reads"), s.canRead],
+      [t("creates"), s.canCreate],
+      [t("edits"), s.canEdit],
+      [t("deletes"), s.canDelete],
+      [s.scopeMode === "all" ? t("whole vault")
+        : s.scopeMode === "include" ? t("chosen folders only") : t("all but some folders"), true],
+    ];
+    this.tile(grid, {
+      icon: "shield-check",
+      name: t("What it may do"),
+      facts: may,
+      build: (m) => this.groupPermissions(m),
+    });
+
+    const tplFolder = V.templateFolder();
+    let tplCount = 0;
+    try { tplCount = V.templates().length; } catch { tplCount = 0; }
+    this.tile(grid, {
+      icon: "folder-tree",
+      name: t("Where things live"),
+      facts: [
+        [s.newNoteFolder ? tail(s.newNoteFolder) : t("new notes: root"), !!s.newNoteFolder],
+        [(s.dailyFolder || V.dailyFolder()) ? tail(s.dailyFolder || V.dailyFolder()) : t("no daily notes"), !!(s.dailyFolder || V.dailyFolder())],
+        [tplFolder ? tail(tplFolder) : t("no templates"), !!tplFolder],
+      ],
+      build: (m) => this.groupFolders(m),
+    });
+
+    this.tile(grid, {
+      icon: "map",
+      name: t("What it knows about your vault"),
+      facts: s.vaultMap === false
+        ? [[t("off — it files notes blind"), false]]
+        : [
+          [t("map on"), true],
+          [tplCount ? t("{0} templates", tplCount) : t("no templates found"), !!tplCount],
+          [s.vaultNotes ? t("your notes added") : t("nothing from you"), !!s.vaultNotes],
+        ],
+      build: (m) => this.groupMap(m),
+    });
+
+    const web = s.webSearch && (s.provider === "obsimind" || s.provider === "openrouter");
+    this.tile(grid, {
+      icon: "search",
+      name: t("Search and the web"),
+      facts: [
+        [t("by words"), true],
+        [t("by meaning"), !!s.semanticSearch],
+        [t("the web"), !!web],
+      ],
+      build: (m) => this.groupSearch(m),
+    });
+  }
+
+  /**
+   * A tile that opens a window full of settings.
+   *
+   * A square rather than a row: four of them sit two-up on a settings page and
+   * fill the width instead of leaving two thirds of it empty, and the facts
+   * have somewhere to go. No chevron — the whole tile is the button, and an
+   * arrow that is not itself clickable is an invitation to click the wrong
+   * thing.
+   */
+  tile(c, { icon, name, facts, build }) {
+    // A div, not a button. Themes style `button` heavily — this vault's gives
+    // them a fixed height and a panel background — and a two-line tile inside
+    // one collapses to a single row with its own contents spilling over the
+    // top of the next tile. Which is exactly what happened. `clickable` puts
+    // the keyboard behaviour back.
+    const el = clickable(c.createDiv({ cls: "oa-tile" }));
+    const head = el.createDiv({ cls: "oa-tile-head" });
+    const mark = head.createDiv({ cls: "oa-tile-icon" });
+    setIcon(mark, icon);
+    head.createDiv({ cls: "oa-tile-name", text: name });
+
+    const row = el.createDiv({ cls: "oa-tile-facts" });
+    for (const [label, on] of facts) {
+      if (!label) continue;
+      row.createSpan({ cls: "oa-chip" + (on ? " is-on" : ""), text: label });
+    }
+
+    // The tile's own facts come from the settings inside it, so the tab is
+    // redrawn once the window is done with.
+    el.onclick = () => {
+      // Held on the tab so `redrawGroup` can reach it: a control inside the
+      // window that changes what else belongs there redraws the window.
+      this._group = new SettingsGroupModal(this.app, name, build, () => {
+        this._group = null;
+        this.display();
+      });
+      this._group.open();
+    };
+  }
+
+  /**
+   * A section heading inside a group window.
+   *
+   * Obsidian's own `setHeading()` draws a full-width rule and dilutes the text
+   * to the same grey as the descriptions around it — in a window it reads as
+   * another disabled setting rather than as a divider. This is the opposite:
+   * small, dark, tightly spaced, with the air above it doing the separating.
+   */
+  section(c, text) {
+    c.createDiv({ cls: "oa-sec", text });
+  }
+
+  /** A fold that lives inside a group window and never touches the page. */
+  groupFold(c, key, build) {
+    this._openAdv = this._openAdv || {};
+    const open = !!this._openAdv[key];
+    const box = c.createDiv({ cls: "oa-adv" + (open ? " is-open" : "") });
+    const head = box.createEl("button", { cls: "oa-adv-head" });
+    head.createSpan({ cls: "oa-adv-caret", text: "›" });
+    head.createSpan({ text: t("Advanced") });
+    head.onclick = () => { this._openAdv[key] = !this._openAdv[key]; this.redrawGroup(); };
+    if (open) build(box.createDiv({ cls: "oa-adv-body" }));
+  }
+
+  /* ── group: what it may do ──────────────────────────────── */
+  groupPermissions(c) {
+    const s = this.s;
+    c.createDiv({ cls: "oa-note", text: t("A switched-off permission is not an instruction the assistant is asked to respect — the tool simply stops existing for it. It cannot be talked into using one.") });
+
+    this.section(c, t("Notes"));
     new Setting(c).setName(t("Read notes"))
       .setDesc(t("Search and read. Without this it can only chat — it won't see your vault at all."))
       .addToggle((x) => x.setValue(s.canRead).onChange(async (v) => { s.canRead = v; await this.plugin.saveSettings(); }));
     new Setting(c).setName(t("Create notes"))
-      .addToggle((x) => x.setValue(s.canCreate).onChange(async (v) => { s.canCreate = v; await this.plugin.saveSettings(); this.display(); }));
+      .addToggle((x) => x.setValue(s.canCreate).onChange(async (v) => { s.canCreate = v; await this.plugin.saveSettings(); }));
     new Setting(c).setName(t("Edit notes"))
       .setDesc(t("Change existing notes. Every edit is backed up first, so \"undo that\" always works."))
       .addToggle((x) => x.setValue(s.canEdit).onChange(async (v) => { s.canEdit = v; await this.plugin.saveSettings(); }));
     new Setting(c).setName(t("Delete notes"))
       .setDesc(t("Even with this on, every deletion stops and waits for you to confirm from the keyboard. It can never delete anything on its own."))
       .addToggle((x) => x.setValue(s.canDelete).onChange(async (v) => { s.canDelete = v; await this.plugin.saveSettings(); }));
+    new Setting(c).setName(t("Confirm every edit"))
+      .setDesc(t("Ask before writing anything, not just before deleting. Safer, slower."))
+      .addToggle((x) => x.setValue(s.confirmEveryEdit).onChange(async (v) => { s.confirmEveryEdit = v; await this.plugin.saveSettings(); }));
 
+    this.section(c, t("Your screen"));
     new Setting(c).setName(t("Manage tabs and windows"))
       .setDesc(t("Let it open notes beside each other, open web pages inside the vault and close tabs you're done with. It never touches its own panel, and closing several at once still asks you."))
       .addToggle((x) => x.setValue(s.canControlUI).onChange(async (v) => {
-        s.canControlUI = v; await this.plugin.saveSettings(); this.display();
+        s.canControlUI = v; await this.plugin.saveSettings(); this.redrawGroup();
       }));
 
-    // The web page part of it quietly changes behaviour when the core plugin
-    // is off — better said here than discovered when a tab opens elsewhere.
-    if (s.canControlUI) {
-      const ip = this.app.internalPlugins;
-      const wv = ip && ip.getPluginById ? ip.getPluginById("webviewer") : null;
-      if (!wv || !wv.enabled) {
-        const box = c.createDiv({ cls: "oa-note" });
-        box.createDiv({ cls: "oa-note-title", text: t("Web viewer is switched off") });
-        box.createDiv({ text: t("Pages will open in your system browser instead. Turn on the core plugin «Web viewer» to have them open inside the vault.") });
-      }
+    // The web page part quietly changes behaviour when the core plugin is off
+    // — better said here than discovered when a tab opens somewhere else.
+    const ip = this.app.internalPlugins;
+    const wv = ip && ip.getPluginById ? ip.getPluginById("webviewer") : null;
+    if (s.canControlUI && (!wv || !wv.enabled)) {
+      const box = c.createDiv({ cls: "oa-note" });
+      box.createDiv({ cls: "oa-note-title", text: t("Web viewer is switched off") });
+      box.createDiv({ text: t("Pages will open in your system browser instead. Turn on the core plugin «Web viewer» to have them open inside the vault.") });
     }
 
-    /* Where things live.
-       Out of Advanced and onto the page: these three fields are the difference
-       between a note filed where it belongs and one dropped in the root, and
-       they were behind a fold nobody opens. */
-    new Setting(c).setName(t("Where things live")).setHeading();
+    /* Privacy, said plainly and given its own place.
+       "Where it may work" is a scope with three modes that exclude each other,
+       so it cannot answer "work everywhere except my medical notes". This can,
+       it is checked before anything else reads a note, and it is worded as
+       what people actually come looking for. */
+    this.section(c, t("Private folders"));
+    const warn = c.createDiv({ cls: "oa-warn" });
+    warn.setText(t("⚠ Answering a question sends parts of your notes to your AI provider. Anything in the folders below is never read, never searched, never indexed and never sent — even when it is the note open on your screen. This is the place for medical records, finances, passwords, other people's information, anything under an agreement."));
 
-    if (s.canCreate) {
-      this.folderField(
-        new Setting(c).setName(t("Folder for new notes")).setDesc(t("Where notes the assistant creates end up when it has no better idea.")),
-        () => s.newNoteFolder,
-        async (v) => { s.newNoteFolder = v; await this.plugin.saveSettings(); },
-        "Inbox");
+    new Setting(c)
+      .setDesc(t("One folder per line, relative to the vault root. Subfolders are covered too."))
+      .addTextArea((tx) => {
+        tx.inputEl.rows = 4;
+        tx.setPlaceholder("2. Areas/Здоровье\n3. Resources/Финансы")
+          .setValue(s.privateFolders || "")
+          .onChange(async (v) => {
+            s.privateFolders = v;
+            await this.plugin.saveSettings();
+            // Both caches contain material from folders that just became
+            // private, so both have to go.
+            this.plugin.vault.index = null;
+            this.plugin.vault._map = null;
+          });
+      });
+
+    const hidden = this.plugin.vault.privateList();
+    if (hidden.length) {
+      let n = 0;
+      try { n = this.app.vault.getMarkdownFiles().filter((f) => this.plugin.vault.isPrivate(f.path)).length; } catch { n = 0; }
+      c.createDiv({ cls: "oa-note", text: t("{0} notes are hidden from the assistant right now.", n) });
     }
+
+    this.section(c, t("Where it may work"));
+    new Setting(c)
+      .setDesc(t("A narrower question than privacy: which part of the vault it works in day to day. Private folders stay hidden whatever you choose here."))
+      .addDropdown((d) => {
+        d.addOption("all", t("Whole vault"));
+        d.addOption("include", t("Only these folders"));
+        d.addOption("exclude", t("Everything except these folders"));
+        d.setValue(s.scopeMode).onChange(async (v) => {
+          s.scopeMode = v;
+          await this.plugin.saveSettings();
+          this.plugin.vault.index = null;   // scope changed → the index is stale
+          this.plugin.vault._map = null;
+          this.redrawGroup();
+        });
+      });
+
+    if (s.scopeMode !== "all") {
+      new Setting(c)
+        .setName(t("Folders"))
+        .setDesc(t("One path per line, relative to the vault root."))
+        .addTextArea((tx) => {
+          tx.inputEl.rows = 5;
+          tx.setPlaceholder("Projects")
+            .setValue(s.scopeFolders)
+            .onChange(async (v) => {
+              s.scopeFolders = v;
+              await this.plugin.saveSettings();
+              this.plugin.vault.index = null;
+              this.plugin.vault._map = null;
+            });
+        });
+    }
+  }
+
+  /* ── group: where things live ───────────────────────────── */
+  groupFolders(c) {
+    const s = this.s;
+    c.createDiv({ cls: "oa-note", text: t("These three decide where a new note lands and what shape it takes. Left empty, the assistant guesses — and a guess is how a project note ends up in the vault root with nothing linking to it.") });
+
+    this.folderField(
+      new Setting(c).setName(t("Folder for new notes")).setDesc(t("Where notes the assistant creates end up when it has no better idea.")),
+      () => s.newNoteFolder,
+      async (v) => { s.newNoteFolder = v; await this.plugin.saveSettings(); },
+      "Inbox");
 
     const foundDaily = this.plugin.vault.dailyFolder();
     this.folderField(
@@ -745,76 +1069,88 @@ class AssistantSettingTab extends PluginSettingTab {
       },
       "Templates");
 
-    /* What it knows about the shape of the vault.
-       Shown, not merely switched on: the point of it is that you can read what
-       the assistant thinks your vault looks like and correct it below. */
+    // What it found in there, listed. A templates folder that turns out to be
+    // empty is otherwise a silent failure.
+    let names = [];
+    try { names = this.plugin.vault.templates().map((f) => f.basename); } catch { names = []; }
+    if (names.length) {
+      const box = c.createDiv({ cls: "oa-note" });
+      box.createDiv({ cls: "oa-note-title", text: t("Templates it can build from: {0}", names.length) });
+      box.createDiv({ text: names.join(" · ") });
+    } else if (foundTpl || s.templateFolder) {
+      c.createDiv({ cls: "oa-note", text: t("No templates in that folder yet.") });
+    }
+  }
+
+  /* ── group: the map ─────────────────────────────────────── */
+  groupMap(c) {
+    const s = this.s;
+
     new Setting(c)
       .setName(t("Learn the vault's structure"))
       .setDesc(t("Folds a map of your vault into every request — the folders, what is in them, which templates exist. This is what stops it filing a project note in the root and inventing a shape for it."))
       .addToggle((x) => x.setValue(s.vaultMap !== false).onChange(async (v) => {
-        s.vaultMap = v; this.plugin.vault._map = null; await this.plugin.saveSettings(); this.display();
+        s.vaultMap = v;
+        this.plugin.vault._map = null;
+        await this.plugin.saveSettings();
+        this.redrawGroup();
       }));
 
-    if (s.vaultMap !== false) {
-      let map = "";
-      try { map = this.plugin.vault.describeVault(); } catch (e) { map = String(e.message); }
-      const box = c.createDiv({ cls: "oa-map" });
-      const head = box.createEl("button", { cls: "oa-adv-head" });
-      head.createSpan({ cls: "oa-adv-caret", text: "›" });
-      head.createSpan({ text: t("What it sees") });
-      const pre = box.createDiv({ cls: "oa-map-body" + (this._mapOpen ? "" : " is-hidden") });
-      pre.setText(map);
-      head.onclick = () => { this._mapOpen = !this._mapOpen; this.display(); };
-      if (this._mapOpen) box.addClass("is-open");
+    if (s.vaultMap === false) return;
 
-      new Setting(c)
-        .setName(t("Anything it should know about your system"))
-        .setDesc(t("Read the map above; whatever it cannot tell from folder names, write here. \"Projects live in 1. Projects, one note each, always linked from the MOC\" is the kind of thing that saves a dozen wrong guesses."))
-        .addTextArea((tx) => {
-          tx.inputEl.rows = 4;
-          tx.setValue(s.vaultNotes || "").onChange(async (v) => { s.vaultNotes = v; await this.plugin.saveSettings(); });
-        });
-    }
+    c.createDiv({ cls: "oa-map-how", text: t("Nothing here was written by hand or asked of a model. The plugin walks the file list Obsidian already keeps: folders with how many notes are under each, the folders one level in, the contents of your templates folder, and the daily-notes folder from your Obsidian settings. It costs nothing, rebuilds itself when the vault changes, and goes into every request as the text below.") });
 
-    this.searchSection(c);
+    let map = "";
+    try { map = this.plugin.vault.describeVault(); } catch (e) { map = String(e.message); }
+    c.createDiv({ cls: "oa-map-body", text: map });
 
-    this.advanced(c, "access", (a) => {
-      new Setting(a).setName(t("Where it may work")).setHeading();
-      new Setting(a).addDropdown((d) => {
-        d.addOption("all", t("Whole vault"));
-        d.addOption("include", t("Only these folders"));
-        d.addOption("exclude", t("Everything except these folders"));
-        d.setValue(s.scopeMode).onChange(async (v) => {
-          s.scopeMode = v; await this.plugin.saveSettings();
-          this.plugin.vault.index = null;   // scope changed → the index is stale
-          this.display();
-        });
+    new Setting(c)
+      .setName(t("Anything it should know about your system"))
+      .setDesc(t("Read the map above; whatever it cannot tell from folder names, write here. \"Projects live in 1. Projects, one note each, always linked from the MOC\" is the kind of thing that saves a dozen wrong guesses."))
+      .addTextArea((tx) => {
+        tx.inputEl.rows = 5;
+        tx.inputEl.addClass("oa-auto-prompt");
+        tx.setValue(s.vaultNotes || "").onChange(async (v) => { s.vaultNotes = v; await this.plugin.saveSettings(); });
       });
-
-      if (s.scopeMode !== "all") {
-        new Setting(a)
-          .setName(t("Folders"))
-          .setDesc(t("One path per line, relative to the vault root."))
-          .addTextArea((tx) => {
-            tx.inputEl.rows = 5;
-            tx.setPlaceholder("Projects")
-              .setValue(s.scopeFolders)
-              .onChange(async (v) => { s.scopeFolders = v; await this.plugin.saveSettings(); this.plugin.vault.index = null; });
-          });
-      }
-
-      new Setting(a)
-        .setName(t("Confirm every edit"))
-        .setDesc(t("Ask before writing anything, not just before deleting. Safer, slower."))
-        .addToggle((x) => x.setValue(s.confirmEveryEdit).onChange(async (v) => { s.confirmEveryEdit = v; await this.plugin.saveSettings(); }));
-    });
   }
 
-  /* ── search, on the vault tab ───────────────────────────── */
-  searchSection(c) {
+  /* ── group: search and the web ──────────────────────────── */
+  groupSearch(c) {
     const s = this.s;
 
-    new Setting(c).setName(t("Web access")).setHeading();
+    /* Order follows what people come here to do.
+       Meaning-based search is the thing with a switch, a cost and a button
+       that does work; the web is one toggle; the model name and the index file
+       are typed once and never again. The old order was the reverse of that,
+       so the button that actually does something sat at the bottom of a
+       scrolling window. */
+    this.section(c, t("In your notes"));
+
+    c.createDiv({ cls: "oa-note", text: t("Word search is always on: it builds itself from your vault in a second, costs nothing and needs no key.") });
+
+    new Setting(c)
+      .setName(t("Also search by meaning"))
+      .setDesc(t("Finds notes that say the same thing in different words."))
+      .addToggle((x) => x.setValue(s.semanticSearch).onChange(async (v) => {
+        s.semanticSearch = v; await this.plugin.saveSettings(); this.redrawGroup();
+      }));
+
+    if (s.semanticSearch) {
+      /* What this actually is, before the button that does it.
+         "Embeddings" is a word people switch on without knowing that it sends
+         every note in the vault to a provider, one by one, and costs money
+         doing it. Both of those are worth knowing beforehand. */
+      const box = c.createDiv({ cls: "oa-explain" });
+      box.createDiv({ cls: "oa-explain-title", text: t("What indexing does, in plain words") });
+      box.createDiv({ text: t("Word search only finds notes containing the words you typed. Ask about «усталость» and a note that says «сил нет совсем» will not come up, though it is exactly what you meant.") });
+      box.createDiv({ text: t("Indexing fixes that. Each note is sent once to your provider, which returns a long list of numbers describing what the note is about — its meaning, expressed as coordinates. That list is kept in a file inside your vault. When you ask something, your question is turned into the same kind of numbers and compared against them, so notes about the same thing come up whatever words they use.") });
+      box.createDiv({ text: t("Two things to know: the pass costs tokens, roughly a small fraction of a cent per note, and it happens once per note — only notes you change afterwards are done again. And the text of every note that gets indexed is sent to your provider, which is why private folders are excluded from it and why you can leave more folders out below.") });
+
+      this.indexPanel(c);
+    }
+
+    this.section(c, t("Outside your notes"));
+
     // Only the two providers that route through OpenRouter can search the web;
     // for the others the switch would be a promise the transport can't keep.
     const webCapable = s.provider === "obsimind" || s.provider === "openrouter";
@@ -823,8 +1159,10 @@ class AssistantSettingTab extends PluginSettingTab {
     } else {
       new Setting(c)
         .setName(t("Search the web"))
-        .setDesc(t("Let the assistant look things up online — news, facts, anything outside your vault. Answers are still grounded in your notes first; the web is a second source it can reach when the notes don't have it."))
-        .addToggle((x) => x.setValue(s.webSearch).onChange(async (v) => { s.webSearch = v; await this.plugin.saveSettings(); this.display(); }));
+        .setDesc(t("Let the assistant look things up online — news, facts, anything outside your vault. Answers are still grounded in your notes first."))
+        .addToggle((x) => x.setValue(s.webSearch).onChange(async (v) => {
+          s.webSearch = v; await this.plugin.saveSettings(); this.redrawGroup();
+        }));
       if (s.webSearch) {
         new Setting(c)
           .setName(t("How many results"))
@@ -834,119 +1172,131 @@ class AssistantSettingTab extends PluginSettingTab {
       }
     }
 
-    new Setting(c).setName(t("Search")).setHeading();
-    const box = c.createDiv({ cls: "oa-note" });
-    box.createDiv({ cls: "oa-note-title", text: t("Word search is always on") });
-    box.createDiv({ text: t("It builds itself from your vault in a second, costs nothing and needs no key.") });
-
-    new Setting(c)
-      .setName(t("Meaning-based search"))
-      .setDesc(t("Also find notes that mean the same thing in different words. Needs a one-time pass over your vault that costs tokens."))
-      .addToggle((x) => x.setValue(s.semanticSearch).onChange(async (v) => { s.semanticSearch = v; await this.plugin.saveSettings(); this.display(); }));
-
     if (!s.semanticSearch) return;
 
-    new Setting(c).setName(t("Embedding model"))
-      .addText((tx) => tx.setValue(s.embedModel).onChange(async (v) => { s.embedModel = v.trim(); await this.plugin.saveSettings(); }));
+    this.section(c, t("Left out of the index"));
+    new Setting(c)
+      .setDesc(t("Folders that are not indexed. The assistant can still open these notes when you ask for one by name — they are just never sent away in bulk. Private folders are already excluded and do not need repeating here."))
+      .addTextArea((tx) => {
+        tx.inputEl.rows = 3;
+        tx.setPlaceholder("4. Archive\n2. Areas/Дневники")
+          .setValue(s.noIndexFolders || "")
+          .onChange(async (v) => { s.noIndexFolders = v; await this.plugin.saveSettings(); });
+      });
 
-    /* The state of the index, in one place and in words.
-       "Reusing an existing index: 2108" next to a button offering to index 48
-       more says nothing about whether those 48 are new writing, notes too
-       short to be worth a vector, or requests the provider keeps refusing. */
-    const panel = c.createDiv({ cls: "oa-index-panel" });
-    const status = panel.createDiv({ cls: "oa-index-status" });
-    const detail = panel.createDiv({ cls: "oa-index-detail" });
-    const problem = panel.createDiv({ cls: "oa-index-problem" });
+    this.groupFold(c, "embeddings", (a) => {
+      new Setting(a).setName(t("Embedding model"))
+        .addText((tx) => tx.setValue(s.embedModel).onChange(async (v) => { s.embedModel = v.trim(); await this.plugin.saveSettings(); }));
 
-    const showCount = async () => {
-      const n = await this.plugin.vault.indexSize();
-      const pending = await this.plugin.vault.pendingCount();
-      status.setText(n
-        ? t("{0} notes in the index", n)
-        : t("Nothing indexed yet"));
-      detail.setText(pending
-        ? t("{0} waiting: notes written or changed since the last pass.", pending)
-        : t("Everything in your vault is in it."));
-      detail.toggleClass("is-hidden", false);
-    };
+      this.fileField(
+        new Setting(a).setName(t("Index file"))
+          .setDesc(t("Already have an index from another script? Point at its .json and it gets reused — no re-indexing, no tokens spent. Leave empty to keep a private one.")),
+        () => s.embedIndexPath,
+        async (v) => {
+          s.embedIndexPath = v;
+          this.plugin.vault._emb = null;      // different file, different vectors
+          await this.plugin.saveSettings();
+          if (v && !(await this.plugin.vault.indexSize(v))) new Notice(t("That file isn't a usable index"));
+        },
+        "json", "Embedding/embeddings-cache.json");
+
+      // A borrowed index is only ever added to, never rewritten.
+      if (this.plugin.vault.indexIsBorrowed) {
+        const why = a.createDiv({ cls: "oa-note" });
+        why.createDiv({ cls: "oa-note-title", text: t("This index belongs to another tool") });
+        why.createDiv({ text: t("Updating adds only notes it hasn't seen — nothing existing is rewritten or deleted, so whatever maintains this file keeps working.") });
+      }
+    });
+  }
+
+  /**
+   * The index: what is in it, what is waiting, and the button, in one card.
+   *
+   * The state and the action belong together. Split apart — a status line at
+   * the top of a window, its button at the bottom past everything else — you
+   * have to remember one to make sense of the other.
+   */
+  indexPanel(c) {
+    const panel = c.createDiv({ cls: "oa-index" });
+    const left = panel.createDiv({ cls: "oa-index-text" });
+    const status = left.createDiv({ cls: "oa-index-status" });
+    const detail = left.createDiv({ cls: "oa-index-detail" });
+    const action = panel.createDiv({ cls: "oa-index-action" });
+    const problem = c.createDiv({ cls: "oa-index-problem is-hidden" });
+
+    const btn = action.createEl("button", { cls: "mod-cta" });
+    let stop = false;
+
     const showProblem = (text) => {
       problem.setText(text || "");
       problem.toggleClass("is-hidden", !text);
     };
-    showProblem("");
 
-    this.fileField(
-      new Setting(c).setName(t("Index file"))
-        .setDesc(t("Already have an index from another script? Point at its .json and it gets reused — no re-indexing, no tokens spent. Leave empty to keep a private one.")),
-      () => s.embedIndexPath,
-      async (v) => {
-        s.embedIndexPath = v;
-        this.plugin.vault._emb = null;      // different file, different vectors
-        await this.plugin.saveSettings();
-        if (v && !(await this.plugin.vault.indexSize(v))) new Notice(t("That file isn't a usable index"));
-        showCount();
-      },
-      "json", "Embedding/embeddings-cache.json");
+    const refresh = async () => {
+      const n = await this.plugin.vault.indexSize();
+      const pending = await this.plugin.vault.pendingCount();
+      status.setText(n ? t("{0} notes in the index", n) : t("Nothing indexed yet"));
+      // Says what the number means. "48 waiting" without this reads as a
+      // failure rather than as notes written since the last pass.
+      detail.setText(pending
+        ? t("{0} waiting: notes written or changed since the last pass.", pending)
+        : t("Everything in your vault is in it."));
+      // The label answers the question the button raises — how much is left.
+      btn.setText(pending ? t("Index {0} new notes", pending) : t("Everything is indexed"));
+      btn.toggleAttribute("disabled", !pending);
+    };
+    refresh();
 
-    showCount();
+    btn.onclick = async () => {
+      if (this._indexing) { stop = true; return; }
+      this._indexing = true; stop = false;
+      btn.setText(t("Stop"));
+      btn.removeAttribute("disabled");
+      showProblem("");
+      try {
+        const r = await this.plugin.vault.buildEmbeddings(
+          (done, total) => status.setText(t("Indexing… {0}/{1}", done, total)),
+          () => stop);
 
-    // A borrowed index is only ever added to, never rewritten — so the button
-    // is offered either way, with the difference spelled out.
-    if (this.plugin.vault.indexIsBorrowed) {
-      const why = c.createDiv({ cls: "oa-note" });
-      why.createDiv({ cls: "oa-note-title", text: t("This index belongs to another tool") });
-      why.createDiv({ text: t("Updating adds only notes it hasn't seen — nothing existing is rewritten or deleted, so whatever maintains this file keeps working.") });
-    }
+        // Say what the pass actually did. A run that embedded nothing at all
+        // is the interesting case, and it used to look exactly like a run
+        // that embedded everything.
+        const parts = [];
+        if (r.embedded) parts.push(t("{0} added", r.embedded));
+        if (r.skipped) parts.push(t("{0} too short to be worth a vector", r.skipped));
+        if (r.failed) parts.push(t("{0} failed", r.failed));
+        new Notice(parts.length ? parts.join(" · ") : t("Nothing left to index"), 8000);
 
-    let stop = false;
-    new Setting(c).addButton((b) => {
-      // The label answers the question the button raises: how much is left to
-      // do. "Update the index" with nothing pending is a button you press and
-      // learn nothing from.
-      const relabel = async () => {
-        const n = await this.plugin.vault.pendingCount();
-        b.setButtonText(n ? t("Index {0} new notes", n) : t("Everything is indexed"));
-        b.setDisabled(!n);
-      };
-      relabel();
-      b.setCta().onClick(async () => {
-        if (this._indexing) { stop = true; return; }
-        this._indexing = true; stop = false;
-        b.setButtonText(t("Stop"));
-        showProblem("");
-        detail.toggleClass("is-hidden", true);
-        try {
-          const r = await this.plugin.vault.buildEmbeddings(
-            (done, total) => status.setText(t("Indexing… {0}/{1}", done, total)),
-            () => stop);
-          await showCount();
-
-          // Say what the pass actually did. A run that embedded nothing at all
-          // is the interesting case, and it used to look exactly like a run
-          // that embedded everything.
-          const parts = [];
-          if (r.embedded) parts.push(t("{0} added", r.embedded));
-          if (r.skipped) parts.push(t("{0} too short to be worth a vector", r.skipped));
-          if (r.failed) parts.push(t("{0} failed", r.failed));
-          new Notice(parts.length ? parts.join(" · ") : t("Nothing left to index"), 8000);
-
-          if (r.failed) {
-            showProblem(r.embedded
-              ? t("{0} notes could not be indexed. The provider said: {1}", r.failed, r.error)
-              : t("Nothing could be indexed — every request was refused. The provider said: {0}. Check the embedding model and your key on the Connection tab.", r.error));
-          }
-        } catch (e) {
-          // Reaching here now means the index file itself could not be written,
-          // which used to be swallowed and looked like a successful pass.
-          showProblem(t("The index could not be saved: {0}", e.message));
-          new Notice(t("Something went wrong: {0}", e.message));
-        } finally {
-          this._indexing = false;
-          await relabel();
+        if (r.failed) {
+          showProblem(r.embedded
+            ? t("{0} notes could not be indexed. The provider said: {1}", r.failed, r.error)
+            : t("Nothing could be indexed — every request was refused. The provider said: {0}. Check the embedding model and your key on the Connection tab.", r.error));
         }
-      });
-    });
+      } catch (e) {
+        // Reaching here means the index file itself could not be written,
+        // which used to be swallowed and looked like a successful pass.
+        showProblem(t("The index could not be saved: {0}", e.message));
+        new Notice(t("Something went wrong: {0}", e.message));
+      } finally {
+        this._indexing = false;
+        await refresh();
+      }
+    };
   }
+
+  /**
+   * Redraw the window a group is currently living in.
+   *
+   * Some of these settings decide whether others exist at all — turning off
+   * the map hides the map, choosing a scope reveals a folder list. Inside a
+   * window that means redrawing the window, never the settings page behind it:
+   * `display()` from in here rebuilt the tab under the modal and threw its
+   * scroll position away for nothing.
+   */
+  redrawGroup() {
+    if (this._group) this._group.draw();
+  }
+
 
   /* ── saved tasks: by phrase, and by clock ───────────────── */
 
@@ -1033,7 +1383,7 @@ class AssistantSettingTab extends PluginSettingTab {
 
     const open = () => new ScenarioEditModal(this.app, this.plugin, sc, () => this.display()).open();
 
-    const main = row.createEl("button", { cls: "oa-row-main" });
+    const main = clickable(row.createDiv({ cls: "oa-row-main" }));
     main.createSpan({ cls: "oa-row-emoji", text: sc.emoji || "✨" });
     const body = main.createDiv({ cls: "oa-row-body" });
     body.createDiv({ cls: "oa-row-name", text: sc.name || t("Custom scenario") });
@@ -1108,7 +1458,7 @@ class AssistantSettingTab extends PluginSettingTab {
     const s = this.s;
     const row = c.createDiv({ cls: "oa-row" + (a.enabled ? "" : " is-off") });
 
-    const main = row.createEl("button", { cls: "oa-row-main" });
+    const main = clickable(row.createDiv({ cls: "oa-row-main" }));
     main.createSpan({ cls: "oa-row-emoji", text: "⏰" });
     const body = main.createDiv({ cls: "oa-row-body" });
     body.createDiv({ cls: "oa-row-name", text: a.name || t("Custom automation") });
@@ -1145,7 +1495,10 @@ class AssistantSettingTab extends PluginSettingTab {
     const L = this.dayLabels();
     const when = (!a.days || !a.days.length) ? t("Every day")
       : [1, 2, 3, 4, 5, 6, 0].filter((d) => a.days.includes(d)).map((d) => L[d]).join(", ");
-    return `${a.time || "--:--"} · ${when}`;
+    // Where it lands belongs on the summary line: an automation that messages
+    // your phone at 08:30 is a different thing from one that quietly writes a
+    // note, and you should not have to open it to tell them apart.
+    return `${a.time || "--:--"} · ${when}${a.telegram ? " · ✈️" : ""}`;
   }
 
   /* ── telegram ───────────────────────────────────────────── */
