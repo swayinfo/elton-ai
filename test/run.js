@@ -1449,6 +1449,14 @@ function eq(actual, expected, name) {
       ok(tooltip.includes("Elton AI"), "подсказка иконки на ленте тоже обновляется");
     }
 
+    // The site has a page per language; sending someone to the wrong one is
+    // worse than not linking at all.
+    T.setLang("en");
+    eq(T.siteUrl(), "https://eltonlabs.org/en/elton-ai", "по-английски — английская страница сайта");
+    eq(T.siteLabel(), "eltonlabs.org/en/elton-ai", "и подпись ссылки совпадает с адресом");
+    T.setLang("ru");
+    eq(T.siteUrl(), "https://eltonlabs.org/elton-ai", "по-русски — русская");
+
     // And the switch itself works in both directions.
     T.setLang("en");
     eq(T.t("Voice replies"), "Voice replies", "по-английски строка остаётся исходной");

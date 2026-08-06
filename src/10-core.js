@@ -697,6 +697,8 @@ const RU = {
     "Поиск по словам работает всегда: индекс строится по хранилищу за секунду, ничего не стоит и не требует ключа.",
   "Let the assistant look things up online — news, facts, anything outside your vault. Answers are still grounded in your notes first.":
     "Разрешить ассистенту смотреть в интернет — новости, факты, всё, чего нет в хранилище. Отвечать он всё равно будет сначала по вашим заметкам.",
+  // The Russian page of the site; the English one is the key above it.
+  "https://eltonlabs.org/en/elton-ai": "https://eltonlabs.org/elton-ai",
   "Made by Elton": "Сделал Элтон",
   "Who made this": "Кто это сделал",
   "Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ":
@@ -1164,6 +1166,17 @@ function clickable(el) {
   });
   return el;
 }
+
+/**
+ * The plugin's page, in the reader's language.
+ *
+ * A translated string like any other — the site has a Russian page and an
+ * English one, and sending someone to the wrong one is worse than not linking
+ * at all. The label is derived from the address rather than written twice, so
+ * the two can never drift apart.
+ */
+function siteUrl() { return t("https://eltonlabs.org/en/elton-ai"); }
+function siteLabel() { return siteUrl().replace(/^https?:\/\//, ""); }
 
 /** The last segment of a path — what a folder is actually called. */
 function tail(path) {

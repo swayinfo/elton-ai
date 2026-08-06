@@ -1,6 +1,6 @@
 # Elton AI
 
-*English · [Русский](README.ru.md) · [eltonlabs.org/elton-ai](https://eltonlabs.org/elton-ai)*
+*English · [Русский](README.ru.md) · [eltonlabs.org/en/elton-ai](https://eltonlabs.org/en/elton-ai)*
 
 A voice and text assistant that works on the notes you already have. It searches your vault, answers from it, and creates and edits notes — by voice or by typing.
 

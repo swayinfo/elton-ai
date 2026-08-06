@@ -32,7 +32,7 @@ class OnboardingModal extends Modal {
           box.createDiv({ cls: "oa-note-title", text: t("Who made this") });
           const line = box.createDiv();
           line.appendText(t("Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ") );
-          const a = line.createEl("a", { text: "eltonlabs.org/elton-ai", href: "https://eltonlabs.org/elton-ai" });
+          const a = line.createEl("a", { text: siteLabel(), href: siteUrl() });
           a.setAttr("target", "_blank");
           a.setAttr("rel", "noopener");
         },
@@ -283,7 +283,7 @@ class AssistantSettingTab extends PluginSettingTab {
     by.appendText(t("Made by Elton") + " · ");
     // The plugin's own page, not the site's front door: someone clicking from
     // inside the plugin wants this plugin, not a homepage to navigate from.
-    const site = by.createEl("a", { text: "eltonlabs.org/elton-ai", href: "https://eltonlabs.org/elton-ai" });
+    const site = by.createEl("a", { text: siteLabel(), href: siteUrl() });
     site.setAttr("target", "_blank");
     site.setAttr("rel", "noopener");
     const go = onb.createEl("button", { cls: "mod-cta", text: t("Open the setup guide") });
@@ -1736,7 +1736,7 @@ class AssistantSettingTab extends PluginSettingTab {
     foot.createDiv({ cls: "oa-set-foot-title", text: `Elton AI ${this.plugin.manifest.version}` });
     foot.createDiv({ text: t("Your notes stay in your vault. Only the text needed to answer a question is sent to the provider you chose — and with a local model, nothing leaves your machine at all.") });
     const link = foot.createDiv({ cls: "oa-onb-card-by" });
-    const a = link.createEl("a", { text: "eltonlabs.org/elton-ai", href: "https://eltonlabs.org/elton-ai" });
+    const a = link.createEl("a", { text: siteLabel(), href: siteUrl() });
     a.setAttr("target", "_blank");
     a.setAttr("rel", "noopener");
   }
