@@ -607,6 +607,19 @@ const RU = {
   "This is a phone — the bot runs on the computer that holds the vault.":
     "Это телефон — бот работает на компьютере, где лежит хранилище.",
   "Send it to Telegram too": "Прислать ещё и в Telegram",
+  "Automation": "Автоматизация",
+  "{0} — running…": "{0} — выполняется…",
+  "{0}: something went wrong": "{0}: что-то пошло не так",
+  "The run came back with nothing to write.": "Ответ пришёл пустым — записывать нечего.",
+  "Could not write the note: {0}": "Не удалось записать заметку: {0}",
+  "Telegram is not connected, so nothing was sent.": "Telegram не подключён — отправлять некуда.",
+  "Nobody is linked to the bot yet — send it /start first.":
+    "К боту пока никто не привязан — сначала напишите ему /start.",
+  "Telegram refused the message: {0}": "Telegram не принял сообщение: {0}",
+  "Sent to Telegram": "Отправлено в Telegram",
+  "Not sent to Telegram": "В Telegram не ушло",
+  "Open the note": "Открыть заметку",
+  "Send to Telegram": "Отправить в Telegram",
   "The result arrives in the chat as well as being written into your vault.":
     "Результат придёт в чат — и всё так же будет записан в хранилище.",
   "Connect a bot on the Telegram tab first — then this can send the result to your phone.":

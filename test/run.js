@@ -1051,7 +1051,7 @@ function eq(actual, expected, name) {
     const plugin = {
       settings: { automations: [], newNoteFolder: "", telegram: { enabled: true, token: "x", userId: "1" } },
       saveSettings: async () => {},
-      telegram: { push: async (text) => { sent.push(text); return true; } },
+      telegram: { configured: () => true, push: async (text) => { sent.push(text); return true; } },
       app: { vault: { create: async () => null } },
       vault: {
         createNote: async (title, body) => { written.push([title, body]); return { path: "Inbox/" + title + ".md" }; },
@@ -1074,12 +1074,28 @@ function eq(actual, expected, name) {
     ok(sent[0].includes("Inbox/Дайджест"), "и путём заметки, в которую это легло");
     eq(written.length, 2, "заметка всё так же пишется — чат её не заменяет");
 
-    // A bot that is down must not make a finished automation look failed.
+    // A bot that is down must not make a finished automation look failed —
+    // but it must not be silent about it either. That was the actual
+    // complaint: the message never arrived and nothing anywhere said why.
     plugin.telegram.push = async () => { throw new Error("нет сети"); };
     let threw = false;
-    try { await sched.deliver({ name: "Д", target: "note", notify: false, telegram: true }, "тело", []); }
+    let out = null;
+    try { out = await sched.deliver({ name: "Д", target: "note", notify: false, telegram: true }, "тело", []); }
     catch { threw = true; }
     ok(!threw, "упавшая отправка не роняет автоматизацию");
+    ok(out && out.errors.length === 1, "но возвращается как ошибка, а не молча");
+    ok(out && !out.sent, "и «отправлено» остаётся ложью");
+    ok(out && out.file, "заметка при этом записана");
+
+    // And the other way round: a note that cannot be written used to take the
+    // Telegram message down with it, because both ran inside one try.
+    plugin.telegram.push = async (text) => { sent.push(text); return true; };
+    plugin.vault.createNote = async () => { throw new Error("папка только для чтения"); };
+    const before = sent.length;
+    const broken = await sched.deliver({ name: "Д", target: "note", notify: false, telegram: true }, "тело", []);
+    eq(sent.length, before + 1, "сообщение уходит, даже если заметку записать не удалось");
+    ok(broken.errors.some((e) => e.includes("папка только для чтения")), "и причина видна");
+    ok(!broken.file, "файла при этом нет");
   }
 
   /* ── Hold-to-talk: the combination is physical ──────────── */

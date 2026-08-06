@@ -184,6 +184,95 @@ class AutomationEditModal extends Modal {
   }
 }
 
+/* ============================================================
+ *  The result, in a window
+ *
+ *  An automation used to finish invisibly: a line appeared at the
+ *  bottom of a note somewhere and a notice flashed past. Whether
+ *  the answer was any good, whether it went to Telegram, whether
+ *  anything failed — all of it had to be gone and looked for.
+ *
+ *  Here it is rendered as markdown, exactly as it will read in the
+ *  note, with what happened to it underneath and the two things
+ *  you might want next: open the note, or send it to the phone.
+ * ========================================================== */
+class AutomationResultModal extends Modal {
+  constructor(app, plugin, automation, out) {
+    super(app);
+    this.plugin = plugin;
+    this.auto = automation;
+    this.out = out;
+  }
+
+  onOpen() {
+    this.modalEl.addClass("oa-result");
+    this.draw();
+  }
+
+  onClose() { this.contentEl.empty(); }
+
+  draw() {
+    const c = this.contentEl;
+    c.empty();
+    const out = this.out;
+
+    const head = c.createDiv({ cls: "oa-result-head" });
+    head.createEl("h3", { text: out.title || t("Automation") });
+    head.createDiv({ cls: "oa-result-when", text: this.auto.prompt ? `«${String(this.auto.prompt).slice(0, 120)}»` : "" });
+
+    if (out.text) {
+      const body = c.createDiv({ cls: "oa-result-body markdown-rendered" });
+      // Rendered, not printed. The answer is written as markdown for a note,
+      // so a window showing it as raw text with hashes in it would be showing
+      // you the wrong thing.
+      MarkdownRenderer.render(this.app, out.text, body, "", this.plugin);
+    } else {
+      c.createDiv({ cls: "oa-note", text: t("The run came back with nothing to write.") });
+    }
+
+    // What happened to it. Every line here is something you would otherwise
+    // have had to go and check.
+    const facts = c.createDiv({ cls: "oa-result-facts" });
+    if (out.file) facts.createDiv({ cls: "oa-fact ok", text: "📄 " + t("Written to: {0}", out.file.path) });
+    if (this.auto.telegram) {
+      facts.createDiv({
+        cls: "oa-fact " + (out.sent ? "ok" : "bad"),
+        text: out.sent ? "✈️ " + t("Sent to Telegram") : "✈️ " + t("Not sent to Telegram"),
+      });
+    }
+    for (const e of out.errors || []) facts.createDiv({ cls: "oa-fact bad", text: "⚠ " + e });
+
+    const row = c.createDiv({ cls: "oa-modal-buttons" });
+    if (out.file) {
+      row.createEl("button", { text: t("Open the note") }).onclick = () => {
+        this.close();
+        this.app.workspace.getLeaf(false).openFile(out.file);
+      };
+    }
+    if (out.text) {
+      row.createEl("button", { text: t("Copy") }).onclick = async () => {
+        await navigator.clipboard.writeText(out.text);
+        new Notice(t("Copied"));
+      };
+      // Offered even when the automation never asked for Telegram: having
+      // read the answer, sending it on is a fair thing to want.
+      if (this.plugin.telegram && this.plugin.telegram.configured() && !out.sent) {
+        row.createEl("button", { text: t("Send to Telegram") }).onclick = async () => {
+          try {
+            const ok = await this.plugin.telegram.push(`## ${out.title}\n\n${out.text}`);
+            this.out.sent = !!ok;
+            if (!ok) new Notice(t("Nobody is linked to the bot yet — send it /start first."), 8000);
+            this.draw();
+          } catch (e) {
+            new Notice(t("Telegram refused the message: {0}", e.message), 8000);
+          }
+        };
+      }
+    }
+    row.createEl("button", { cls: "mod-cta", text: t("Done") }).onclick = () => this.close();
+  }
+}
+
 class AutomationScheduler {
   constructor(plugin) {
     this.plugin = plugin;
@@ -242,61 +331,93 @@ class AutomationScheduler {
         onSegment: null,
         written: true,
       });
-      if (!reply || !reply.trim()) {
-        if (a.notify !== false) new Notice(t("Nothing to write — the run came back empty."));
-        return null;
-      }
-      return await this.deliver(a, reply.trim(), agent.sources || []);
+      const answer = String(reply || "").trim();
+      const out = answer
+        ? await this.deliver(a, answer, agent.sources || [])
+        : { text: "", file: null, sent: false, errors: [t("The run came back with nothing to write.")] };
+      out.text = answer;
+      out.title = a.name || t("Morning digest");
+
+      // Run by hand: show it. The whole complaint about automations was that
+      // you press the button, something happens somewhere, and you have to go
+      // looking for it to find out what.
+      if (manual) new AutomationResultModal(plugin.app, plugin, a, out).open();
+      else this.announce(a, out);
+      return out;
     } finally {
       this.running.delete(a.id);
     }
   }
 
-  /** Write the answer where the automation says, and offer to open it. */
+  /**
+   * Put the answer where the automation says, and report what actually
+   * happened to it.
+   *
+   * Each delivery is on its own. They used to run in sequence in one `try`,
+   * so a note that failed to be written took the Telegram message down with
+   * it — the failure was in the note, but what you noticed was the message
+   * that never arrived. Now one can fail without touching the other, and both
+   * outcomes come back to be shown.
+   */
   async deliver(a, text, sources) {
     const plugin = this.plugin, V = plugin.vault;
     const title = a.name || t("Morning digest");
     const stamp = todayKey();
     const body = text + this.sourcesBlock(sources);
-    let file = null;
+    const out = { text, file: null, sent: false, errors: [] };
 
-    if (a.target === "note") {
-      file = await V.createNote(`${title} ${stamp}`, `# ${title} — ${stamp}\n\n${body}\n`,
-        a.folder || plugin.settings.newNoteFolder || "");
-    } else {
-      // Into today's daily note — creating it if the day hasn't one yet.
-      file = V.dailyNote("today");
-      // Same folder the daily_note tool uses, which falls back to
-      // Obsidian's own daily-notes settings when ours was never filled in.
-      const daily = V.dailyFolder();
-      if (!file && daily) {
-        await V.ensureFolder(daily);
-        file = await plugin.app.vault.create(normalizePath(daily + "/" + stamp + ".md"), "");
+    try {
+      if (a.target === "note") {
+        out.file = await V.createNote(`${title} ${stamp}`, `# ${title} — ${stamp}\n\n${body}\n`,
+          a.folder || plugin.settings.newNoteFolder || "");
+      } else {
+        // Into today's daily note — creating it if the day hasn't one yet.
+        let file = V.dailyNote("today");
+        // Same folder the daily_note tool uses, which falls back to
+        // Obsidian's own daily-notes settings when ours was never filled in.
+        const daily = V.dailyFolder();
+        if (!file && daily) {
+          await V.ensureFolder(daily);
+          file = await plugin.app.vault.create(normalizePath(daily + "/" + stamp + ".md"), "");
+        }
+        if (file) await V.appendToNote(file, body, a.heading || title);
+        else file = await V.createNote(`${title} ${stamp}`, body, plugin.settings.newNoteFolder || "");
+        out.file = file;
       }
-      if (file) await V.appendToNote(file, body, a.heading || title);
-      else file = await V.createNote(`${title} ${stamp}`, body, plugin.settings.newNoteFolder || "");
+    } catch (e) {
+      out.errors.push(t("Could not write the note: {0}", (e && e.message) || e));
     }
 
-    if (a.notify !== false && file) {
-      const n = new Notice(t("{0} is ready", title), 12000);
-      if (n.noticeEl) {
-        n.noticeEl.addClass("oa-notice-click");
-        n.noticeEl.addEventListener("click", () => plugin.app.workspace.getLeaf(false).openFile(file));
-      }
-    }
-
-    // And to the phone, if asked. After the note rather than instead of it:
-    // the vault is where it lives, the chat is only where you are told.
-    if (a.telegram && plugin.telegram) {
+    if (a.telegram) {
       try {
-        const where = file ? `\n\n_${t("Written to: {0}", file.path)}_` : "";
-        await plugin.telegram.push(`## ${title} · ${stamp}\n\n${text}${where}`);
+        if (!plugin.telegram || !plugin.telegram.configured()) {
+          out.errors.push(t("Telegram is not connected, so nothing was sent."));
+        } else if (!plugin.settings.telegram.userId) {
+          out.errors.push(t("Nobody is linked to the bot yet — send it /start first."));
+        } else {
+          const where = out.file ? `\n\n_${t("Written to: {0}", out.file.path)}_` : "";
+          out.sent = await plugin.telegram.push(`## ${title} · ${stamp}\n\n${text}${where}`);
+        }
       } catch (e) {
-        // A failed message must not make a finished automation look failed.
-        console.warn("[Elton AI] could not send the automation to Telegram:", e && e.message);
+        // Said out loud rather than logged. A message that silently fails to
+        // arrive is indistinguishable from a feature that does not work.
+        out.errors.push(t("Telegram refused the message: {0}", (e && e.message) || e));
       }
     }
-    return file;
+    return out;
+  }
+
+  /** A scheduled run finished while you were doing something else. */
+  announce(a, out) {
+    if (a.notify === false) return;
+    const plugin = this.plugin;
+    const bad = out.errors.length;
+    const n = new Notice(bad ? t("{0}: something went wrong", out.title) : t("{0} is ready", out.title), 12000);
+    if (!n.noticeEl) return;
+    n.noticeEl.addClass("oa-notice-click");
+    // Clicking opens the same window the manual run shows, rather than the
+    // note — the window has the answer, where it went, and what failed.
+    n.noticeEl.addEventListener("click", () => new AutomationResultModal(plugin.app, plugin, a, out).open());
   }
 
   sourcesBlock(sources) {
