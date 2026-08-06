@@ -202,6 +202,91 @@ function scenarioLabel(sc) {
 }
 
 /* ============================================================
+ *  The editor
+ *
+ *  A window, not a card that unfolds in the settings page.
+ *
+ *  Folded cards meant a list where every row could become half a
+ *  screen of form, and the page then looked like three nested
+ *  boxes with a form loose inside them. A scenario is a small
+ *  document — a name, the phrases that call it, and a brief you
+ *  actually want room to write — so it gets a window of its own,
+ *  and the list stays a list.
+ * ========================================================== */
+class ScenarioEditModal extends Modal {
+  constructor(app, plugin, scenario, onSave) {
+    super(app);
+    this.plugin = plugin;
+    this.sc = scenario;
+    this.onSave = onSave;
+    // Edited on a copy: closing with Esc has to leave the original alone.
+    this.draft = Object.assign({}, scenario);
+  }
+
+  onOpen() {
+    this.modalEl.addClass("oa-scen-edit");
+    const c = this.contentEl;
+    c.empty();
+    c.createEl("h3", { text: this.draft.name || t("Custom scenario") });
+
+    const d = this.draft;
+
+    new Setting(c)
+      .setName(t("Name"))
+      .setDesc(t("What it is called on the button and in the bot's menu."))
+      .addText((tx) => {
+        tx.inputEl.addClass("oa-emoji-input");
+        tx.setPlaceholder("✨").setValue(d.emoji || "").onChange((v) => { d.emoji = v.trim().slice(0, 4); });
+      })
+      .addText((tx) => tx.setValue(d.name || "").onChange((v) => { d.name = v; }));
+
+    new Setting(c)
+      .setName(t("Trigger phrases"))
+      .setDesc(t("Separated by commas. Say any of them and this scenario runs."))
+      .addText((tx) => {
+        tx.inputEl.addClass("oa-wide-input");
+        tx.setValue(d.triggers || "").onChange((v) => { d.triggers = v; });
+      });
+
+    const brief = new Setting(c)
+      .setName(t("What it asks for"))
+      .setDesc(t("The brief the assistant actually receives. Write it as if you were asking in full."));
+    brief.settingEl.addClass("oa-scen-brief");
+    brief.addTextArea((ta) => {
+      ta.inputEl.addClass("oa-auto-prompt");
+      ta.inputEl.rows = 10;
+      ta.setValue(d.prompt || "").onChange((v) => { d.prompt = v; });
+    });
+
+    new Setting(c)
+      .setName(t("Show as a button"))
+      .setDesc(t("Puts it under the reactor and in an empty chat, for the days you would rather tap than talk."))
+      .addToggle((x) => x.setValue(d.pin !== false).onChange((v) => { d.pin = v; }));
+
+    // Only where it means something. Telling someone their scenario has a
+    // Telegram command when they have no bot is noise.
+    if (this.plugin.telegram && this.plugin.telegram.configured()) {
+      const cmd = slugForCommand(d.name || "");
+      if (cmd) c.createDiv({ cls: "oa-note", text: t("In Telegram this scenario answers to /{0}", cmd) });
+    }
+
+    const row = c.createDiv({ cls: "oa-modal-buttons" });
+    const cancel = row.createEl("button", { text: t("Cancel") });
+    cancel.onclick = () => this.close();
+    const save = row.createEl("button", { cls: "mod-cta", text: t("Save") });
+    save.onclick = async () => {
+      Object.assign(this.sc, d);
+      await this.plugin.saveSettings();
+      this.plugin.refreshViews();
+      this.close();
+      if (this.onSave) this.onSave();
+    };
+  }
+
+  onClose() { this.contentEl.empty(); }
+}
+
+/* ============================================================
  *  The picker
  *
  *  One command rather than one command per scenario: the list is

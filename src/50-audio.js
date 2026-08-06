@@ -138,8 +138,15 @@ function formatFromMime(mime) {
 class Recorder {
   constructor() { this.active = null; }
 
-  /** Record one utterance. Ends on silence, on maxMs, or when told to. */
-  async record({ maxMs = 20000, onLevel, getStop, pushToTalk, isPressed }) {
+  /**
+   * Record one utterance. Ends on silence, on maxMs, or when told to.
+   *
+   * `holdOpen` removes the silence rule: the recording runs until the caller
+   * stops it. Dictation needs that — a pause to think is not the end of a
+   * sentence, and having the microphone close itself mid-thought is the one
+   * thing that made typing by voice unusable.
+   */
+  async record({ maxMs = 20000, onLevel, getStop, pushToTalk, isPressed, holdOpen }) {
     const mic = await openMic(true);
     const picked = pickRecordingType();
     const recorder = picked ? new MediaRecorder(mic.stream, { mimeType: picked.mime })
@@ -178,6 +185,7 @@ class Recorder {
         else if (spoke >= MIN_SPEECH_MS) silent += TICK_MS;
         const elapsed = Date.now() - started;
         if (pushToTalk) { if (!isPressed() || elapsed >= maxMs) finish(); }
+        else if (holdOpen) { if (elapsed >= maxMs) finish(); }
         else if ((spoke >= MIN_SPEECH_MS && silent >= SILENCE_HANG) || elapsed >= maxMs) finish();
       }, TICK_MS);
     });

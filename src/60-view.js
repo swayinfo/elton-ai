@@ -12,6 +12,21 @@
  *  the lag straight back.
  * ========================================================== */
 
+/**
+ * Stop a button from taking focus off the text box.
+ *
+ * This is the whole reason sending a message on a phone did nothing. Tapping
+ * the button blurs the textarea, the on-screen keyboard slides away, the bar
+ * travels a hundred-odd pixels down the screen while the finger is still on
+ * its way up — and the click lands on whatever moved into that spot, which is
+ * never the send button. Refusing the focus change keeps the layout still for
+ * the length of a tap.
+ */
+function keepFocus(el) {
+  el.addEventListener("pointerdown", (e) => e.preventDefault());
+  el.addEventListener("mousedown", (e) => e.preventDefault());
+}
+
 const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`;
 
 class AssistantView extends ItemView {
@@ -48,8 +63,27 @@ class AssistantView extends ItemView {
   getDisplayText() { return "💡 " + (this.plugin.settings.assistantName || t("Assistant")); }
   getIcon() { return "bot"; }
 
-  async onOpen() { this.render(); }
+  async onOpen() {
+    this.render();
+    // The panel used to learn about a new note only when it was rebuilt, so
+    // the chip kept naming a note that had been closed ten minutes ago —
+    // and since the chip is the only sign of what "this note" means, the
+    // assistant looked like it was reading the wrong thing.
+    this.registerEvent(this.app.workspace.on("file-open", () => this.updateNoteChip()));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.updateNoteChip()));
+  }
   async onClose() { this.teardown(); }
+
+  /**
+   * Whatever markdown is in front of the user right now.
+   * `file-open` does not fire when you merely switch to a tab that is already
+   * open, which is most of how people move around a vault.
+   */
+  syncActiveNote() {
+    const f = this.app.workspace.getActiveFile();
+    if (f instanceof TFile && f.extension === "md") this.plugin.lastNote = f;
+    return this.plugin.lastNote;
+  }
 
   /* ── layout ─────────────────────────────────────────────── */
   render() {
@@ -95,6 +129,18 @@ class AssistantView extends ItemView {
         if (this.mode === "conversation") new Notice(t("Applies to the next conversation"));
       };
     }
+
+    // Hands-free or hold-to-talk. This was a dropdown three folds deep in
+    // settings, which is the wrong place for it: which one you want depends on
+    // the room you are in, not on how you set the plugin up once.
+    this.micModeBtn = bar.createEl("button", { cls: "oa-iconbtn" });
+    this.syncMicModeBtn();
+    this.micModeBtn.onclick = async () => {
+      this.plugin.settings.micMode = this.plugin.settings.micMode === "push" ? "handsfree" : "push";
+      await this.plugin.saveSettings();
+      this.syncMicModeBtn();
+      if (this.mode === "conversation") new Notice(t("Applies to the next conversation"));
+    };
 
     const gear = bar.createEl("button", { cls: "oa-iconbtn" });
     gear.setAttr("aria-label", t("Settings"));
@@ -165,6 +211,7 @@ class AssistantView extends ItemView {
     const send = this.textRow.createEl("button", { cls: "oa-send" });
     setIcon(send, "arrow-up");
     send.setAttr("aria-label", t("Send"));
+    keepFocus(send);
     send.onclick = () => this.sendTyped();
 
     /* The written answer, folded away at the bottom.
@@ -252,6 +299,17 @@ class AssistantView extends ItemView {
     setIcon(this.voiceBtn, this.plugin.settings.voiceEnabled ? "volume-2" : "volume-x");
   }
 
+  syncMicModeBtn() {
+    if (!this.micModeBtn) return;
+    const push = this.plugin.settings.micMode === "push";
+    setIcon(this.micModeBtn, push ? "hand" : "mic");
+    this.micModeBtn.toggleClass("is-on", push);
+    const label = push ? t("Push to talk — hold the button while you speak.")
+      : t("Hands-free — it listens until you go quiet.");
+    this.micModeBtn.setAttr("aria-label", label);
+    this.micModeBtn.setAttr("title", label);
+  }
+
   syncBargeBtn() {
     if (!this.bargeBtn) return;
     const on = this.plugin.settings.allowInterrupt;
@@ -298,6 +356,7 @@ class AssistantView extends ItemView {
     this.replyEl = null;
     this.replyToggle = null;
     this.bargeBtn = null;
+    this.micModeBtn = null;
 
     const wrap = root.createDiv({ cls: "oa-chat" });
 
@@ -348,26 +407,37 @@ class AssistantView extends ItemView {
     this.dictateBtn = bar.createEl("button", { cls: "oa-chat-mic" });
     setIcon(this.dictateBtn, "mic");
     this.dictateBtn.setAttr("aria-label", t("Dictate"));
+    keepFocus(this.dictateBtn);
     this.dictateBtn.onclick = () => { unlockAudio(); this.dictate(); };
 
     const send = bar.createEl("button", { cls: "oa-chat-send" });
     setIcon(send, "arrow-up");
     send.setAttr("aria-label", t("Send"));
+    keepFocus(send);
     send.onclick = () => this.sendTyped();
   }
 
   /** Record one phrase and drop the transcript into the input box. */
   async dictate() {
-    if (this.dictating) { this.plugin.recorder.stop(); return; }
+    // Lower the flag rather than killing the recorder: the recording loop
+    // watches this flag and closes down cleanly, keeping what you said.
+    // Stopping the recorder from outside left that loop spinning on a
+    // microphone that was already gone, and the transcript never arrived.
+    if (this.dictating) { this.dictating = false; return; }
     if (!this.plugin.ai.hasCloud()) {
       new Notice(t("A local model can't transcribe speech or speak. Point this at a cloud key and voice keeps working while text stays local."), 8000);
       return;
     }
     this.dictating = true;
     this.dictateBtn.addClass("is-live");
+    setIcon(this.dictateBtn, "square");
+    this.dictateBtn.setAttr("aria-label", t("Stop dictating"));
     try {
       const { blob, format, hadSpeech } = await this.plugin.recorder.record({
-        maxMs: 30000,
+        // Open until you close it. It used to stop itself on the first pause,
+        // which is the moment you are working out how to say the next part.
+        holdOpen: true,
+        maxMs: 300000,
         getStop: () => !this.dictating,
       });
       if (hadSpeech) {
@@ -382,7 +452,11 @@ class AssistantView extends ItemView {
       new Notice(t("Microphone unavailable: {0}", e.message));
     } finally {
       this.dictating = false;
-      if (this.dictateBtn) this.dictateBtn.removeClass("is-live");
+      if (this.dictateBtn) {
+        this.dictateBtn.removeClass("is-live");
+        setIcon(this.dictateBtn, "mic");
+        this.dictateBtn.setAttr("aria-label", t("Dictate"));
+      }
     }
   }
 
@@ -414,11 +488,24 @@ class AssistantView extends ItemView {
 
   updateNoteChip() {
     if (!this.noteEl) return;
-    const f = this.plugin.lastNote;
-    if (f && this.plugin.vault.inScope(f.path)) {
-      this.noteEl.setText("📂 " + t("On screen: {0}", f.basename));
-      this.noteEl.toggleClass("is-hidden", false);
-    } else this.noteEl.toggleClass("is-hidden", true);
+    const f = this.syncActiveNote();
+    this.noteEl.empty();
+    const known = f && this.plugin.vault.inScope(f.path);
+    this.noteEl.createSpan({ text: known ? "📂 " + t("On screen: {0}", f.basename) : t("No note in front of you") });
+
+    // The manual way out of every case the events miss — a note edited in a
+    // popout window, one opened before the panel was, a sync landing changes
+    // underneath. One button beats explaining when the automatic one works.
+    const refresh = this.noteEl.createEl("button", { cls: "oa-note-refresh" });
+    setIcon(refresh, "refresh-cw");
+    refresh.setAttr("aria-label", t("Re-read the note on screen"));
+    refresh.setAttr("title", t("Re-read the note on screen"));
+    refresh.onclick = () => {
+      const now = this.syncActiveNote();
+      this.updateNoteChip();
+      new Notice(now ? t("Now reading: {0}", now.basename) : t("No note in front of you"));
+    };
+    this.noteEl.toggleClass("is-hidden", false);
   }
 
   /** Every visible change to what the assistant is doing routes through here. */
@@ -756,6 +843,52 @@ class AssistantView extends ItemView {
     this.setReply(text, text);
     if (out && out.mute) this.revealUnspoken();
   }
+
+  /* ── hold-a-key-and-talk, from anywhere in Obsidian ──────── */
+
+  /**
+   * Start recording because a key went down somewhere in the app.
+   *
+   * Deliberately not part of the hands-free loop: that one listens, answers,
+   * then listens again, and a key you hold has no business starting a session
+   * that outlives it. One press, one utterance, one answer.
+   */
+  async startHold() {
+    if (this._holding || this.busy || this.mode === "conversation") return;
+    if (!this.plugin.ai.hasCloud()) {
+      new Notice(t("A local model can't transcribe speech or speak. Point this at a cloud key and voice keeps working while text stays local."), 8000);
+      return;
+    }
+    this._holding = true;
+    unlockAudio();
+    // Anything it is still saying is over: you pressed the key to talk to it.
+    this.stopTurn();
+    this.setPhase("listening", t("Speaking… let go when you're done"));
+    try {
+      const { blob, format, hadSpeech } = await this.plugin.recorder.record({
+        holdOpen: true,
+        maxMs: 120000,
+        getStop: () => !this._holding,
+        onLevel: (lv) => this.reactor && this.reactor.setCssProps({ "--lvl": String(Math.min(1, lv / 45)) }),
+      });
+      if (this.reactor) this.reactor.setCssProps({ "--lvl": "0" });
+      if (!hadSpeech) { this.setPhase("idle"); return; }
+      this.setPhase("thinking");
+      const text = await this.plugin.ai.transcribe(await blobToBase64(blob), format);
+      if (!text || text.length < 2) { this.setPhase("idle", t("Didn't catch that")); return; }
+      if (this.chat) this.chat.user(text); else this.setHeard(text);
+      await this.turn(text, { speak: !this.chat && this.plugin.settings.voiceEnabled });
+      if (!this.chat) this.setPhase("idle");
+    } catch (e) {
+      new Notice(t("Microphone unavailable: {0}", e.message));
+      this.setPhase("idle");
+    } finally {
+      this._holding = false;
+    }
+  }
+
+  /** The key came back up — close the microphone and let the turn run. */
+  stopHold() { this._holding = false; }
 
   /* ── hands-free session ─────────────────────────────────── */
   async toggleTalk() {

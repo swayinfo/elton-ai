@@ -275,15 +275,41 @@
    it was the second-loudest thing on the panel; as faint text it is there
    when you look for it and invisible when you are not. */
 .oa-note-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-size: var(--font-ui-smaller);
   color: var(--text-faint);
   text-align: center;
   padding: 0 10px;
-  max-width: 80%;
+  max-width: 90%;
+}
+.oa-note-chip > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The re-read button. Faint until wanted: it sits next to a line you are
+   meant to glance at, not a control you are meant to notice. */
+.oa-note-refresh {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0.65;
+}
+.oa-note-refresh:hover { opacity: 1; color: var(--text-normal); background: var(--background-modifier-hover); }
+.oa-note-refresh .svg-icon { width: 13px; height: 13px; }
 
 /* ── controls ──────────────────────────────────────────────── */
 .oa-controls { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
@@ -478,6 +504,47 @@
 .oa-set-tab:hover { color: var(--text-normal); }
 .oa-set-tab.is-on { color: var(--text-accent); border-bottom-color: var(--text-accent); font-weight: 500; }
 .oa-set-body .setting-item:first-child { border-top: none; padding-top: 0; }
+
+/* Sub-tabs inside a tab. Deliberately quieter than the strip above them —
+   pills rather than an underline, so the eye reads them as a choice within
+   the page rather than as another row of the same navigation. */
+.oa-subtabs { display: flex; gap: 6px; margin: 0 0 14px; }
+.oa-subtab {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.oa-subtab:hover { color: var(--text-normal); }
+.oa-subtab.is-on { color: var(--text-on-accent); background: var(--interactive-accent); }
+
+/* The vault map: machine output, read as a block. Monospace and scrollable
+   rather than reflowed — the indentation is the structure. */
+.oa-map { margin: 4px 0 14px; }
+.oa-map-body {
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  margin-top: 6px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.oa-map-body.is-hidden { display: none; }
+.oa-mono {
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-accent);
+  word-break: break-all;
+  margin: 4px 0;
+}
 
 /* The privacy warning on the context note. Loud on purpose — it is the one
    setting that can leak something you cannot take back. Matches Obsidian's
@@ -914,68 +981,50 @@
   border-radius: var(--radius-m);
   margin: 10px 0;
 }
-.oa-auto-card {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  background: var(--background-secondary);
-  padding: 4px 14px 10px;
-  margin: 14px 0;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.oa-auto-card.is-on {
-  border-color: var(--text-accent);
-  box-shadow: 0 0 0 1px var(--text-accent) inset;
-}
-.oa-auto-head {
+/* ── the list of saved tasks ──────────────────────────────────
+   One row per scenario or automation, editing in its own window.
+
+   Every rule here is written to survive a theme: the old folded card was
+   built out of a <button> and an Obsidian Setting, and a theme that draws
+   buttons and settings as white panels turned one card into three nested
+   boxes — which is exactly how it looked. So the row draws its own frame and
+   flatly refuses the theme's on everything inside it. */
+.oa-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; }
+
+.oa-settings .oa-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 0;
+  padding: 4px 6px 4px 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  transition: border-color var(--oa-fast) var(--oa-ease), background var(--oa-fast) var(--oa-ease);
 }
-/* The border only earns its place when there is something under it. */
-.oa-auto-card.is-open .oa-auto-head {
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--background-modifier-border);
-  margin-bottom: 4px;
-}
+.oa-settings .oa-row:hover { border-color: var(--background-modifier-border-hover); }
+.oa-settings .oa-row.is-off { opacity: 0.55; }
 
-/* The whole summary strip is the fold control, so it is a button — reachable
-   by Tab, and a target you cannot miss. */
-.oa-auto-grip {
+.oa-settings .oa-row-main {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0;
+  gap: 10px;
+  padding: 8px 8px;
   border: none;
+  border-radius: var(--radius-s);
   background: none;
   box-shadow: none;
   text-align: left;
   cursor: pointer;
   color: inherit;
+  font-size: inherit;
 }
-.oa-auto-grip:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: var(--radius-s); }
-.oa-auto-chev {
-  flex: 0 0 auto;
-  display: flex;
-  color: var(--text-faint);
-  transition: transform var(--oa-fast) var(--oa-ease), color var(--oa-fast) var(--oa-ease);
-}
-.oa-auto-chev svg { width: 16px; height: 16px; }
-.oa-auto-card.is-open .oa-auto-chev { transform: rotate(90deg); color: var(--text-muted); }
-@media (hover: hover) and (pointer: fine) {
-  .oa-auto-grip:hover .oa-auto-chev { color: var(--text-normal); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .oa-auto-chev { transition: none; }
-}
-
-.oa-auto-body.is-hidden { display: none; }
-.oa-auto-body { animation: oaFadeIn var(--oa-fast) var(--oa-ease); }
-
-.oa-auto-info { flex: 1; min-width: 0; }
-.oa-auto-name {
+.oa-settings .oa-row-main:hover { background: var(--background-modifier-hover); box-shadow: none; }
+.oa-settings .oa-row-main:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
+.oa-row-emoji { flex: 0 0 auto; font-size: 19px; line-height: 1; width: 24px; text-align: center; }
+.oa-row-body { flex: 1; min-width: 0; }
+.oa-row-name {
   font-weight: 600;
   color: var(--text-normal);
   font-size: var(--font-ui-medium);
@@ -983,10 +1032,54 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.oa-auto-when { font-size: var(--font-ui-smaller); color: var(--text-muted); margin-top: 1px; }
-.oa-auto-switch .setting-item { border: 0; padding: 0; }
-.oa-auto-card .setting-item { border-top: 1px solid var(--background-modifier-border-focus); padding: 10px 0; }
-.oa-auto-body .setting-item:first-of-type { border-top: 0; }
+.oa-row-sub {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oa-row-tools { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
+.oa-settings .oa-row-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-s);
+  background: none;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.oa-settings .oa-row-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); box-shadow: none; }
+.oa-settings .oa-row-btn.is-danger:hover { color: var(--text-error); background: var(--background-modifier-error-hover); }
+.oa-settings .oa-row-btn .svg-icon { width: 15px; height: 15px; }
+/* The toggle comes wrapped in an Obsidian Setting, which brings a border, a
+   full row of padding and a min-height with it. None of that fits here. */
+.oa-settings .oa-row-switch .setting-item {
+  border: 0;
+  padding: 0;
+  margin: 0 4px 0 2px;
+  min-height: 0;
+  background: none;
+}
+.oa-settings .oa-row-switch .setting-item-info { display: none; }
+
+/* Editing happens in a window, so the window gets room to write in. */
+.oa-scen-edit { width: min(680px, 92vw); }
+.oa-scen-edit .oa-scen-brief { display: block; }
+.oa-scen-edit .oa-scen-brief .setting-item-control { width: 100%; margin-top: 8px; }
+.oa-scen-edit .oa-scen-brief textarea { width: 100%; }
+.oa-modal-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+body.is-mobile .oa-scen-edit { width: 100%; }
+body.is-mobile .oa-row-main { padding: 10px 8px; }
+body.is-mobile .oa-row-btn { width: 44px; height: 44px; }
+
 /* The emoji is one glyph; a full-width text field around it reads as a
    second name field. */
 .oa-emoji-input { width: 3.5em; text-align: center; flex: 0 0 auto; }

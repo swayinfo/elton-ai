@@ -67,6 +67,99 @@ function newAutomation(presetId) {
   };
 }
 
+/* ============================================================
+ *  Editing one, in its own window
+ *
+ *  Same reasoning as the scenario editor: a schedule is eight
+ *  fields, and eight fields unfolding inside a list turn the list
+ *  into a form with rows around it.
+ * ========================================================== */
+class AutomationEditModal extends Modal {
+  constructor(app, plugin, automation, onSave) {
+    super(app);
+    this.plugin = plugin;
+    this.auto = automation;
+    this.onSave = onSave;
+    this.draft = Object.assign({}, automation, { days: (automation.days || []).slice() });
+  }
+
+  onOpen() {
+    this.modalEl.addClass("oa-scen-edit");
+    this.draw();
+  }
+
+  onClose() { this.contentEl.empty(); }
+
+  draw() {
+    const c = this.contentEl;
+    c.empty();
+    const a = this.draft;
+    c.createEl("h3", { text: a.name || t("Custom automation") });
+
+    new Setting(c).setName(t("Name")).addText((tx) =>
+      tx.setValue(a.name || "").onChange((v) => { a.name = v; }));
+
+    new Setting(c).setName(t("Time")).addText((tx) => {
+      tx.inputEl.type = "time";
+      tx.setValue(a.time || "09:00").onChange((v) => { a.time = v || "09:00"; });
+    });
+
+    // Days: click to toggle, none selected means every day. Monday-first.
+    const L = [t("Sun"), t("Mon"), t("Tue"), t("Wed"), t("Thu"), t("Fri"), t("Sat")];
+    const daysSetting = new Setting(c).setName(t("Days")).setDesc(t("None selected = every day."));
+    const daysRow = daysSetting.controlEl.createDiv({ cls: "oa-auto-days" });
+    [1, 2, 3, 4, 5, 6, 0].forEach((d) => {
+      const btn = daysRow.createEl("button", { cls: "oa-day" + (a.days.includes(d) ? " is-on" : ""), text: L[d] });
+      btn.onclick = () => {
+        a.days = a.days.includes(d) ? a.days.filter((x) => x !== d) : a.days.concat(d);
+        this.draw();
+      };
+    });
+
+    new Setting(c).setName(t("Where it writes")).addDropdown((d) => {
+      d.addOption("daily", t("Today's daily note"));
+      d.addOption("note", t("A new note"));
+      d.setValue(a.target || "daily").onChange((v) => { a.target = v; this.draw(); });
+    });
+
+    if ((a.target || "daily") === "daily") {
+      new Setting(c).setName(t("Heading")).setDesc(t("Under this heading in the daily note."))
+        .addText((tx) => tx.setPlaceholder(a.name || "").setValue(a.heading || "")
+          .onChange((v) => { a.heading = v; }));
+    } else {
+      new Setting(c).setName(t("Folder")).setDesc(t("Where the new note goes."))
+        .addText((tx) => {
+          tx.setValue(a.folder || "");
+          const commit = (v) => { a.folder = String(v || "").trim().replace(/^\/+|\/+$/g, ""); };
+          tx.onChange(commit);
+          new PathSuggest(tx.inputEl, () => allFolders(this.app), commit);
+        });
+    }
+
+    const brief = new Setting(c).setName(t("Prompt"))
+      .setDesc(t("What the assistant should do. It has the same tools as in a normal chat — it can read your notes, your daily entries, and search the web if that's on."));
+    brief.settingEl.addClass("oa-scen-brief");
+    brief.addTextArea((tx) => {
+      tx.inputEl.rows = 8;
+      tx.inputEl.addClass("oa-auto-prompt");
+      tx.setValue(a.prompt || "").onChange((v) => { a.prompt = v; });
+    });
+
+    new Setting(c).setName(t("Notify me when it's done"))
+      .addToggle((x) => x.setValue(a.notify !== false).onChange((v) => { a.notify = v; }));
+
+    const row = c.createDiv({ cls: "oa-modal-buttons" });
+    row.createEl("button", { text: t("Cancel") }).onclick = () => this.close();
+    const save = row.createEl("button", { cls: "mod-cta", text: t("Save") });
+    save.onclick = async () => {
+      Object.assign(this.auto, a);
+      await this.plugin.saveSettings();
+      this.close();
+      if (this.onSave) this.onSave();
+    };
+  }
+}
+
 class AutomationScheduler {
   constructor(plugin) {
     this.plugin = plugin;

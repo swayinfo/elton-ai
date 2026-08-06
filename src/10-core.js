@@ -531,6 +531,185 @@ const RU = {
   "Your notes stay in your vault. Only the text needed to answer a question is sent to the provider you chose — and with a local model, nothing leaves your machine at all.":
     "Заметки остаются в вашем хранилище. Провайдеру уходит только текст, нужный для ответа на вопрос, — а с локальной моделью не уходит вообще ничего.",
   "Show the setup guide again": "Показать пошаговую настройку заново",
+
+  // ── the note on screen, dictation ──
+  "Reading the guide: {0}": "Читаю руководство: {0}",
+  "Reading the template: {0}": "Читаю шаблон: {0}",
+  "No note in front of you": "Заметка не открыта",
+  "Re-read the note on screen": "Перечитать открытую заметку",
+  "Now reading: {0}": "Теперь читаю: {0}",
+  "Stop dictating": "Остановить запись",
+  "Speaking… let go when you're done": "Говорите… отпустите, когда закончите",
+
+  // ── the vault's own shape ──
+  "Vault": "Хранилище",
+  "Tasks": "Задания",
+  "Let it learn your vault": "Пусть изучит хранилище",
+  "Before it writes anything it needs to know how your vault is arranged — which folders hold what, and which templates a new note should be built from. Here is what it found. Correct it if it got something wrong.":
+    "Прежде чем что-то писать, ассистенту нужно понять, как устроено ваше хранилище: какие папки за что отвечают и по каким шаблонам создавать заметки. Вот что он нашёл сам — поправьте, если ошибся.",
+  "Where things live": "Где что лежит",
+  "Where notes the assistant creates end up when it has no better idea.":
+    "Куда попадают созданные ассистентом заметки, если он не придумал места лучше.",
+  "Templates folder": "Папка шаблонов",
+  "Found on its own: {0}": "Нашёл сам: {0}",
+  "None found — point at it if you have one.": "Не нашёл — укажите, если она есть.",
+  "The assistant reads a template before creating a note of that kind, so a project note comes out looking like your other project notes. Found on its own: {0}":
+    "Перед созданием заметки ассистент прочитает подходящий шаблон — чтобы заметка проекта выглядела как остальные заметки проектов. Нашёл сам: {0}",
+  "The assistant reads a template before creating a note of that kind, so a project note comes out looking like your other project notes. Empty means it asks the Templates or Templater plugin where they are.":
+    "Перед созданием заметки ассистент прочитает подходящий шаблон — чтобы заметка проекта выглядела как остальные заметки проектов. Пусто — спросит папку у плагина «Шаблоны» или Templater.",
+  "Learn the vault's structure": "Изучать структуру хранилища",
+  "Folds a map of your vault into every request — the folders, what is in them, which templates exist. This is what stops it filing a project note in the root and inventing a shape for it.":
+    "Вкладывает карту хранилища в каждый запрос: папки, что в них лежит, какие есть шаблоны. Именно это мешает ему бросить заметку проекта в корень и выдумать ей вид.",
+  "What it sees": "Что он видит",
+  "Anything it should know about your system": "Что ещё стоит знать о вашей системе",
+  "Read the map above; whatever it cannot tell from folder names, write here. \"Projects live in 1. Projects, one note each, always linked from the MOC\" is the kind of thing that saves a dozen wrong guesses.":
+    "Посмотрите карту выше и допишите то, чего не видно по названиям папок. «Проекты лежат в 1. Projects, по заметке на проект, всегда со ссылкой из MOC» — вот такая строчка экономит десяток неверных догадок.",
+  "Whatever the folder names don't say. Optional — you can fill this in later.":
+    "То, чего не видно по названиям папок. Необязательно — можно заполнить потом.",
+
+  // ── hold a key and talk ──
+  "Hold a key and talk": "Зажать клавишу и говорить",
+  "Works anywhere in Obsidian, from any note. Hold the keys, say what you want, let go — the panel opens itself if it was closed. It is a combination the plugin watches directly, so it is set by pressing it rather than by typing it.":
+    "Работает в любом месте Obsidian, из любой заметки. Зажали, сказали, отпустили — панель откроется сама, если была закрыта. Сочетание плагин слушает напрямую, поэтому его не вписывают, а нажимают.",
+  "Key combination": "Сочетание клавиш",
+  "Press the keys…": "Нажмите сочетание…",
+  "Set": "Задать",
+  "Change": "Изменить",
+  "Turn it off": "Выключить",
+
+  // ── saved tasks ──
+  "By phrase": "По фразе",
+  "On a schedule": "По расписанию",
+
+  // ── telegram ──
+  "Telegram": "Telegram",
+  "Write to your vault from your phone. A bot you own passes your messages — typed or spoken — to this assistant, and sends its answers back. It has the same access to your notes as the panel does.":
+    "Пишите своему хранилищу с телефона. Ваш собственный бот передаёт сообщения — текстом или голосом — этому ассистенту и возвращает ответы. Доступ к заметкам у него такой же, как у панели.",
+  "⚠ Access to Telegram is restricted by some providers in Russia, and connections to it may be slow or fail entirely. If Telegram does not open normally on this computer, the bot will not answer reliably either.":
+    "⚠ В России часть операторов ограничивает доступ к Telegram: соединение может быть медленным или не устанавливаться вовсе. Если Telegram на этом компьютере открывается с трудом, бот тоже будет отвечать с перебоями.",
+  "⚠ Access to Telegram is restricted by some providers in Russia, and connections to it may be slow or fail entirely. If Telegram does not open normally for you, this bot will not work reliably either.":
+    "⚠ В России часть операторов ограничивает доступ к Telegram: соединение может быть медленным или не устанавливаться вовсе. Если Telegram у вас открывается с трудом, бот тоже будет работать с перебоями.",
+  "Connect a bot": "Подключить бота",
+  "Four steps, with what you'll see at each one. No experience with Telegram bots needed.":
+    "Четыре шага, и на каждом написано, что вы увидите. Опыт с ботами не нужен.",
+  "Set up Telegram": "Настроить Telegram",
+  "Answer messages": "Отвечать на сообщения",
+  "Only while Obsidian is open on this computer. Anything sent while it is closed arrives the next time you open the vault.":
+    "Только пока Obsidian открыт на этом компьютере. Всё, что придёт при закрытом, дождётся следующего запуска хранилища.",
+  "Bot token": "Токен бота",
+  "From BotFather. It is a password — anyone holding it can talk to your bot.":
+    "Тот, что выдал BotFather. Это пароль: у кого он есть, тот может писать вашему боту.",
+  "Check the token": "Проверить токен",
+  "Paste the token first.": "Сначала вставьте токен.",
+  "No token yet.": "Токена пока нет.",
+  "This is a phone — the bot runs on the computer that holds the vault.":
+    "Это телефон — бот работает на компьютере, где лежит хранилище.",
+  "Set this up on your computer": "Настраивается на компьютере",
+  "The bot is answered by the computer that holds your vault — that is the whole point of it, and it is why a phone is where you write TO the bot rather than where it runs. These settings are on the Telegram tab there.":
+    "Боту отвечает компьютер, на котором лежит хранилище, — в этом весь смысл: с телефона вы боту пишете, а работает он там. Настройки — на вкладке Telegram на компьютере.",
+  "It is switched on for this vault, so your computer answers whenever Obsidian is open on it.":
+    "Для этого хранилища бот включён — компьютер отвечает, пока на нём открыт Obsidian.",
+  "It is not switched on yet.": "Пока не включён.",
+  "Switched off.": "Выключено.",
+  "Listening. Linked to your Telegram account.": "Слушает. Привязан к вашему аккаунту Telegram.",
+  "Not running — reopen the vault or switch it off and on.":
+    "Не запущен — перезапустите хранилище или выключите и включите обратно.",
+  "Telegram refused the token: {0}": "Telegram отклонил токен: {0}",
+  "Works — the bot is @{0}. Now go and say /start to it.":
+    "Работает, бот @{0}. Теперь напишите ему /start.",
+  "Send me a test message": "Прислать мне тестовое сообщение",
+  "This is {0}, speaking from your vault. Everything works.":
+    "Это {0}, пишу из вашего хранилища. Всё работает.",
+  "Sent.": "Отправлено.",
+  "Nobody is linked yet — send /start to the bot first.":
+    "Пока никто не привязан — сначала напишите боту /start.",
+  "Linked account": "Привязанный аккаунт",
+  "The only Telegram account this bot answers. Clearing it lets the next person to send /start take over — do that only if it is you.":
+    "Единственный аккаунт Telegram, которому бот отвечает. Если стереть, ботом завладеет следующий, кто напишет /start, — делайте это, только если это будете вы.",
+  "Linked to your Telegram account. It is listening.": "Привязан к вашему аккаунту Telegram. Слушает.",
+  "Waiting for /start. Send it from the phone you want to use.":
+    "Жду /start. Напишите его с того телефона, с которого будете пользоваться.",
+  "Forget the linked account": "Забыть привязанный аккаунт",
+  "What this actually is": "Что это вообще такое",
+  "A Telegram bot is a chat account you own. You write to it from your phone, and the assistant on this computer answers — the same one as in the panel, with the same access to your notes. Nothing is published anywhere: the bot talks only to you.":
+    "Бот в Telegram — это ваш собственный собеседник. Вы пишете ему с телефона, а отвечает ассистент с этого компьютера: тот же самый, что в панели, и с тем же доступом к заметкам. Никуда ничего не публикуется — бот говорит только с вами.",
+  "Two things to know first": "Две вещи, которые стоит знать сразу",
+  "It answers only while Obsidian is open on this computer. Messages sent while it is closed arrive the next time you open the vault.":
+    "Отвечает, только пока Obsidian открыт на этом компьютере. Сообщения, отправленные при закрытом, придут при следующем запуске.",
+  "Set it up on one computer only. Two would take turns answering at random.":
+    "Настраивайте только на одном компьютере. Два будут отвечать по очереди в случайном порядке.",
+  "Make the bot": "Создайте бота",
+  "In Telegram, find the account called BotFather — the one with the blue tick. Send it /newbot. It asks for a name (anything, e.g. «My vault»), then for a username, which must end in bot (e.g. elton_vault_bot). It replies with a long line of letters and digits after «Use this token to access the HTTP API» — that line is the token.":
+    "В Telegram найдите аккаунт BotFather — тот, что с синей галочкой. Отправьте ему /newbot. Он спросит название (любое, например «Моё хранилище»), потом имя пользователя — оно обязано заканчиваться на bot (например elton_vault_bot). В ответ придёт длинная строка из букв и цифр после слов «Use this token to access the HTTP API». Эта строка и есть токен.",
+  "The token looks like this": "Токен выглядит так",
+  "It is a password. Anyone who has it can talk to your bot, so do not put it in a note or send it to anyone.":
+    "Это пароль. Кто им завладеет, тот сможет писать вашему боту, — не кладите его в заметку и никому не пересылайте.",
+  "Paste the token": "Вставьте токен",
+  "Paste it here and press check. The plugin asks Telegram whether the token is real and tells you the bot's name back — if the name is right, the token is right.":
+    "Вставьте его сюда и нажмите проверку. Плагин спросит у Telegram, настоящий ли токен, и покажет имя бота: имя верное — значит, и токен верный.",
+  "Say hello to it": "Поздоровайтесь с ним",
+  "Open your bot in Telegram — BotFather gave you a t.me link to it — and send it /start. The first person to do that becomes the owner, and from then on it answers nobody else.":
+    "Откройте своего бота в Telegram (BotFather прислал ссылку t.me) и отправьте ему /start. Кто сделает это первым, тот и станет владельцем: больше бот не ответит никому.",
+  "What it can and cannot do": "Что он умеет и чего не умеет",
+  "It searches, reads, creates and edits notes exactly as the panel does. It cannot delete: deleting waits for a key press at the keyboard, and over a chat there is nobody to press it — so it declines and says so.":
+    "Ищет, читает, создаёт и правит заметки ровно как панель. Удалять не может: удаление ждёт нажатия клавиши на клавиатуре, а в переписке нажимать некому — поэтому он отказывается и прямо об этом говорит.",
+  "Voice messages are transcribed with your provider, the same way the panel hears you.":
+    "Голосовые расшифровывает ваш провайдер — так же, как панель слышит вас.",
+  "Send /new in the chat to make it forget the conversation so far.":
+    "Напишите в чат /new, чтобы он забыл предыдущий разговор.",
+  "Set it up on one computer only: Telegram gives each message to whoever asks first, so two would answer half each.":
+    "Настраивайте только на одном компьютере: Telegram отдаёт сообщение тому, кто спросил первым, — два устройства ответят по половине каждое.",
+  // ── what the bot itself says ──
+  "Send /start to link this bot to your vault.": "Отправьте /start, чтобы привязать бота к хранилищу.",
+  "Linked. This bot now answers only you, and only while Obsidian is open on your computer.\n\nWrite to it the way you would speak to the panel — ask about your notes, or ask it to write one. Voice messages work too.":
+    "Привязал. Теперь бот отвечает только вам и только пока Obsidian открыт на компьютере.\n\nПишите ему так же, как говорили бы с панелью: спрашивайте о заметках или просите что-нибудь записать. Голосовые тоже понимает.",
+  "Ready. Ask about your notes, or ask for one to be written.":
+    "Готов. Спрашивайте о заметках или просите что-нибудь записать.",
+  "Forgotten. Starting fresh.": "Забыл. Начинаем заново.",
+  "Still working on the last one — one moment.": "Ещё отвечаю на прошлое — секунду.",
+  "I can read text and listen to voice messages — nothing else yet.":
+    "Я понимаю текст и голосовые — больше пока ничего.",
+  "I couldn't make that out. Try again?": "Не разобрал. Ещё раз?",
+  "I have nothing to say to that.": "Мне нечего на это ответить.",
+  "From your notes:": "Из ваших заметок:",
+  "Thinking about your answer…": "Думаю над вашим ответом…",
+  "What this bot can do": "Что умеет этот бот",
+  "Telegram would not take the formatted message ({0}), so answers are being sent as plain text.":
+    "Telegram не принял сообщение с оформлением ({0}) — ответы уходят простым текстом.",
+  "If you can read this as a heading and the list below as a list, formatting is working.":
+    "Если сверху виден заголовок, а ниже — список, значит оформление работает.",
+  "Search and read your notes": "Искать и читать ваши заметки",
+  "Create and edit them": "Создавать и править их",
+  "Listen to voice messages": "Понимать голосовые",
+  "A fold, like the one your sources arrive in": "Сворачиваемый блок — в таком приходят источники",
+  "Tap it to open.": "Нажмите, чтобы раскрыть.",
+  "Forget the conversation so far": "Забыть предыдущий разговор",
+  "What I can do": "Что я умею",
+  "Write to me the way you would speak to the panel — about your notes, or asking for one to be written. Voice messages work too.":
+    "Пишите мне так же, как говорили бы с панелью: о своих заметках или с просьбой что-нибудь записать. Голосовые тоже понимаю.",
+  "Commands": "Команды",
+  "Your scenarios": "Ваши сценарии",
+  "Each one also works as a spoken phrase — just write it out.":
+    "Каждый работает и обычной фразой — просто напишите её словами.",
+  "I can search, read, create and edit notes. I cannot delete — that waits for a key press at the keyboard, and there is nobody here to press it.":
+    "Я умею искать, читать, создавать и править заметки. Удалять не умею: удаление ждёт нажатия клавиши на клавиатуре, а здесь нажимать некому.",
+  "Creating notes is switched off in settings right now.":
+    "Создание заметок сейчас выключено в настройках.",
+  "I don't know that command. Send /help for the list.":
+    "Не знаю такой команды. Отправьте /help — покажу список.",
+  "In Telegram this scenario answers to /{0}": "В Telegram этот сценарий отзывается на /{0}",
+  "What it is called on the button and in the bot's menu.":
+    "Как он называется на кнопке и в меню бота.",
+  "Listening to your message…": "Слушаю ваше сообщение…",
+  // The unit on the clock in the waiting caption: "Думаю… · 45 с".
+  "s": "с",
+  "Show an animation while it thinks": "Показывать анимацию, пока он думает",
+  "An answer takes tens of seconds. A moving picture appears the moment you write, its caption says what the assistant is doing right now — searching, reading, writing — and it disappears when the answer arrives.":
+    "Ответ готовится десятки секунд. Картинка появляется сразу, как вы написали, в подписи видно, чем ассистент занят прямо сейчас — ищет, читает, пишет, — и она исчезает, когда ответ готов.",
+  "Your own animation": "Своя анимация",
+  "A link to a .gif or .mp4. Empty means the built-in one. It is uploaded once and then reused from Telegram's own storage.":
+    "Ссылка на .gif или .mp4. Пусто — встроенная. Загружается один раз, дальше берётся из хранилища самого Telegram.",
+  "Link to a GIF": "Ссылка на GIF",
 };
 
 let LANG = "en";
@@ -650,6 +829,12 @@ const DEFAULT_SETTINGS = {
   // "auto" picks the quick model for the provider; "" runs everything on one.
   fastModel: "auto",
   contextNote: "",
+  // Fold the shape of the vault into every prompt: top-level folders, what is
+  // inside them, which templates exist, where the daily notes are. Costs a few
+  // hundred tokens and is the difference between a note filed where it belongs
+  // and one dropped wherever the model last looked.
+  vaultMap: true,
+  vaultNotes: "",
 
   voiceEnabled: true,
   ttsEngine: "cloud",
@@ -664,6 +849,10 @@ const DEFAULT_SETTINGS = {
   allowInterrupt: false,
   interruptSensitivity: 8,
   micMode: "handsfree",
+  // Hold a key anywhere in Obsidian and talk. Obsidian's own hotkeys fire on
+  // the way down and never tell you about the way up, so this cannot be one of
+  // them — it is a key combination watched directly. Off until it is given one.
+  holdKey: null,          // { code, ctrl, shift, alt, meta }
 
   canRead: true,
   canCreate: true,
@@ -678,6 +867,15 @@ const DEFAULT_SETTINGS = {
   scopeFolders: "",
   newNoteFolder: "",
   dailyFolder: "",
+  // Where this vault keeps its templates. Empty means: ask the Templates core
+  // plugin, then Templater, then look for a folder called that.
+  templateFolder: "",
+
+  // The bot that puts the vault on a phone. Off, and with no token, until
+  // someone deliberately connects one.
+  // `gifId` is filled in by Telegram itself the first time the waiting
+  // animation is sent, so it is never downloaded twice.
+  telegram: { enabled: false, token: "", userId: "", thinkingGif: true, thinkingGifUrl: "", gifId: "" },
 
   // Let the assistant reach the public internet. Only providers that route
   // through OpenRouter (Elton AI, OpenRouter) can do it, so the tool is
@@ -725,6 +923,34 @@ const DEFAULT_SETTINGS = {
 
 /* ── small helpers ─────────────────────────────────────────── */
 const wait = (ms) => new Promise((r) => window.setTimeout(r, ms));
+
+/* ── a key combination you hold ────────────────────────────────
+ * Stored by `code`, not by `key`: the physical key is what a finger
+ * holds down, and `key` changes with the keyboard layout — a
+ * combination set on a Russian layout would stop firing on an
+ * English one, which is not a thing anyone would think to check.
+ * ────────────────────────────────────────────────────────────── */
+function hotkeyFromEvent(e) {
+  if (!e.code || /^(Control|Shift|Alt|Meta)/.test(e.code)) return null;
+  return { code: e.code, ctrl: !!e.ctrlKey, shift: !!e.shiftKey, alt: !!e.altKey, meta: !!e.metaKey };
+}
+
+function hotkeyMatches(hk, e) {
+  return !!hk && e.code === hk.code
+    && !!e.ctrlKey === !!hk.ctrl && !!e.shiftKey === !!hk.shift
+    && !!e.altKey === !!hk.alt && !!e.metaKey === !!hk.meta;
+}
+
+function hotkeyLabel(hk) {
+  if (!hk) return t("Not set");
+  const parts = [];
+  if (hk.ctrl) parts.push("Ctrl");
+  if (hk.shift) parts.push("Shift");
+  if (hk.alt) parts.push("Alt");
+  if (hk.meta) parts.push(Platform && Platform.isMacOS ? "Cmd" : "Win");
+  parts.push(String(hk.code).replace(/^Key|^Digit/, "").replace(/^Numpad/, "Num "));
+  return parts.join(" + ");
+}
 
 function joinUrl(base, path) {
   const b = String(base || "").replace(/\/+$/, "");

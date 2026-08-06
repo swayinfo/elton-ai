@@ -11,7 +11,11 @@
  *  model is never told it exists.
  * ========================================================== */
 
-const MAX_STEPS = 6;
+// Six was the whole turn. With the quick model doing the gathering the strong
+// model then arrives with whatever is left, and "create eight notes" is eight
+// tool calls that have to fit after the searching — so the ceiling has to hold
+// both halves.
+const MAX_STEPS = 10;
 // A long answer can outrun the token ceiling. Ask for the rest rather than
 // serving a sentence that stops mid-word — but bounded, so a model that has
 // forgotten how to stop can't bill forever.
@@ -29,6 +33,23 @@ const HANDOVER = {
   role: "user",
   content: "Enough searching. Answer now, from what you have already gathered. "
     + "Do not call any more tools; if something is missing, say so in the answer.",
+};
+
+/**
+ * The quick model has stopped gathering, so the strong one takes over.
+ *
+ * NOT the same instruction as running out of steps. This one used to be, and
+ * it was the bug behind "I'll create that note" followed by nothing: the quick
+ * model answers a request to write something with a sentence rather than a tool
+ * call, this arrived saying call no more tools, and the strong model — which
+ * had the request and the ability — was forbidden from doing the one thing that
+ * had been asked for. Both models then described the work and neither did it.
+ */
+const TAKE_OVER = {
+  role: "user",
+  content: "Stop searching — you have enough. Now finish the job. "
+    + "If the user asked you to create, write, edit or delete anything and it has not been done yet, "
+    + "do it NOW with the tools, in this turn. Never announce work you have not carried out.",
 };
 
 const CONTINUE_PROMPT =
@@ -130,18 +151,28 @@ function buildTools(s, plugin) {
       { path: { type: "string" } }, ["path"]);
   }
   if (s.canCreate) {
-    fn("create_note", "Create a new note.",
+    fn("create_note",
+      "Create a new note. If this vault has a template for this kind of note, read it first and build the note on it — properties, headings and links included. A note that does not look like its neighbours is filed wrong.",
       { title: { type: "string" }, content: { type: "string", description: "Body, in markdown" }, folder: { type: "string", description: "Optional folder" } },
       ["title", "content"]);
+    if (plugin.vault.templateFolder()) {
+      fn("read_template",
+        "Read one of this vault's templates — the shape a note of that kind is supposed to have. Call it BEFORE creating a project, a meeting, a book note or anything else the vault has a template for. The list of them is in the layout description above.",
+        { name: { type: "string", description: "Template name or path, as listed" } }, ["name"]);
+    }
     // Only when the board can actually be rendered. Without the Kanban plugin
     // the same file opens as ordinary text, and "here is your board" would be
     // a note with headings in it.
     if (plugin.vault.kanbanReady()) {
       fn("create_board",
-        "Create a Kanban board: a project laid out as columns with cards you drag between them. Use this — NOT create_note — whenever the user asks for a board, a kanban, or a project broken into stages. A note with headings and checkboxes is not a board; it opens as plain text.",
+        "Create a Kanban board: a project laid out as columns with cards you drag between them. Use this — NOT create_note — whenever the user asks for a board, a kanban, or a project broken into stages. A note with headings and checkboxes is not a board; it opens as plain text. If this vault has a board template, read it first: take its columns and its properties from there rather than inventing your own.",
         {
           title: { type: "string" },
           folder: { type: "string", description: "Optional folder" },
+          properties: {
+            type: "object",
+            description: "Frontmatter properties the vault's boards carry — copy them from the template or from a neighbouring board, e.g. a link back to the parent MOC. Values may be strings or lists of strings.",
+          },
           columns: {
             type: "array",
             description: "The columns, in order. Three or four is usual — e.g. Idea, In progress, Done.",
@@ -183,7 +214,7 @@ const PERSONAS = {
   blunt: "Short and direct. No preamble, no summary of what you are about to say. Answer, then stop.",
 };
 
-async function buildSystemPrompt(plugin, { written = false } = {}) {
+async function buildSystemPrompt(plugin, { written = false, channel = "" } = {}) {
   const s = plugin.settings;
   const name = s.assistantName || "Assistant";
   const persona = s.persona === "custom" && s.personaCustom ? s.personaCustom : (PERSONAS[s.persona] || PERSONAS.calm);
@@ -199,7 +230,15 @@ async function buildSystemPrompt(plugin, { written = false } = {}) {
     "• You may reason and give an opinion, not just retrieve. Ground it in their notes, and say which part is your own view.",
   ];
 
-  if (written) {
+  if (channel === "telegram") {
+    /* Telegram renders proper markdown now — headings, lists, tables and all.
+       Worth saying outright: told only "write markdown", a model aims at the
+       old bold-and-italic dialect and produces a wall of paragraphs, which is
+       what a long answer on a phone screen must not be. */
+    lines.push("• This answer is read in a Telegram chat on a phone. It renders full markdown, so use it: `##` headings to break a long answer into parts, `-` and `1.` lists, `- [ ]` checkboxes for things to do, `---` between big sections, tables where the content really is a table, `**bold**` for the thing that matters, `> ` for quoting the user's own notes.");
+    lines.push("• Write for a phone screen: lead with the answer, keep paragraphs to two or three sentences, and never send one unbroken block of text. Do not add a heading to a two-line answer — structure a long one, leave a short one short.");
+    lines.push("• Do not list your sources at the end; that is added for you.");
+  } else if (written) {
     // The answer is written into a note, not spoken — so markdown helps here
     // where it would only be read out as noise in the reactor.
     lines.push("• This answer is saved to a note, not spoken. Write clean, readable markdown: short paragraphs, and headings or lists where they genuinely help. Do not mention that you are writing to a note.");
@@ -223,6 +262,11 @@ async function buildSystemPrompt(plugin, { written = false } = {}) {
 
   if (s.canEdit || s.canCreate) {
     lines.push("• When you change a note, do it — do not ask permission first, and do not describe what you would do. The user can always say \"undo that\".");
+    // The single most common failure, and the one that reads as the assistant
+    // being useless: it replies "I'll create that note" and the turn ends. A
+    // promise is not an action, and there is no later in which to keep it.
+    lines.push("• NEVER announce work instead of doing it. \"I'll create it\", \"let me write that\", \"I'm making the note\" are forbidden unless the tool call is already in this same turn. Call the tool first, then say what you did, in the past tense. If you cannot, say why — do not promise.");
+    lines.push("• Asked for several notes, create all of them, one create_note call each. Do not stop after the first and do not offer to continue.");
     // The convention lives in the neighbours and nowhere else, so a note made
     // without looking at them comes out orphaned — no link back to its MOC, no
     // tags, filed nowhere.
@@ -234,6 +278,18 @@ async function buildSystemPrompt(plugin, { written = false } = {}) {
   }
   if (s.canDelete) {
     lines.push("• Deletion always stops for the user's confirmation. Never claim something is deleted before they confirm it.");
+  }
+
+  // The map of the vault. Cached for the session — it reads metadata only, but
+  // it reads all of it, and it goes into every single prompt.
+  if (s.vaultMap !== false) {
+    if (!plugin.vault._map) {
+      try { plugin.vault._map = plugin.vault.describeVault(); } catch { plugin.vault._map = ""; }
+    }
+    if (plugin.vault._map) lines.push("", "How this vault is laid out:", plugin.vault._map);
+  }
+  if (s.vaultNotes) {
+    lines.push("", "What the user says about how their vault works:", String(s.vaultNotes).slice(0, 2000));
   }
 
   // The note that carries the user's own context. Read fresh each turn so
@@ -313,7 +369,7 @@ class Agent {
     this.sources.push({ path: file.path, title: file.basename });
   }
 
-  async run(history, userText, { onEvent, confirm, onSegment, onDelta, written = false }) {
+  async run(history, userText, { onEvent, confirm, onSegment, onDelta, written = false, channel = "" }) {
     const plugin = this.plugin;
     const s = plugin.settings;
     const V = plugin.vault;
@@ -332,7 +388,7 @@ class Agent {
     const tools = buildTools(s, plugin);
 
     const messages = [
-      { role: "system", content: await buildSystemPrompt(plugin, { written }) },
+      { role: "system", content: await buildSystemPrompt(plugin, { written, channel }) },
       ...history,
     ];
 
@@ -357,27 +413,31 @@ class Agent {
        first word. Writing the answer is the one step where the strong model
        earns its keep, and it happens once. */
     const fast = fastModelFor(s);
-    const search = fast ? { tools, ...budget, model: fast } : { tools, ...budget };
+    // True once the strong model has taken over. From then on it runs the loop
+    // itself — it can still call tools, which is what makes "create a note"
+    // actually create one.
+    let handed = !fast;
 
     for (let step = 0; step < MAX_STEPS; step++) {
       if (this.cancelled) return null;
+      const opts = handed ? { tools, ...budget } : { tools, ...budget, model: fast };
       // Deltas are only worth showing for the step that turns out to be the
       // answer, and which step that is only becomes clear once it arrives with
       // no tool calls. So they go out as they come and the view discards them
       // if the step turns out to have been a search after all.
-      const msg = await this.ask(messages, search, fast ? null : onDelta);
+      const msg = await this.ask(messages, opts, handed ? onDelta : null);
       if (this.cancelled) return null;
 
       const calls = msg.tool_calls || [];
       if (!calls.length) {
-        // The fast model has stopped reaching for tools, which means it thinks
-        // it has enough. Everything it gathered is in `messages`; the answer
-        // itself is written by the model the user chose.
-        if (!fast) return await this.finishAnswer(messages, msg, budget, onSegment);
+        if (handed) return await this.finishAnswer(messages, msg, budget, onSegment);
+        // The quick model has stopped reaching for tools. Everything it
+        // gathered is in `messages`; the strong model continues from here —
+        // answering, or doing the work the quick one only talked about.
+        handed = true;
         if (onDelta) onDelta(null, "");
-        const handed = await this.ask(messages.concat([HANDOVER]), { tools, ...budget }, onDelta);
-        if (this.cancelled) return null;
-        return await this.finishAnswer(messages, handed, budget, onSegment);
+        messages.push(TAKE_OVER);
+        continue;
       }
       if (onDelta) onDelta(null, "");   // that step was tool use — clear the draft
 
@@ -615,6 +675,25 @@ class Agent {
         return `Opened "${f.basename}" beside what was already there.`;
       }
 
+      case "read_template": {
+        const want = String(args.name || "").trim();
+        const list = V.templates();
+        const low = want.toLowerCase().replace(/\.md$/, "");
+        const f = list.find((x) => x.path === want)
+          || list.find((x) => x.basename.toLowerCase() === low)
+          || list.find((x) => x.basename.toLowerCase().includes(low));
+        if (!f) return `No template called "${want}". These exist: ${list.map((x) => x.basename).join(", ") || "none"}`;
+        onEvent({ kind: "action", text: t("Reading the template: {0}", f.basename) });
+        // Raw, not stripped: the frontmatter and the placeholders ARE the
+        // template. Reading it as prose would drop exactly the part that
+        // decides what the finished note looks like.
+        const raw = await plugin.app.vault.cachedRead(f);
+        return `Template "${f.basename}" (${f.path}):\n\n${raw.slice(0, 6000)}\n\n`
+          + "Build the new note on this: same properties, same headings, same links. "
+          + "Replace template placeholders ({{date}}, <% ... %> and the like) with real values — "
+          + "the assistant's notes are not processed by the template plugin afterwards.";
+      }
+
       case "create_note": {
         if (!s.canCreate) return "Creating notes is switched off in settings.";
         if (s.confirmEveryEdit) {
@@ -634,7 +713,7 @@ class Agent {
           const ok = await confirm({ title: t("Confirm change"), body: `${t("Created: {0}", safeTitle(args.title))}`, danger: false });
           if (!ok) return "The user declined. Do not retry.";
         }
-        const f = await V.createBoard(args.title, args.columns, args.folder);
+        const f = await V.createBoard(args.title, args.columns, args.folder, args.properties);
         onEvent({ kind: "action", text: t("Board created: {0}", f.basename) });
         await V.openNote(f);
         const names = (args.columns || []).map((c) => c && c.name).filter(Boolean).join(", ");

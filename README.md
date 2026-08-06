@@ -105,6 +105,14 @@ The server picks a voice from the language of each phrase, so answers in either 
 
 To have it start with the system, download [`start-piper.vbs`](https://github.com/swayinfo/elton-ai/blob/main/start-piper.vbs), put it alongside, and drop a shortcut to it in the startup folder (`Win+R` → `shell:startup`).
 
+### Hold a key and talk
+
+A key combination that works anywhere in Obsidian: hold it, say what you want, let go. The panel opens itself if it was closed, so you can talk without leaving the note you are in.
+
+Set it on the Voice tab: press "Set", then press the combination. You cannot type it, and it is not an ordinary Obsidian hotkey — Obsidian tells a command when a key goes down and never when it comes up, and "hold" cannot be built on that. The physical key is what is remembered, so a keyboard layout never breaks it.
+
+Next to it, in the panel's own header, is the microphone mode: hands-free (it listens until you go quiet) or push-to-talk. That one lives in the panel rather than in settings, because which you want depends on the room you are in.
+
 ### Answer length
 
 Three options on the "Assistant" tab: short (a few paragraphs), normal (a full explanation, the default) and long (thorough).
@@ -139,7 +147,30 @@ The point is that the phrase is recognised locally, in the plugin, not by the mo
 
 **Three ways to start one:** say the phrase, press the button under the reactor (or in an empty chat), or run "Run a scenario" from the command palette.
 
-How scenarios differ from automations: you start a scenario yourself and listen to the answer; an automation fires on a schedule and writes its answer into a note.
+How scenarios differ from automations: you start a scenario yourself and listen to the answer; an automation fires on a schedule and writes its answer into a note. Both live on the "Tasks" tab: one line each, edited in a window of its own.
+
+---
+
+## Telegram
+
+Your vault, reachable without holding it. You write to a bot you own — typed or spoken — and the same assistant on your computer answers, with the same access: it searches your notes, reads them, creates and edits them.
+
+**Connecting one.** Telegram tab → "Set up Telegram". Four steps, saying what you will see at each: what a bot actually is, how to get a token from BotFather, checking the token (the plugin asks Telegram and tells you the bot's name back), and `/start`. No prior experience with bots is assumed.
+
+**It answers exactly one person.** The first to send `/start` becomes the owner; everyone else gets no reply at all.
+
+**Commands.** Every enabled scenario becomes a command in the bot's menu — "Weekly review" → `/weekly_review`. Anything typed after the command rides along as a refinement. Plus `/help` for the list and `/new` to forget the conversation. The menu updates itself when you edit your scenarios.
+
+**Real formatting.** Answers go out as Rich Messages: headings, lists, checkboxes, tables, dividers and collapsible blocks — sources arrive folded away rather than stacked under every reply.
+
+**While you wait**, an animation with a caption that follows the work: "Searching…", "Reading: 06-08-2026", "Writing the answer". You can point it at your own GIF.
+
+Worth knowing up front:
+
+- The bot answers **only while Obsidian is open** on the computer. Messages sent while it is closed arrive the next time you open the vault — Telegram holds them for a day.
+- Set it up on **one computer only**: Telegram gives each message to whoever asks first, so two would answer half each. On a phone the bridge does not start at all.
+- **It cannot delete notes.** Deletion waits for a key press at the keyboard, and over a chat there is nobody to press it, so it declines and says so.
+- The token sits in `data.json` in plain text, like every other key.
 
 ---
 
@@ -161,6 +192,20 @@ Every permission is separate. A permission that is off is not an instruction not
 - **Delete** — off by default. Even when it is on, **every deletion stops and waits for a keypress**. The assistant never deletes anything on its own.
 
 You can restrict it to particular folders — "only these" or "all but these". The restriction applies to search as well: notes outside the scope do not even appear in results.
+
+---
+
+## How it learns your vault
+
+A note created blind comes out orphaned: without the properties its neighbours carry, without a link back to its parent MOC, filed wherever. The assistant has no way of knowing how your vault is arranged unless it is told.
+
+**The map.** The plugin builds one from what Obsidian already knows: top-level and second-level folders with how much is in each, the list of templates, where the daily notes live. It costs nothing, takes no indexing pass, and goes into every request. On the Vault tab you can unfold and read it — exactly what the assistant sees.
+
+**Templates.** It finds the folder on its own — from the Templates core plugin or Templater — and you can point at one by hand. Before creating a note of a kind that has a template, it reads that template and builds the note on it: same properties, same headings, same links. Kanban boards too: the columns and properties come from your template rather than being invented.
+
+**In your own words.** Under the map there is a box for whatever folder names cannot say: "projects live in 1. Projects, one note each, always linked from the MOC". One line like that saves a dozen wrong guesses.
+
+The setup guide offers all of this as a step — "Let it learn your vault" — showing what it managed to find.
 
 ---
 
@@ -213,6 +258,8 @@ The plugin never contacts anything except the provider you chose in settings. It
 | `api.openai.com` | the **OpenAI** provider | the same |
 | `localhost:11434` | a local model (Ollama / LM Studio) | nothing leaves the machine |
 | `localhost:5000` | the local Piper voice | only the answer text, to be spoken |
+| `api.telegram.org` | only if you connected a bot | your messages to the bot and the assistant's replies |
+| `media.giphy.com` | only the Telegram waiting animation, once | nothing — a picture is downloaded |
 
 Elton AI is the author's proxy to OpenRouter models, for people who would rather not set up a key of their own; it is paid for through a separate Telegram bot. Every other provider works without it and the plugin loses nothing.
 

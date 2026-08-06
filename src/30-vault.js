@@ -475,6 +475,86 @@ class VaultBridge {
       + `Add the same ones here unless the user said otherwise — a note without them is not filed the way the rest of the folder is.`;
   }
 
+  /* ── templates ──────────────────────────────────────────────
+   *
+   * A vault's note types live in its templates, and the assistant had no way
+   * to know they existed: asked for a project note it invented a shape, while
+   * the real one — with its properties, its headings, its links back — sat in
+   * a folder it never looked in. The folder is not guessed: Obsidian's own
+   * Templates plugin and Templater both record it, and either answer is the
+   * truth about this vault.
+   * ────────────────────────────────────────────────────────── */
+  templateFolder() {
+    // What the user pointed at wins over anything we can work out: a vault can
+    // have templates in a folder no plugin was ever told about.
+    if (this.s.templateFolder) return normalizePath(this.s.templateFolder);
+    const ip = this.app.internalPlugins;
+    try {
+      const core = ip && ip.getPluginById ? ip.getPluginById("templates") : null;
+      const dir = core && core.instance && core.instance.options && core.instance.options.folder;
+      if (dir) return normalizePath(dir);
+    } catch {}
+    try {
+      const tp = this.app.plugins && this.app.plugins.plugins && this.app.plugins.plugins["templater-obsidian"];
+      const dir = tp && tp.settings && tp.settings.templates_folder;
+      if (dir) return normalizePath(dir);
+    } catch {}
+    // Neither plugin configured — fall back to a folder actually called that.
+    return resolveFolder(this.app, "templates", (p) => this.inScope(p));
+  }
+
+  /** The templates themselves, newest first. */
+  templates(limit = 40) {
+    const dir = this.templateFolder();
+    if (!dir) return [];
+    return this.app.vault.getMarkdownFiles()
+      .filter((f) => f.path.startsWith(dir + "/"))
+      .sort((a, b) => a.basename.localeCompare(b.basename))
+      .slice(0, limit);
+  }
+
+  /**
+   * The shape of this vault, in a paragraph.
+   *
+   * Built once and kept in settings, because it goes into every system prompt:
+   * top-level folders with how much is in them, the templates that exist, and
+   * where the daily notes live. Without it the assistant files everything in
+   * the root of wherever it last looked — it genuinely had no map.
+   */
+  describeVault() {
+    const files = this.files();
+    const byTop = new Map();
+    for (const f of files) {
+      const top = f.path.includes("/") ? f.path.slice(0, f.path.indexOf("/")) : "/";
+      byTop.set(top, (byTop.get(top) || 0) + 1);
+    }
+    const lines = [];
+    lines.push(`The vault holds ${files.length} notes. Top-level folders, with how many notes are under each:`);
+    for (const [name, n] of [...byTop.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20)) {
+      // The second level is where the actual filing happens in a PARA-style
+      // vault — "2. Areas" alone tells the model nothing about where a project
+      // note belongs.
+      const subs = new Set();
+      for (const f of files) {
+        if (!f.path.startsWith(name + "/")) continue;
+        const rest = f.path.slice(name.length + 1);
+        if (rest.includes("/")) subs.add(rest.slice(0, rest.indexOf("/")));
+      }
+      const tail = subs.size ? ` — inside: ${[...subs].slice(0, 8).join(", ")}` : "";
+      lines.push(`• ${name} (${n})${tail}`);
+    }
+
+    const tpl = this.templates();
+    if (tpl.length) {
+      lines.push("", `Templates live in "${this.templateFolder()}". A note of a kind that has a template here MUST be built from it — read it with read_note first and follow its properties, headings and links. The templates are:`);
+      for (const f of tpl) lines.push(`• ${f.basename} (${f.path})`);
+    }
+
+    const daily = this.dailyFolder();
+    if (daily) lines.push("", `Daily notes are in "${daily}".`);
+    return lines.join("\n");
+  }
+
   /** Is the Kanban plugin there to render a board at all? */
   kanbanReady() {
     const p = this.app.plugins;
@@ -492,7 +572,7 @@ class VaultBridge {
    * trailing settings block has to hold real JSON, one list-collapse flag per
    * column. Miss any of the three and the file is a note about a board.
    */
-  async createBoard(title, columns, folder) {
+  async createBoard(title, columns, folder, properties) {
     const cols = (Array.isArray(columns) ? columns : [])
       .map((c) => ({
         name: String((c && c.name) || "").trim(),
@@ -514,7 +594,23 @@ class VaultBridge {
     const fence = "`".repeat(3);
     const tail = `%% kanban:settings\n${fence}\n${settings}\n${fence}\n%%`;
 
-    const text = `---\nkanban-plugin: board\n---\n\n${body}\n\n${tail}\n`;
+    /* Whatever else the vault's own board template carries.
+       A board built from `kanban-plugin: board` alone renders correctly and is
+       still filed wrong: in a vault whose project boards all carry a link back
+       to their MOC, one without it is an orphan nothing points at. The model
+       reads the template and passes those properties through here. */
+    const extra = [];
+    for (const [k, v] of Object.entries(properties || {})) {
+      if (!k || k === "kanban-plugin") continue;
+      if (Array.isArray(v)) {
+        extra.push(`${k}:`);
+        for (const item of v) extra.push(`  - "${String(item).replace(/"/g, '\\"')}"`);
+      } else if (v != null && String(v) !== "") {
+        extra.push(`${k}: ${/[:#[\]{}]/.test(String(v)) ? `"${String(v).replace(/"/g, '\\"')}"` : v}`);
+      }
+    }
+    const front = (extra.length ? extra.join("\n") + "\n" : "") + "kanban-plugin: board";
+    const text = `---\n${front}\n---\n\n${body}\n\n${tail}\n`;
     return await this.createNote(title, text, folder);
   }
 

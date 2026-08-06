@@ -21,6 +21,7 @@ class EltonAI extends ObsidianPlugin {
     this.recorder = new Recorder();
     this.speaker = new Speaker(this);
     this.scheduler = new AutomationScheduler(this);
+    this.telegram = new TelegramBridge(this);
     this.lastNote = null;
 
     this.registerView(VIEW_TYPE, (leaf) => new AssistantView(leaf, this));
@@ -71,6 +72,8 @@ class EltonAI extends ObsidianPlugin {
 
     this.addSettingTab(new AssistantSettingTab(this.app, this));
 
+    this.registerHoldKey();
+
     // Which note is on screen decides what "this" and "here" mean. The
     // workspace's own idea of the active file goes stale the moment focus
     // moves to the assistant panel, so track markdown opens explicitly.
@@ -87,6 +90,9 @@ class EltonAI extends ObsidianPlugin {
 
       // Start the automation timer once the vault is ready to be read.
       this.scheduler.start();
+      // The bot answers from the vault, so it must not start before the vault
+      // is there to answer from.
+      this.telegram.start();
 
       if (!this.settings.onboarded) {
         // Persist the flag before opening: a sync writing data.json can
@@ -101,16 +107,66 @@ class EltonAI extends ObsidianPlugin {
     });
 
     // Keep the index roughly honest without rebuilding on every keystroke.
-    const stale = obsidian.debounce(() => { this.vault.index = null; }, 20000, true);
+    const stale = obsidian.debounce(() => { this.vault.index = null; this.vault._map = null; }, 20000, true);
     for (const ev of ["create", "delete", "rename", "modify"]) {
       this.registerEvent(this.app.vault.on(ev, stale));
     }
+  }
+
+  /**
+   * Hold a key anywhere in Obsidian and talk.
+   *
+   * Not an Obsidian command: commands fire once on the way down and say
+   * nothing about the way up, so "hold to speak" cannot be built on one. The
+   * listener is on the window in capture phase — otherwise an editor with
+   * focus swallows the combination before it is ever seen — and it opens the
+   * panel if it is closed, which is the whole point of it being global.
+   */
+  registerHoldKey() {
+    let down = false;
+    this.registerDomEvent(window, "keydown", (e) => {
+      const hk = this.settings.holdKey;
+      if (!hotkeyMatches(hk, e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Held keys repeat. The second one must not start a second recording.
+      if (down || e.repeat) return;
+      down = true;
+      this.activateView().then((v) => { if (v) v.startHold(); else down = false; });
+    }, true);
+
+    // Any keyup that ends the combination ends the recording — letting go of
+    // Ctrl while still on Space has to stop it too, or the microphone stays
+    // open on a combination that is no longer held.
+    this.registerDomEvent(window, "keyup", (e) => {
+      const hk = this.settings.holdKey;
+      if (!down || !hk) return;
+      const releases = e.code === hk.code
+        || (hk.ctrl && /^Control/.test(e.code)) || (hk.shift && /^Shift/.test(e.code))
+        || (hk.alt && /^Alt/.test(e.code)) || (hk.meta && /^Meta/.test(e.code));
+      if (!releases) return;
+      down = false;
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        if (leaf.view && leaf.view.stopHold) leaf.view.stopHold();
+      }
+    }, true);
+
+    // A window that loses focus never delivers the keyup, and the microphone
+    // would sit open until the tab came back.
+    this.registerDomEvent(window, "blur", () => {
+      if (!down) return;
+      down = false;
+      for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+        if (leaf.view && leaf.view.stopHold) leaf.view.stopHold();
+      }
+    });
   }
 
   onunload() {
     this.speaker.stop();
     this.recorder.stop();
     this.ambience.stop();
+    this.telegram.stop();
   }
 
   async loadSettings() {
@@ -122,6 +178,7 @@ class EltonAI extends ObsidianPlugin {
       bases: Object.assign({}, DEFAULT_SETTINGS.bases, raw.bases),
       models: Object.assign({}, DEFAULT_SETTINGS.models, raw.models),
       cloudFallback: Object.assign({}, DEFAULT_SETTINGS.cloudFallback, raw.cloudFallback),
+      telegram: Object.assign({}, DEFAULT_SETTINGS.telegram, raw.telegram),
     });
 
     // A voice saved for one engine is rejected by another, and the only
@@ -137,7 +194,16 @@ class EltonAI extends ObsidianPlugin {
     }
   }
 
-  async saveSettings() { await this.saveData(this.settings); }
+  async saveSettings() {
+    await this.saveData(this.settings);
+    // The bot's "/" menu is built from the scenarios, so it goes stale the
+    // moment one is renamed. Debounced: this runs on every keystroke in a
+    // settings field, and the menu is one HTTP call.
+    if (!this._syncCmds) {
+      this._syncCmds = obsidian.debounce(() => { this.telegram.syncCommands(); }, 4000);
+    }
+    this._syncCmds();
+  }
 
   /** Open the panel where the user asked for it, reusing an existing one. */
   async activateView() {

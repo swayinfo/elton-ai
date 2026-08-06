@@ -160,8 +160,12 @@ function eq(actual, expected, name) {
   {
     // buildTools asks the vault where the daily notes live, so that the
     // daily_note tool exists for people who never filled the setting in.
-    const withDaily = (folder, kanban) => ({
-      vault: { dailyFolder: () => folder || "", kanbanReady: () => !!kanban },
+    const withDaily = (folder, kanban, templates) => ({
+      vault: {
+        dailyFolder: () => folder || "",
+        kanbanReady: () => !!kanban,
+        templateFolder: () => templates || "",
+      },
     });
     const names = (s, plugin) =>
       T.buildTools(Object.assign({}, T.DEFAULT_SETTINGS, s), plugin || withDaily("")).map((x) => x.function.name);
@@ -172,6 +176,15 @@ function eq(actual, expected, name) {
     ok(names({}, withDaily("Daily")).includes("daily_note"),
       "и появляется, когда папку удалось взять из настроек Obsidian, даже если своё поле пустое");
     ok(!names({ canRead: false }).includes("recent_notes"), "без права на чтение нет и recent_notes");
+
+    // The whole point of read_template is that a project note comes out
+    // looking like the other project notes. Offering it with no templates
+    // folder would be a tool whose every call fails.
+    ok(!all.includes("read_template"), "без папки шаблонов инструмент шаблонов не предлагается");
+    ok(names({}, withDaily("", false, "Templates")).includes("read_template"),
+      "с папкой шаблонов read_template появляется");
+    ok(!names({ canCreate: false }, withDaily("", false, "Templates")).includes("read_template"),
+      "и исчезает без права создавать заметки");
 
     ok(!all.includes("create_board"), "без плагина Kanban доску предлагать нечем");
     ok(names({}, withDaily("", true)).includes("create_board"), "с плагином Kanban инструмент появляется");
@@ -875,6 +888,108 @@ function eq(actual, expected, name) {
       ok(/overflow-y:\s*auto/.test(short), "на низком экране сцена прокручивается, а не обрезает");
       ok(/justify-content:\s*flex-start/.test(short), "и выкладывается сверху, а не по центру");
     }
+  }
+
+  /* ── Telegram: splitting, and who gets answered ────────── */
+  describe("Телеграм: длинные ответы и чужие сообщения");
+  {
+    const long = ("Первое предложение. Второе предложение. ".repeat(300)).trim();
+    const parts = T.splitForTelegram(long);
+    ok(parts.length > 1, "длинный ответ режется на несколько сообщений");
+    ok(parts.every((p) => p.length <= 4096), "ни один кусок не превышает лимит Telegram");
+    ok(parts.every((p) => p.trim().length), "пустых сообщений не появляется");
+    eq(parts.join(" ").replace(/\s+/g, " "), long.replace(/\s+/g, " "), "текст не теряется при нарезке");
+
+    const short = T.splitForTelegram("Короткий ответ.");
+    eq(short, ["Короткий ответ."], "короткий ответ уходит одним сообщением");
+
+    // A rich message holds eight times as much, and that is the point: an
+    // answer that fits in one bubble reads as one answer.
+    eq(T.splitForTelegram(long, 30000).length, 1, "в rich-сообщение тот же ответ влезает целиком");
+    // A paragraph break is a better place to cut than a character count.
+    const para = T.splitForTelegram("а".repeat(3000) + "\n\n" + "б".repeat(1500), 4000);
+    ok(para[0].endsWith("а"), "режет по границе абзаца, а не посреди слова");
+
+    // Authorisation is the whole security model: a bot token in the wrong
+    // hands must not become a vault in the wrong hands.
+    const saved = [];
+    const bridge = new T.TelegramBridge({
+      settings: { telegram: { enabled: true, token: "x", userId: "111" } },
+      saveSettings: async () => {},
+    });
+    bridge.send = async (chat, text) => { saved.push([chat, text]); };
+
+    ok(!(await bridge.authorise({ chat: { id: 9 }, from: { id: 222 }, text: "привет" })),
+      "сообщение от чужого аккаунта не проходит");
+    eq(saved.length, 0, "и чужому ничего не отвечают — он не должен узнать, что бот живой");
+    ok(await bridge.authorise({ chat: { id: 9 }, from: { id: 111 }, text: "привет" }),
+      "сообщение от владельца проходит");
+
+    const fresh = new T.TelegramBridge({
+      settings: { telegram: { enabled: true, token: "x", userId: "" } },
+      saveSettings: async () => {},
+    });
+    fresh.send = async () => {};
+    ok(!(await fresh.authorise({ chat: { id: 9 }, from: { id: 777 }, text: "/start" })),
+      "первый /start не отвечает на само сообщение — он привязывает");
+    eq(fresh.cfg.userId, "777", "и запоминает того, кто его отправил");
+    ok(!(await fresh.authorise({ chat: { id: 9 }, from: { id: 888 }, text: "/start" })),
+      "второй желающий уже не проходит");
+  }
+
+  /* ── Telegram: scenarios as slash commands ─────────────── */
+  describe("Телеграм: сценарии командами через /");
+  {
+    eq(T.slugForCommand("О чём я думал"), "o_chem_ya_dumal", "кириллица превращается в латиницу");
+    eq(T.slugForCommand("Что сегодня"), "chto_segodnya", "и во втором случае тоже");
+    eq(T.slugForCommand("📖 Объясни заметку!"), "obyasni_zametku", "эмодзи и знаки выбрасываются");
+    eq(T.slugForCommand("Weekly Review"), "weekly_review", "латиница просто опускается в нижний регистр");
+    eq(T.slugForCommand("💭💭💭"), "", "из одних эмодзи команды не выйдет");
+    ok(T.slugForCommand("а".repeat(60)).length <= 32, "длина не превышает предел Telegram");
+
+    const plugin = {
+      settings: {
+        telegram: { enabled: true, token: "x", userId: "1" },
+        canCreate: true,
+        scenarios: [
+          { id: "1", enabled: true, prompt: "P1", name: "О чём я думал", emoji: "💭" },
+          { id: "2", enabled: true, prompt: "P2", name: "Что сегодня", emoji: "📅" },
+          // Same name twice: Telegram would silently keep only one.
+          { id: "3", enabled: true, prompt: "P3", name: "Что сегодня", emoji: "📅" },
+          { id: "4", enabled: false, prompt: "P4", name: "Выключенный" },
+          { id: "5", enabled: true, prompt: "", name: "Пустой" },
+        ],
+      },
+      saveSettings: async () => {},
+    };
+    const bridge = new T.TelegramBridge(plugin);
+    const map = bridge.commandMap();
+
+    ok(map.has("o_chem_ya_dumal"), "сценарий стал командой");
+    ok(map.has("chto_segodnya") && map.has("chto_segodnya_2"), "одинаковые имена не затирают друг друга");
+    ok(!map.has("vyklyuchennyy"), "выключенный сценарий команды не получает");
+    eq(map.size, 3, "пустой сценарий тоже не считается");
+
+    const help = bridge.helpText();
+    ok(help.includes("/o_chem_ya_dumal"), "справка перечисляет команды сценариев");
+    ok(help.includes("/new") && help.includes("/help"), "и служебные команды тоже");
+  }
+
+  /* ── Hold-to-talk: the combination is physical ──────────── */
+  describe("Клавиша «зажать и говорить»");
+  {
+    const ev = (code, mods = {}) => Object.assign({ code, ctrlKey: false, shiftKey: false, altKey: false, metaKey: false }, mods);
+    const hk = T.hotkeyFromEvent(ev("Space", { ctrlKey: true, shiftKey: true }));
+    eq(hk, { code: "Space", ctrl: true, shift: true, alt: false, meta: false }, "сочетание снимается с события");
+    eq(T.hotkeyFromEvent(ev("ControlLeft", { ctrlKey: true })), null, "один модификатор — ещё не сочетание");
+
+    ok(T.hotkeyMatches(hk, ev("Space", { ctrlKey: true, shiftKey: true })), "то же сочетание — совпадает");
+    ok(!T.hotkeyMatches(hk, ev("Space", { ctrlKey: true })), "без Shift — уже другое сочетание");
+    ok(!T.hotkeyMatches(hk, ev("KeyS", { ctrlKey: true, shiftKey: true })), "другая клавиша — не совпадает");
+    ok(!T.hotkeyMatches(null, ev("Space")), "когда сочетание не задано, не срабатывает ничего");
+    // `code`, not `key`: a combination set on a Russian layout has to keep
+    // working on an English one.
+    ok(T.hotkeyLabel(hk).includes("Ctrl") && T.hotkeyLabel(hk).includes("Space"), "подпись читаемая");
   }
 
   /* ── report ────────────────────────────────────────────── */

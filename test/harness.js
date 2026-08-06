@@ -105,6 +105,8 @@ const EXPOSED = [
   "Speaker", "speechChunks", "sentences", "Ambience", "AMBIENCE_REPEAT_MS",
   "builtinSkillsFor", "builtinSkillText", "BUILTIN_SKILLS",
   "fastModelFor", "FAST_MODELS", "AssistantView",
+  "splitForTelegram", "hotkeyFromEvent", "hotkeyMatches", "hotkeyLabel", "TelegramBridge",
+  "slugForCommand",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */
