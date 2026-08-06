@@ -651,6 +651,16 @@ const RU = {
   "Connect a bot on the Telegram tab first — then this can send the result to your phone.":
     "Сначала подключите бота на вкладке Telegram — тогда результат сможет приходить на телефон.",
   "Written to: {0}": "Записано в: {0}",
+  // ── what each model is like, in the picker ──
+  "clever, the best balance": "умная, лучший баланс",
+  "proven, a little cheaper": "проверенная, чуть дешевле",
+  "quick and cheap": "быстрая и дешёвая",
+  "clever": "умная",
+  "balanced": "баланс",
+  "the fastest": "самая быстрая",
+  "room for a lot of context": "большой контекст",
+  "the cheapest": "самая дешёвая",
+
   // ── privacy ──
   "Private folders": "Личные папки",
   "⚠ Answering a question sends parts of your notes to your AI provider. Anything in the folders below is never read, never searched, never indexed and never sent — even when it is the note open on your screen. This is the place for medical records, finances, passwords, other people's information, anything under an agreement.":
@@ -666,7 +676,7 @@ const RU = {
 
   // ── what indexing is ──
   "What indexing does, in plain words": "Что такое индексация, простыми словами",
-  "Word search only finds notes containing the words you typed. Ask about «усталость» and a note that says «сил нет совсем» will not come up, though it is exactly what you meant.":
+  "Word search only finds notes containing the words you typed. Ask about «burnout» and a note that says «I have nothing left in the tank» will not come up, though it is exactly what you meant.":
     "Поиск по словам находит только те заметки, где встречаются написанные вами слова. Спросите про «усталость» — заметка со словами «сил нет совсем» не найдётся, хотя это ровно про то же.",
   "Indexing fixes that. Each note is sent once to your provider, which returns a long list of numbers describing what the note is about — its meaning, expressed as coordinates. That list is kept in a file inside your vault. When you ask something, your question is turned into the same kind of numbers and compared against them, so notes about the same thing come up whatever words they use.":
     "Индексация это чинит. Каждая заметка один раз уезжает к провайдеру, а обратно приходит длинный список чисел, описывающий, о чём она, — смысл, записанный координатами. Этот список лежит файлом в вашем хранилище. Когда вы о чём-то спрашиваете, вопрос превращается в такие же числа и сравнивается с ними — поэтому заметки про одно и то же находятся, какими бы словами они ни были написаны.",
@@ -881,23 +891,26 @@ const PROVIDERS = {
  * takes anything the provider accepts. Enforcement belongs on the
  * server, which is the only place a client cannot argue with.
  */
+/* The notes are written in English and translated at the point of use, like
+   every other string here. They were Russian, hard-coded — which meant an
+   English speaker opening the model picker met a dropdown half in Cyrillic. */
 const MODEL_CATALOG = {
   // Elton AI and OpenRouter share an upstream, so they share a list.
   obsimind: [
-    { id: "anthropic/claude-sonnet-4.6", note: "умный, лучший баланс" },
-    { id: "anthropic/claude-sonnet-4.5", note: "проверенный, чуть дешевле" },
-    { id: "anthropic/claude-haiku-4.5", note: "быстрый и дешёвый" },
-    { id: "openai/gpt-5.5", note: "умный" },
-    { id: "openai/gpt-4.1-mini", note: "быстрый и дешёвый" },
-    { id: "google/gemini-3.5-flash", note: "самый быстрый" },
-    { id: "google/gemini-2.5-pro", note: "большой контекст" },
-    { id: "deepseek/deepseek-chat", note: "самый дешёвый" },
+    { id: "anthropic/claude-sonnet-4.6", note: "clever, the best balance" },
+    { id: "anthropic/claude-sonnet-4.5", note: "proven, a little cheaper" },
+    { id: "anthropic/claude-haiku-4.5", note: "quick and cheap" },
+    { id: "openai/gpt-5.5", note: "clever" },
+    { id: "openai/gpt-4.1-mini", note: "quick and cheap" },
+    { id: "google/gemini-3.5-flash", note: "the fastest" },
+    { id: "google/gemini-2.5-pro", note: "room for a lot of context" },
+    { id: "deepseek/deepseek-chat", note: "the cheapest" },
   ],
   openai: [
-    { id: "gpt-5.5", note: "умный" },
-    { id: "gpt-4.1", note: "баланс" },
-    { id: "gpt-4.1-mini", note: "быстрый и дешёвый" },
-    { id: "gpt-4o-mini", note: "самый дешёвый" },
+    { id: "gpt-5.5", note: "clever" },
+    { id: "gpt-4.1", note: "balanced" },
+    { id: "gpt-4.1-mini", note: "quick and cheap" },
+    { id: "gpt-4o-mini", note: "the cheapest" },
   ],
   // Local models are named by whatever the user pulled, and Ollama does
   // answer /v1/models — so there the refresh button is the right tool.

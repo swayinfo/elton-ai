@@ -52,6 +52,65 @@ const TAKE_OVER = {
     + "do it NOW with the tools, in this turn. Never announce work you have not carried out.",
 };
 
+/* ============================================================
+ *  Catching a promise that was never kept
+ *
+ *  The prompt tells the model to act before it speaks. Prompts are
+ *  guidance, and this one is disobeyed in a specific, recognisable
+ *  way: the answer says it is about to create, open or edit
+ *  something, and the turn ends with no such tool call in it. From
+ *  the outside that is indistinguishable from the work being done,
+ *  which is why it went unnoticed for so long.
+ *
+ *  So the answer is read before it is delivered. If it promises
+ *  and the transcript shows nothing was done, the model is sent
+ *  back once with its own sentence quoted at it. Once, not in a
+ *  loop: a model that will not act on the second telling is not
+ *  going to on the fifth, and each attempt costs a request.
+ * ========================================================== */
+
+/* Words that claim an action is about to happen, in both languages.
+ *
+ * Word boundaries are spelled out rather than written `\b`: in JavaScript `\b`
+ * is defined against [A-Za-z0-9_], so every Cyrillic letter counts as a
+ * non-word character and `\bсоздам\b` matches nothing, ever. Which is what
+ * this check did on its first outing — it passed the English tests and caught
+ * none of the Russian.
+ *
+ * No lookbehind either: iOS below 16.4 cannot parse it, and this file has to
+ * load on a phone. The leading boundary consumes a character instead, which
+ * costs nothing here — the result is only ever tested, never spliced.
+ */
+const B = "(?:^|[^\\p{L}\\p{N}])";
+const E = "(?![\\p{L}\\p{N}])";
+const PROMISE_RE = new RegExp(
+  [
+    // English: "I'll create", "let me open", "I am going to add", "one moment"
+    `${B}(i'?ll|i will|i'?m going to|i am going to|let me|i'?m about to)\\s+\\p{L}`,
+    `${B}(one moment|hold on|give me a (?:second|moment))${E}`,
+    // Russian, first person future: "создам", "открою", "запишу"
+    `${B}(созда[юм]|создадим|откро[юем]|открою|запишу|запишем|добавлю|добавим|напишу|напишем|сделаю|сделаем|отредактирую|исправлю|удалю|проверю|посмотрю|поищу|найду|соберу|оформлю)${E}`,
+    // "сейчас <что-нибудь> сделаю", "давай запишем"
+    `${B}(сейчас|щас|давай(?:те)?)\\s+(?:\\S+\\s+)?(созда|откр|запиш|добав|напиш|сдела|провер|отред|удал|поищ|найд|собер|оформ)`,
+    `${B}(секунд(?:у|очку)?|минут(?:у|очку)?|момент)${E}`,
+  ].join("|"),
+  "iu",
+);
+
+/** Tools that change something or put something on screen. */
+const ACTION_TOOLS = new Set([
+  "create_note", "create_board", "append_note", "replace_in_note", "delete_note",
+  "open_note", "open_beside", "open_url", "close_tab", "undo_last",
+]);
+
+const KEEP_PROMISE = {
+  role: "user",
+  content: "STOP. Your reply says you are about to do something, and you have not done it — "
+    + "there is no tool call for it in this turn, and there is no later turn in which to make one. "
+    + "Do it NOW with the tools. Then reply again describing what you did, in the past tense. "
+    + "If you genuinely cannot do it, say plainly why instead of promising.",
+};
+
 const CONTINUE_PROMPT =
   "Your answer was cut off at the point shown. Carry straight on from there. " +
   "Do not repeat anything you already wrote, do not start over, and do not add " +
@@ -155,8 +214,12 @@ function buildTools(s, plugin) {
   }
   if (s.canCreate) {
     fn("create_note",
-      "Create a new note. If this vault has a template for this kind of note, read it first and build the note on it — properties, headings and links included. A note that does not look like its neighbours is filed wrong.",
-      { title: { type: "string" }, content: { type: "string", description: "Body, in markdown" }, folder: { type: "string", description: "Optional folder" } },
+      "Create a new note, written. The body is not optional and not a placeholder: a note created empty for the user to fill in later is a chore you handed them, not a note. If this vault has a template for this kind of note, read it first and build the note on it — properties, headings and links included. A note that does not look like its neighbours is filed wrong.",
+      {
+        title: { type: "string" },
+        content: { type: "string", description: "The note itself, in markdown. Write it properly — what it is about, what matters, what to do with it. Never empty." },
+        folder: { type: "string", description: "Optional folder" },
+      },
       ["title", "content"]);
     if (plugin.vault.templateFolder()) {
       fn("read_template",
@@ -343,6 +406,11 @@ class Agent {
     // Which notes fed this answer. Chat mode lists them under the reply so
     // an answer can be traced back to what it came from.
     this.sources = [];
+    // Did this turn actually do anything — create, edit, open, delete? What
+    // the promise check is checked against.
+    this.acted = false;
+    // The promise check fires once per turn, never in a loop.
+    this.checked = false;
   }
 
   cancel() {
@@ -372,6 +440,21 @@ class Agent {
       }
     }
     return await ai.chat(messages, opts);
+  }
+
+  /**
+   * Does this answer promise something the turn never did?
+   *
+   * Both halves have to be true. A reply that says "I'll open it" right after
+   * open_note ran is fine — that is a clumsy tense, not a broken promise, and
+   * sending the model back for it would cost a request to fix grammar. What
+   * matters is a promise with an empty transcript behind it.
+   */
+  brokenPromise(text) {
+    const said = String(text || "");
+    if (!said.trim()) return false;
+    if (this.acted) return false;
+    return PROMISE_RE.test(said);
   }
 
   noteSource(file) {
@@ -440,7 +523,18 @@ class Agent {
 
       const calls = msg.tool_calls || [];
       if (!calls.length) {
-        if (handed) return await this.finishAnswer(messages, msg, budget, onSegment);
+        if (handed) {
+          // Read the answer before handing it over. A promise with nothing
+          // behind it goes back to the model once, with its own words quoted.
+          if (this.brokenPromise(msg.content) && !this.checked) {
+            this.checked = true;
+            if (onDelta) onDelta(null, "");
+            messages.push({ role: "assistant", content: String(msg.content || "") });
+            messages.push(KEEP_PROMISE);
+            continue;
+          }
+          return await this.finishAnswer(messages, msg, budget, onSegment);
+        }
         // The quick model has stopped reaching for tools. Everything it
         // gathered is in `messages`; the strong model continues from here —
         // answering, or doing the work the quick one only talked about.
@@ -453,11 +547,34 @@ class Agent {
 
       messages.push(msg);
       for (const call of calls) {
-        let args = {};
-        try { args = JSON.parse(call.function.arguments || "{}"); } catch {}
+        /* Arguments that did not survive the trip.
+           A tool call is JSON the model writes token by token, so a long note
+           can run into the reply ceiling mid-string and arrive as broken JSON.
+           This used to be caught and thrown away — `args` stayed `{}` and the
+           call ran anyway, which is how a request for eight notes about ESP32
+           produced two files called "Untitled" in the vault root. Seen live.
+           An empty object is not a valid call: say so and let it retry. */
+        const raw = String(call.function.arguments || "").trim();
+        let args = null;
+        try { args = JSON.parse(raw || "{}"); } catch { args = null; }
+        if (!args || typeof args !== "object") {
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: "Your arguments for this call were cut off before they were complete, so nothing was done. "
+              + "Call it again with shorter content — write the note in a few paragraphs rather than a long one.",
+          });
+          continue;
+        }
+
         let result;
         try {
           result = await this.runTool(call.function.name, args, { onEvent, confirm });
+          // Recorded from what actually ran, not from what the model said it
+          // would run: a call that threw did not happen.
+          // Opening the daily note counts as acting; reading it does not.
+          if (ACTION_TOOLS.has(call.function.name)
+            || (call.function.name === "daily_note" && args.open)) this.acted = true;
         } catch (e) {
           result = "That failed: " + e.message;
         }
@@ -719,6 +836,24 @@ class Agent {
 
       case "create_note": {
         if (!s.canCreate) return "Creating notes is switched off in settings.";
+        // Second guard, for the same failure seen from the other side: a call
+        // that arrives without a title is not a note anyone asked for. Left
+        // to itself, `safeTitle("")` names it "Untitled" and files it in the
+        // vault root — rubbish that then has to be found and deleted by hand.
+        if (!String(args.title || "").trim()) {
+          return "No title came through — the call was probably cut short. Call create_note again with a title and a shorter body.";
+        }
+        /* And a body. Asked for three notes on a subject, the model created
+           three empty files and reported them as "ready to fill in" — which
+           is three chores, not three notes. Seen live, twice. An empty note
+           is refused with the reason, and it writes one.
+           The floor is deliberately low: a genuinely short note is fine, a
+           blank one is not. */
+        if (String(args.content || "").replace(/\s/g, "").length < 20) {
+          return "That note has no content, so it was not created. A note nobody wrote anything in is a chore, not a note. "
+            + "Call create_note again with the note actually written — what it is about, what matters, what to do with it. "
+            + "If you meant to write it in a later step, write it now instead: there is no later step.";
+        }
         if (s.confirmEveryEdit) {
           const ok = await confirm({ title: t("Confirm change"), body: `${t("Created: {0}", safeTitle(args.title))}`, danger: false });
           if (!ok) return "The user declined. Do not retry.";

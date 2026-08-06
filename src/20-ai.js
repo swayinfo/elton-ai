@@ -181,7 +181,7 @@ class AIClient {
       const list = res.json && Array.isArray(res.json.skills) ? res.json.skills : [];
       this._skillIndex = list.filter((s) => s && s.name);
     } catch (e) {
-      console.warn("elton-ai: индекс скиллов недоступен —", e.message);
+      console.warn("[Elton AI] the skill index is unavailable —", e.message);
       this._skillIndex = [];
     }
     return this._skillIndex;

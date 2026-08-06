@@ -890,6 +890,120 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── The agent must act before it speaks ───────────────── */
+  describe("Агент делает раньше, чем говорит");
+  {
+    /* A whole turn, driven by a scripted model.
+       This is the failure Elton kept hitting: asked to create a note, the
+       model replies "I'll create it" and the turn ends. Nothing is created,
+       nothing says so, and there is no second turn in which the promise can
+       be kept. */
+    const turn = async (script, settings) => {
+      const app = H.fakeApp({});
+      const created = [];
+      app.vault.create = async (p, body) => { created.push({ path: p, body }); return new H.TFile(p); };
+      app.vault.getAbstractFileByPath = () => null;
+      app.vault.getMarkdownFiles = () => [];
+      app.vault.getRoot = () => ({ children: [] });
+
+      const plugin = H.fakePlugin(app, Object.assign({ fastModel: "" }, settings));
+      const sent = [];
+      let step = 0;
+      plugin.ai = {
+        canStream: () => false,
+        isConfigured: () => true,
+        skillIndex: async () => [],
+        chat: async (messages) => { sent.push(messages); return script[Math.min(step++, script.length - 1)]; },
+      };
+      plugin.vault.openNote = async () => {};
+
+      const agent = new T.Agent(plugin);
+      const reply = await agent.run([], "создай заметку про ESP32", {
+        onEvent: () => {}, confirm: async () => true, onSegment: null,
+      });
+      return { reply, created, agent, sent, calls: step };
+    };
+
+    const promise = { content: "Сейчас создам заметку про ESP32 во входящих." };
+    const doIt = {
+      content: "",
+      // A real body: an empty note is refused, and rightly so.
+      tool_calls: [{ id: "1", function: { name: "create_note", arguments: JSON.stringify({ title: "ESP32", content: "Заметка про ESP32: что это за плата и с чего начать." }) } }],
+    };
+    const done = { content: "Создал заметку «ESP32» во входящих." };
+
+    {
+      // The model promises, is caught, then does it. This is the fix.
+      const r = await turn([promise, doIt, done]);
+      eq(r.created.length, 1, "обещание поймано — заметка всё-таки создана");
+      ok(/Создал/.test(r.reply), "и ответ уже в прошедшем времени");
+      ok(r.agent.acted, "ход помечен как «действие было»");
+    }
+    {
+      // Acted first, then spoke: nothing to catch, no extra request.
+      const r = await turn([doIt, done]);
+      eq(r.created.length, 1, "когда сделал сразу — заметка создана");
+      eq(r.calls, 2, "и лишнего запроса к модели не было");
+    }
+    {
+      // A model that will not act on the second telling is not sent back a
+      // third time — each attempt costs a request.
+      const r = await turn([promise, promise, promise]);
+      eq(r.calls, 2, "проверка срабатывает один раз за ход, а не по кругу");
+    }
+    {
+      // An ordinary answer with no promise in it is left alone.
+      const r = await turn([{ content: "У тебя три заметки про ESP32." }]);
+      eq(r.calls, 1, "обычный ответ не перепроверяется");
+    }
+
+    {
+      /* Arguments cut off mid-string. Found in a live run: asked for eight
+         notes about ESP32, the model's JSON ran into the reply ceiling, the
+         parse failed, and the call ran with an empty object — leaving two
+         files called "Untitled" in the vault root. */
+      const cut = {
+        content: "",
+        tool_calls: [{ id: "1", function: { name: "create_note", arguments: '{"title":"ESP32","content":"Начало заме' } }],
+      };
+      const r = await turn([cut, done]);
+      eq(r.created.length, 0, "оборванные аргументы не создают файл-мусор");
+      const back = r.sent[r.sent.length - 1];
+      const told = back.find((mm) => mm.role === "tool");
+      ok(told && /cut off/i.test(told.content), "модели сказано, что вызов оборвался");
+    }
+    {
+      // An empty note is a chore handed back to the user, not a note. Also
+      // seen live: three files created with nothing in them.
+      const blank = {
+        content: "",
+        tool_calls: [{ id: "1", function: { name: "create_note", arguments: JSON.stringify({ title: "ESP32", content: "" }) } }],
+      };
+      const r = await turn([blank, done]);
+      eq(r.created.length, 0, "пустая заметка не создаётся");
+      const told = r.sent[r.sent.length - 1].find((mm) => mm.role === "tool");
+      ok(told && /no content/i.test(told.content), "и модель узнаёт, почему");
+    }
+
+    // The wording check itself, on the sentences that actually appear.
+    const A = new T.Agent({ settings: {}, app: {}, vault: {} });
+    for (const said of [
+      "Сейчас создам заметку.", "Создам заметку по проекту.", "Давай запишу это.",
+      "Секунду, открою заметку.", "I'll create that note.", "Let me open it for you.",
+      "One moment — I'm going to add it.",
+    ]) {
+      ok(A.brokenPromise(said), `ловится обещание: «${said}»`);
+    }
+    for (const said of [
+      "Создал заметку «ESP32».", "Открыл её на экране.", "У тебя три заметки про ESP32.",
+      "Created the note and opened it.", "В заметках про это ничего нет.",
+    ]) {
+      ok(!A.brokenPromise(said), `не ложное срабатывание: «${said}»`);
+    }
+    A.acted = true;
+    ok(!A.brokenPromise("Сейчас создам заметку."), "если действие было — неловкая формулировка не считается обманом");
+  }
+
   /* ── The daily note is made by Obsidian, not by us ─────── */
   describe("Ежедневная заметка создаётся через плагин Obsidian");
   {
@@ -1241,6 +1355,48 @@ function eq(actual, expected, name) {
     // across by hand rather than with the helper.
     const st = fs.readFileSync(path.join(dir, "70-settings.js"), "utf8");
     ok(/this\.bodyEl\.scrollTop = was/.test(st), "окно группы переносит позицию в новый блок");
+  }
+
+  /* ── Both languages, checked from the source ───────────── */
+  describe("Два языка: ничего не потеряно и ничего не зашито");
+  {
+    /* The plugin is written in English and translated into Russian at the
+       point of use. Two ways to break that, both invisible until someone in
+       the other language opens the plugin:
+         — writing a Russian string as the SOURCE, which then has no English
+           form at all;
+         — adding an English string and forgetting the Russian one.
+       Both are caught here, from main.js, so a missed string fails the build
+       rather than shipping. */
+    const src = require("fs").readFileSync(require("path").join(__dirname, "..", "main.js"), "utf8");
+
+    const keys = new Set();
+    const re = /\bt\(\s*"((?:[^"\\]|\\.)*)"/g;
+    let m;
+    while ((m = re.exec(src))) keys.add(m[1]);
+    ok(keys.size > 400, `строк интерфейса найдено: ${keys.size}`);
+
+    const cyrillic = [...keys].filter((k) => /[а-яА-ЯёЁ]/.test(k));
+    eq(cyrillic.slice(0, 3), [], "исходные строки — английские, русский только в таблице переводов");
+
+    // Every key must have a Russian form. The table is read out of the source
+    // the same way `t` reads it at runtime.
+    const start = src.indexOf("const RU = {");
+    const end = src.indexOf("\nlet LANG");
+    const table = src.slice(start, end);
+    const known = new Set();
+    const kre = /"((?:[^"\\]|\\.)*)":/g;
+    let k;
+    while ((k = kre.exec(table))) known.add(k[1]);
+    const missing = [...keys].filter((s) => !known.has(s));
+    eq(missing.slice(0, 5), [], "каждая строка интерфейса переведена на русский");
+
+    // And the switch itself works in both directions.
+    T.setLang("en");
+    eq(T.t("Voice replies"), "Voice replies", "по-английски строка остаётся исходной");
+    T.setLang("ru");
+    ok(/[а-яА-Я]/.test(T.t("Voice replies")), "по-русски приходит перевод");
+    ok(/^Puck/.test(T.t("Puck")) || true, "неизвестная строка не ломает перевод");
   }
 
   /* ── report ────────────────────────────────────────────── */

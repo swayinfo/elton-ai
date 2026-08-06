@@ -508,7 +508,7 @@ class AssistantSettingTab extends PluginSettingTab {
 
     if (list.length) {
       setting.addDropdown((d) => {
-        for (const m of list) d.addOption(m.id, m.note ? `${m.id} — ${m.note}` : m.id);
+        for (const m of list) d.addOption(m.id, m.note ? `${m.id} — ${t(m.note)}` : m.id);
         // A model saved before this list existed, or typed by hand, must not
         // silently turn into something else just because it is not on it.
         if (current && !known) d.addOption(current, `${current} — ${t("your own")}`);
@@ -566,7 +566,7 @@ class AssistantSettingTab extends PluginSettingTab {
         .setDesc(t("Finding the right notes is a lot of small decisions, and a quick model makes them just as well as a clever one — about three times faster. The answer itself is still written by the model above."))
         .addDropdown((d) => {
           d.addOption("auto", t("Automatic ({0})", auto));
-          for (const m of modelChoices(s.provider)) d.addOption(m.id, `${m.id} — ${m.note}`);
+          for (const m of modelChoices(s.provider)) d.addOption(m.id, `${m.id} — ${t(m.note)}`);
           d.addOption("", t("Off — one model for everything"));
           d.setValue(s.fastModel == null ? "auto" : s.fastModel)
             .onChange(async (v) => { s.fastModel = v; await this.plugin.saveSettings(); });
@@ -1144,7 +1144,7 @@ class AssistantSettingTab extends PluginSettingTab {
          doing it. Both of those are worth knowing beforehand. */
       const box = c.createDiv({ cls: "oa-explain" });
       box.createDiv({ cls: "oa-explain-title", text: t("What indexing does, in plain words") });
-      box.createDiv({ text: t("Word search only finds notes containing the words you typed. Ask about «усталость» and a note that says «сил нет совсем» will not come up, though it is exactly what you meant.") });
+      box.createDiv({ text: t("Word search only finds notes containing the words you typed. Ask about «burnout» and a note that says «I have nothing left in the tank» will not come up, though it is exactly what you meant.") });
       box.createDiv({ text: t("Indexing fixes that. Each note is sent once to your provider, which returns a long list of numbers describing what the note is about — its meaning, expressed as coordinates. That list is kept in a file inside your vault. When you ask something, your question is turned into the same kind of numbers and compared against them, so notes about the same thing come up whatever words they use.") });
       box.createDiv({ text: t("Two things to know: the pass costs tokens, roughly a small fraction of a cent per note, and it happens once per note — only notes you change afterwards are done again. And the text of every note that gets indexed is sent to your provider, which is why private folders are excluded from it and why you can leave more folders out below.") });
 
