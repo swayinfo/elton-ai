@@ -1688,6 +1688,7 @@ class AssistantSettingTab extends PluginSettingTab {
 
     new Setting(c)
       .setName(t("Language"))
+      .setDesc(t("The interface switches immediately. Restart Obsidian afterwards so anything already open picks it up too. What the assistant answers in does not depend on this — it replies in the language you write or speak to it."))
       .addDropdown((d) => {
         d.addOption("auto", t("Follow Obsidian"));
         d.addOption("ru", t("Russian"));
@@ -1696,9 +1697,13 @@ class AssistantSettingTab extends PluginSettingTab {
           s.lang = v; setLang(v === "auto" ? null : v);
           await this.plugin.saveSettings();
           // Everything at once, including the palette entries and the ribbon
-          // tooltip — no restart, which is what a language switch should be.
+          // tooltip. A restart is not needed — but it is offered, because
+          // "almost everything changed" is the state people distrust most,
+          // and a window that was already open when the switch happened keeps
+          // whatever text it was built with.
           this.plugin.applyLanguage();
           this.display();
+          new Notice(t("Language changed. Anything already open keeps its old wording until you restart Obsidian."), 8000);
         });
       });
 

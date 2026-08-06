@@ -699,6 +699,10 @@ const RU = {
     "Разрешить ассистенту смотреть в интернет — новости, факты, всё, чего нет в хранилище. Отвечать он всё равно будет сначала по вашим заметкам.",
   // The Russian page of the site; the English one is the key above it.
   "https://eltonlabs.org/en/elton-ai": "https://eltonlabs.org/elton-ai",
+  "Language changed. Anything already open keeps its old wording until you restart Obsidian.":
+    "Язык переключён. То, что уже открыто, останется на прежнем языке до перезапуска Obsidian.",
+  "The interface switches immediately. Restart Obsidian afterwards so anything already open picks it up too. What the assistant answers in does not depend on this — it replies in the language you write or speak to it.":
+    "Интерфейс переключается сразу. После этого перезапустите Obsidian, чтобы язык подхватило и то, что уже открыто. На язык ответов это не влияет: ассистент отвечает на том языке, на котором вы к нему обратились.",
   "Made by Elton": "Сделал Элтон",
   "Who made this": "Кто это сделал",
   "Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ":
