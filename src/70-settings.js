@@ -652,6 +652,20 @@ class AssistantSettingTab extends PluginSettingTab {
       .setDesc(t("Read answers out loud. Turn off for a text-only assistant."))
       .addToggle((x) => x.setValue(s.voiceEnabled).onChange(async (v) => { s.voiceEnabled = v; await this.plugin.saveSettings(); this.display(); }));
 
+    /* What language you speak to it in.
+       Stated rather than detected: a short clip of Russian is regularly heard
+       as Polish, and what comes back is your own sentence spelled in a
+       language you do not read. */
+    new Setting(c)
+      .setName(t("The language you speak"))
+      .setDesc(t("What your speech is transcribed as. Left on the interface language, which is right unless you read the plugin in one language and talk to it in another."))
+      .addDropdown((d) => {
+        d.addOption("", t("Same as the interface"));
+        d.addOption("ru", t("Russian"));
+        d.addOption("en", t("English"));
+        d.setValue(s.speechLang || "").onChange(async (v) => { s.speechLang = v; await this.plugin.saveSettings(); });
+      });
+
     // Before the early return below: this is about talking TO it, which works
     // whether or not it talks back.
     this.holdKeySetting(c);

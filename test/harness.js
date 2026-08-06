@@ -112,7 +112,7 @@ const EXPOSED = [
   "builtinSkillsFor", "builtinSkillText", "BUILTIN_SKILLS",
   "fastModelFor", "FAST_MODELS", "AssistantView",
   "splitForTelegram", "hotkeyFromEvent", "hotkeyMatches", "hotkeyLabel", "TelegramBridge",
-  "slugForCommand", "AutomationScheduler", "newAutomation", "siteUrl", "siteLabel",
+  "pcmToWav", "slugForCommand", "AutomationScheduler", "newAutomation", "siteUrl", "siteLabel",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */

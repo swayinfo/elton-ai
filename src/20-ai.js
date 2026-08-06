@@ -374,12 +374,31 @@ class AIClient {
     // Audio goes through the chat endpoint rather than /audio/transcriptions:
     // it is the one shape all three cloud providers accept, and it lets us
     // pass a hint about what the audio is likely to contain.
+    /* The language is stated, not guessed.
+     *
+     * Left to work it out, the model hears Russian and sometimes writes
+     * Polish — same sound inventory, close enough vocabulary, and a short
+     * noisy clip gives it nothing to break the tie. What came back was
+     * "Ty powinien zmienić nazwę zametki": the user's own words, spelled in
+     * another language, so the assistant then answered the wrong question.
+     *
+     * Which language is a setting, defaulting to the one the interface is in.
+     * Someone who reads the plugin in Russian is overwhelmingly likely to
+     * speak to it in Russian. */
+    const spoken = this.s.speechLang || LANG;
+    const named = spoken === "ru" ? "Russian" : "English";
+    const script = spoken === "ru" ? " Write it in Cyrillic." : "";
     const res = await this.post("/v1/chat/completions", {
       model: p.id === "openai" ? "gpt-4o-mini-transcribe" : "google/gemini-2.5-flash",
       messages: [{
         role: "user",
         content: [
-          { type: "text", text: "Transcribe this audio exactly. It is a short spoken command to a note-taking assistant. Reply with the transcript only — no commentary, no quotes." },
+          {
+            type: "text",
+            text: `Transcribe this audio exactly. The speaker is speaking ${named}, so the transcript must be in ${named}.${script} `
+              + `Never translate it and never render it in a related language — if a word is unclear, write the ${named} word it most likely was. `
+              + "It is a short spoken command to a note-taking assistant. Reply with the transcript only — no commentary, no quotes.",
+          },
           { type: "input_audio", input_audio: { data: base64Audio, format } },
         ],
       }],

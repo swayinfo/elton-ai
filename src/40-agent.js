@@ -387,6 +387,9 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     // off by a character, the note left half-rearranged, and an apology.
     lines.push("• Restructuring a note — moving things between sections, reordering, folding things away — is one rewrite_note call, not a chain of small replacements. Read the note, work out how the whole file should read, send it back. Never leave a note half-rearranged.");
     lines.push("• You are never allowed to end a job by telling the user which steps to perform themselves. If a tool refused, say what it said. If you can do it, do it.");
+    // A link to a note that does not exist looks identical to a working one
+    // until someone clicks it, so it survives review and rots quietly.
+    lines.push("• A [[link]] must name a note that exists. Use the name a tool gave you back, not the title you asked for — Obsidian changes titles it cannot use as file names. If you link to something you have not created and have not seen in a search result, check it exists first.");
     // The convention lives in the neighbours and nowhere else, so a note made
     // without looking at them comes out orphaned — no link back to its MOC, no
     // tags, filed nowhere.
@@ -982,7 +985,15 @@ class Agent {
         const f = await V.createNote(args.title, args.content, args.folder);
         onEvent({ kind: "action", text: t("Created: {0}", f.basename) });
         await V.openNote(f);
-        return `Created "${f.basename}" at ${f.path} and opened it. ${V.folderConventions(f.parent && f.parent.path)}`.trim();
+        /* The exact name to link with, spelled out.
+           Obsidian may have changed the title on the way in — a colon or a
+           slash is not allowed in a file name — and a link written from the
+           title you asked for then points at nothing. Which is what happened:
+           a board created as "Изучение ESP32" was linked from the MOC as
+           "[[MOC - Изучение ESP32]]", and the card sat there grey. */
+        return `Created "${f.basename}" at ${f.path} and opened it. `
+          + `Link to it as [[${f.basename}]] — exactly that, it is the real file name. `
+          + V.folderConventions(f.parent && f.parent.path);
       }
 
       case "create_board": {
@@ -1011,7 +1022,9 @@ class Agent {
         // Opened AS a board, not as the markdown it is made of.
         await V.showAsBoard(f);
         const names = (args.columns || []).map((c) => c && c.name).filter(Boolean).join(", ");
-        return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. It is open and rendering as a board. ${V.folderConventions(f.parent && f.parent.path)}`.trim();
+        return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. It is open and rendering as a board. `
+          + `Link to it as [[${f.basename}]] — exactly that, it is the real file name. `
+          + V.folderConventions(f.parent && f.parent.path);
       }
 
       case "append_note": {

@@ -590,6 +590,10 @@ const RU = {
   "brief me on, catch me up on, what do I know about": "введи в курс дела, что я знаю про, напомни что у меня по теме",
   "I am about to name a subject. Gather everything I have written about it — search more than once, in different words, because I will not have used yours — and give it back to me as one connected briefing: what I already think, where I contradict myself, what I have decided and what is still open. End with the two or three questions my own notes do not answer. My material only; do not fill the gaps from your own knowledge, mark them as gaps.":
     "Сейчас назову тему. Собери всё, что я о ней писал — ищи несколько раз и разными словами, потому что моими словами это вряд ли названо, — и верни одним связным вводом: что я уже думаю, где противоречу сам себе, что решено, а что открыто. В конце — два-три вопроса, на которые мои заметки не отвечают. Только мой материал: дыры не заполняй своими знаниями, а помечай как дыры.",
+  "The language you speak": "Язык, на котором вы говорите",
+  "What your speech is transcribed as. Left on the interface language, which is right unless you read the plugin in one language and talk to it in another.":
+    "На каком языке расшифровывать вашу речь. По умолчанию — как язык интерфейса; менять стоит, только если читаете плагин на одном языке, а говорите на другом.",
+  "Same as the interface": "Как в интерфейсе",
   "Hold a key and talk": "Зажать клавишу и говорить",
   "Works anywhere in Obsidian, from any note. Hold the keys, say what you want, let go — the panel opens itself if it was closed. It is a combination the plugin watches directly, so it is set by pressing it rather than by typing it.":
     "Работает в любом месте Obsidian, из любой заметки. Зажали, сказали, отпустили — панель откроется сама, если была закрыта. Сочетание плагин слушает напрямую, поэтому его не вписывают, а нажимают.",
@@ -1000,6 +1004,11 @@ const DEFAULT_SETTINGS = {
   // and one dropped wherever the model last looked.
   vaultMap: true,
   vaultNotes: "",
+
+  // Which language you speak to it in. Empty follows the interface language,
+  // which is right for almost everyone; it exists for the person whose
+  // Obsidian is in English and who talks to it in Russian.
+  speechLang: "",
 
   voiceEnabled: true,
   ttsEngine: "cloud",
