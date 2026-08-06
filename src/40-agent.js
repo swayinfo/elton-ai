@@ -380,7 +380,17 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     } catch {}
   }
 
-  lines.push("", `Reply in the same language the user speaks to you in.`);
+  /* Language, said properly and said last.
+     One line in the middle of a long prompt lost to the notes themselves: a
+     conversation started in English drifted into Russian a few turns in,
+     because everything the assistant had read was Russian and that weighs
+     more than a passing instruction. The rule needs the distinction spelled
+     out — what you READ has nothing to do with what you WRITE — and it needs
+     to be near the end, where a model weighs it most. */
+  lines.push("",
+    "LANGUAGE. Answer in the language the user wrote or spoke to you in, and keep it for the whole conversation.",
+    "Their notes may be in a different language from the one they are talking to you in. That changes nothing: you read whatever language the notes are in, and you answer in theirs. Quoting a note does not switch you into its language — quote it as it is written and carry on in the language of the conversation.",
+    "If they switch languages, switch with them; until then, do not drift.");
   // Spelled out rather than mentioned in passing. One clause at the end of a
   // long prompt was not enough to stop "the last couple of days" being served
   // from February: the model had the date and no reason to connect it to the
@@ -496,8 +506,21 @@ class Agent {
     let opener = userText;
     if (active && s.canRead && V.inScope(active.path)) {
       try {
-        const body = (await V.read(active, 1500));
-        opener = `[The note currently open on the user's screen is "${active.basename}" (${active.path}). Its content:\n${body}\n]\n\nThe user says: ${userText}`;
+        /* How much of the open note comes along.
+           It was 1500 characters, which on a daily note is the frontmatter,
+           the button row and the habits — everything except what was written
+           that day. Asked about a 48 KB note, the assistant said there was no
+           material in it, and from where it sat that was true.
+           Now it gets a real read, and when even that is not the whole note
+           it is TOLD so — otherwise it treats the opening as the article and
+           answers confidently about a note it has only glanced at. */
+        const LIMIT = 6000;
+        const body = await V.read(active, LIMIT);
+        const clipped = body.endsWith("…");
+        const note = clipped
+          ? `\n[This is only the beginning of the note — it is longer than what you can see here. Read the whole thing with read_note("${active.path}") before answering anything about its contents.]`
+          : "";
+        opener = `[The note currently open on the user's screen is "${active.basename}" (${active.path}). Its content:\n${body}\n${note}]\n\nThe user says: ${userText}`;
       } catch {}
     }
     messages.push({ role: "user", content: opener });
