@@ -1129,7 +1129,9 @@ function eq(actual, expected, name) {
        check the scope; this one built a path and asked for it directly, so a
        private daily-notes folder was read anyway. */
     {
-      const files = [new H.TFile("Дневник/06-08-2026.md")];
+      // Today's date, not a date someone typed while writing the test — this
+      // failed the first time midnight passed during a session.
+      const files = [new H.TFile("Дневник/" + T.todayKey() + ".md")];
       const app = H.fakeApp({});
       app.vault.getMarkdownFiles = () => files;
       app.vault.getAbstractFileByPath = (p) => files.find((f) => f.path === p) || null;

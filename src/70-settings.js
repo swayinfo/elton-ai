@@ -1087,10 +1087,31 @@ class AssistantSettingTab extends PluginSettingTab {
       },
       "Templates");
 
+    /* Which template an ordinary note is built on.
+       Shown as a setting because the guess is good but not always right, and
+       because the consequence of a wrong guess — every new note in the wrong
+       shape — is worth being able to see and correct. */
+    let all = [];
+    try { all = this.plugin.vault.templates(); } catch { all = []; }
+    if (all.length) {
+      const found = this.plugin.vault.standardTemplate();
+      new Setting(c)
+        .setName(t("Template for ordinary notes"))
+        .setDesc(t("The assistant is shown this one with every request, so a note it writes comes out with your properties, headings and buttons rather than as bare text. A project or a book has its own template — it reads those itself."))
+        .addDropdown((d) => {
+          d.addOption("", t("Work it out ({0})", found ? found.basename : t("nothing suitable found")));
+          for (const f of all) d.addOption(f.path, f.basename);
+          d.addOption("-", t("Don't use one"));
+          d.setValue(s.standardTemplate || "").onChange(async (v) => {
+            s.standardTemplate = v; await this.plugin.saveSettings(); this.redrawGroup();
+          });
+        });
+    }
+
     // What it found in there, listed. A templates folder that turns out to be
     // empty is otherwise a silent failure.
     let names = [];
-    try { names = this.plugin.vault.templates().map((f) => f.basename); } catch { names = []; }
+    try { names = all.map((f) => f.basename); } catch { names = []; }
     if (names.length) {
       const box = c.createDiv({ cls: "oa-note" });
       box.createDiv({ cls: "oa-note-title", text: t("Templates it can build from: {0}", names.length) });

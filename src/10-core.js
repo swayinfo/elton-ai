@@ -504,6 +504,7 @@ const RU = {
   "You interrupted": "Вы перебили",
   "Set up the plugin first": "Сначала настройте плагин",
   "Searching: {0}": "Ищу: {0}",
+  "Looking at the folders": "Смотрю папки",
   "Looking in: {0}": "Смотрю в: {0}",
   "Read: {0}": "Читаю: {0}",
   "Opened: {0}": "Открыл: {0}",
@@ -552,6 +553,12 @@ const RU = {
   "Where notes the assistant creates end up when it has no better idea.":
     "Куда попадают созданные ассистентом заметки, если он не придумал места лучше.",
   "Templates folder": "Папка шаблонов",
+  "Template for ordinary notes": "Шаблон обычной заметки",
+  "The assistant is shown this one with every request, so a note it writes comes out with your properties, headings and buttons rather than as bare text. A project or a book has its own template — it reads those itself.":
+    "Его ассистент видит в каждом запросе — поэтому написанная им заметка выходит с вашими свойствами, заголовками и кнопками, а не голым текстом. У проекта или книги свой шаблон, их он читает сам.",
+  "Work it out ({0})": "Определить самому ({0})",
+  "nothing suitable found": "подходящего не нашлось",
+  "Don't use one": "Не использовать",
   "Found on its own: {0}": "Нашёл сам: {0}",
   "None found — point at it if you have one.": "Не нашёл — укажите, если она есть.",
   "The assistant reads a template before creating a note of that kind, so a project note comes out looking like your other project notes. Found on its own: {0}":
@@ -1050,6 +1057,9 @@ const DEFAULT_SETTINGS = {
   // Where this vault keeps its templates. Empty means: ask the Templates core
   // plugin, then Templater, then look for a folder called that.
   templateFolder: "",
+  // The template ordinary notes are built on, shown to the assistant in every
+  // request. Empty finds it by name; "-" switches the whole thing off.
+  standardTemplate: "",
 
   // The bot that puts the vault on a phone. Off, and with no token, until
   // someone deliberately connects one.

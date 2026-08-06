@@ -166,6 +166,14 @@ function buildTools(s, plugin) {
     fn("list_notes",
       "List notes in a folder. The folder can be named loosely — \"inbox\", \"входящие\" or \"5. Inbox\" all resolve to the same place, so pass what the user said.",
       { folder: { type: "string" } }, ["folder"]);
+    /* The folder list, on request.
+       The map in the prompt is a summary and says so, but a summary is
+       exactly what a model reaches for when asked "is there a folder called
+       X" — and then reports that a folder the user is looking at does not
+       exist. This is the answer to that question. */
+    fn("list_folders",
+      "Every folder in the vault. Call it before saying a folder does not exist, and before creating one that might already be there under a slightly different name.",
+      { under: { type: "string", description: "Optional: only folders inside this one." } }, []);
     fn("find_files",
       "Find notes by name or path pattern, when you know roughly what a file is called but not where it is. Use * for any part of a name.",
       { pattern: { type: "string", description: "e.g. \"*budget*\", \"Projects/**/*.md\", \"MOC*\"" } }, ["pattern"]);
@@ -346,6 +354,22 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     "• Act first, speak afterwards. Every tool call you are going to make comes BEFORE the sentence describing it, and that sentence is in the past tense: \"opened it\", \"created it\", not \"I'll open it\" or \"one moment\". You are never speaking to someone who will wait for a second message — this reply is the whole turn.",
   ];
 
+  /* How to work, as distinct from what to do.
+   *
+   * Written after watching a fortnight of real requests fail in the same four
+   * ways: guessing instead of looking, asking instead of starting, reporting
+   * success without checking, and handing the job back as advice. None of
+   * those are gaps in ability — every one of them had a tool available at the
+   * time. They are habits, so they are addressed as habits.
+   */
+  lines.push("",
+    "How to work — this matters as much as the answer:",
+    "• LOOK BEFORE YOU BUILD. Before creating or restructuring anything, spend a call finding out how this vault already does it: read a neighbouring note, read the template, list the folder. One look costs a second and is the difference between a note that belongs and a note that has to be redone by hand.",
+    "• CHECK WHAT YOU DID. After an edit, read the result back if there is any doubt it landed the way you meant. A tool that returned an error message is not a tool that worked, and \"done\" said over a failed call is the worst thing you can say.",
+    "• START, DON'T NEGOTIATE. If a request is big, do the first part now and report; if it is ambiguous but has an obvious reading, take it and say which reading you took. Ask a question only when you genuinely cannot proceed — and never as an opening move.",
+    "• FINISH THE JOB. If something refused, say exactly what refused and why, then do what you can around it. Never end by listing steps for the user to carry out: they asked you precisely so they would not have to.",
+    "• SAY WHAT IS TRUE. If you could not find something, say you could not find it — not that it does not exist. If you did half, say which half. Confidence about a vault you have not looked at is the fastest way to be useless.");
+
   if (channel === "telegram") {
     /* Telegram renders proper markdown now — headings, lists, tables and all.
        Worth saying outright: told only "write markdown", a model aims at the
@@ -389,6 +413,15 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     lines.push("• You are never allowed to end a job by telling the user which steps to perform themselves. If a tool refused, say what it said. If you can do it, do it.");
     // A link to a note that does not exist looks identical to a working one
     // until someone clicks it, so it survives review and rots quietly.
+    /* Two ways to be confidently wrong about the vault, both seen. */
+    lines.push("• The layout above is a summary, not the whole vault. Never tell the user something does not exist because it is not in it — call list_folders, find_files or grep first. They are looking at their own sidebar while you say it.");
+    // 215 notes in one turn is not a thing; pretending otherwise ends in a
+    // turn that stops halfway with no explanation.
+    /* The failure this replaces: asked for 215 notes, the assistant explained
+       that 215 was too many, proposed three ways to organise the work, asked
+       which the user preferred — and created nothing. A batch delivered beats
+       a plan discussed. */
+    lines.push("• Asked for far more notes than fit in one turn, START ANYWAY. Write the first batch — around eight, the most useful ones first — and only then say how many were made, how many remain, and that saying \"continue\" gets the next batch. Do not open with the limitation, do not propose three approaches, and never ask which one they want before you have written anything. The answer to \"can you do 215\" is eight notes and a sentence, not a question.");
     lines.push("• A [[link]] must name a note that exists. Use the name a tool gave you back, not the title you asked for — Obsidian changes titles it cannot use as file names. If you link to something you have not created and have not seen in a search result, check it exists first.");
     // The convention lives in the neighbours and nowhere else, so a note made
     // without looking at them comes out orphaned — no link back to its MOC, no
@@ -404,6 +437,27 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
   }
   if (s.canDelete) {
     lines.push("• Deletion always stops for the user's confirmation. Never claim something is deleted before they confirm it.");
+  }
+
+  /* The house style for a note, in the prompt rather than behind a tool.
+     This is what a careful person does first and a model does last: look at
+     how notes are made here before making one. Reading it costs a couple of
+     hundred tokens once per turn and saves every note from coming out as a
+     stranger in its own folder. */
+  if (s.canCreate) {
+    try {
+      const tpl = plugin.vault.standardTemplate();
+      if (tpl) {
+        const raw = (await plugin.app.vault.cachedRead(tpl)).slice(0, 1500);
+        lines.push("",
+          `How a note is built in this vault — the template "${tpl.basename}":`,
+          "```", raw, "```",
+          "Every note you create follows this: the same properties in the same order, the same headings, the same links and buttons. "
+          + "Fill the properties in rather than leaving them blank — the parent MOC, the date, the tags that fit. "
+          + "Template placeholders are yours to resolve: `<% tp.date.now(\"YYYY-MM-DD\") %>` becomes today's date, `<% tp.file.title %>` becomes the note's title, `<% tp.file.cursor() %>` is simply removed. Nothing processes them after you. "
+          + "A different kind of note — a project, a book, a board — has its own template; read that one with read_template instead.");
+      }
+    } catch { /* a template that cannot be read is not worth failing a turn over */ }
   }
 
   // The map of the vault. Cached for the session — it reads metadata only, but
@@ -812,6 +866,16 @@ class Agent {
         onEvent({ kind: "action", text: t("Looking in: {0}", dir || "/") });
         if (!list.length) return `"${dir}" has no notes in it.`;
         return `"${dir}" contains:\n` + list.map((f) => `— ${f.basename} (${f.path})`).join("\n");
+      }
+
+      case "list_folders": {
+        const under = String(args.under || "").trim();
+        const root = under ? (V.folder(under) || under) : "";
+        let all = allFolders(plugin.app).filter((p) => p && V.inScope(p));
+        if (root) all = all.filter((p) => p === root || p.startsWith(root + "/"));
+        onEvent({ kind: "action", text: t("Looking at the folders") });
+        if (!all.length) return under ? `Nothing inside "${under}".` : "This vault has no folders.";
+        return `Folders${root ? ` inside "${root}"` : ""} (${all.length}):\n` + all.join("\n");
       }
 
       case "find_files": {

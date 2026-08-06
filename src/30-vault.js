@@ -562,6 +562,27 @@ class VaultBridge {
     return resolveFolder(this.app, "templates", (p) => this.inScope(p));
   }
 
+  /**
+   * The template an ordinary note should be built on.
+   *
+   * Chosen the way a person would: the one whose name says it is the standard
+   * one, or the only one there is. Handed to the model in the prompt rather
+   * than left for it to go and find — a rule saying "read the template first"
+   * is obeyed when the model thinks the note is special enough, and a note
+   * about traffic signs never feels special enough. So sixteen notes about
+   * traffic signs came out with no properties, no link to their MOC and no
+   * buttons, in a vault where every other note has all three.
+   */
+  standardTemplate() {
+    const set = this.s.standardTemplate;
+    if (set === "-") return null;                 // deliberately switched off
+    const list = this.templates();
+    if (!list.length) return null;
+    if (set) return list.find((f) => f.path === set || f.basename === set) || null;
+    const named = list.find((f) => /стандарт|standard|default|обычн|базов|basic/i.test(f.basename));
+    return named || (list.length === 1 ? list[0] : null);
+  }
+
   /** The templates themselves, newest first. */
   templates(limit = 40) {
     const dir = this.templateFolder();
@@ -584,7 +605,13 @@ class VaultBridge {
    */
   describeVault() {
     const files = this.files();
+    // Obsidian's own folder list, which includes the empty ones.
+    const dirs = allFolders(this.app).filter((p) => p && this.inScope(p));
     const byTop = new Map();
+    for (const p of dirs) {
+      if (p.includes("/")) continue;
+      byTop.set(p, 0);
+    }
     for (const f of files) {
       const top = f.path.includes("/") ? f.path.slice(0, f.path.indexOf("/")) : "/";
       byTop.set(top, (byTop.get(top) || 0) + 1);
@@ -595,13 +622,27 @@ class VaultBridge {
       // The second level is where the actual filing happens in a PARA-style
       // vault — "2. Areas" alone tells the model nothing about where a project
       // note belongs.
+      /* From the folder list, not from the notes' paths.
+         Derived from paths, a folder with nothing in it does not exist — and
+         the empty folder is precisely the one the user is about to ask you to
+         fill. "Create the notes in Автошкола" was answered with "there is no
+         such folder" while it sat in the sidebar, empty, waiting. */
       const subs = new Set();
-      for (const f of files) {
-        if (!f.path.startsWith(name + "/")) continue;
-        const rest = f.path.slice(name.length + 1);
-        if (rest.includes("/")) subs.add(rest.slice(0, rest.indexOf("/")));
+      for (const p of dirs) {
+        if (!p.startsWith(name + "/")) continue;
+        const rest = p.slice(name.length + 1);
+        subs.add(rest.includes("/") ? rest.slice(0, rest.indexOf("/")) : rest);
       }
-      const tail = subs.size ? ` — inside: ${[...subs].slice(0, 8).join(", ")}` : "";
+      /* All of them, in order, not the first eight in whatever order the file
+         list happened to be in. Eight was enough to describe the shape of a
+         vault and not enough to answer "is there a folder called X" — and the
+         assistant answered that question anyway, telling the user a folder he
+         was looking at in the sidebar did not exist. */
+      const list = [...subs].sort((a, b) => a.localeCompare(b));
+      const shown = list.slice(0, 25);
+      const tail = list.length
+        ? ` — inside: ${shown.join(", ")}${list.length > shown.length ? ` and ${list.length - shown.length} more` : ""}`
+        : "";
       lines.push(`• ${name} (${n})${tail}`);
     }
 
