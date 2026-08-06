@@ -703,6 +703,14 @@ const RU = {
     "Язык переключён. То, что уже открыто, останется на прежнем языке до перезапуска Obsidian.",
   "The interface switches immediately. Restart Obsidian afterwards so anything already open picks it up too. What the assistant answers in does not depend on this — it replies in the language you write or speak to it.":
     "Интерфейс переключается сразу. После этого перезапустите Obsidian, чтобы язык подхватило и то, что уже открыто. На язык ответов это не влияет: ассистент отвечает на том языке, на котором вы к нему обратились.",
+  // The folder the plugin creates for saved conversations when none is set.
+  "Assistant conversations": "Разговоры с ассистентом",
+  "Rewrite this note?": "Переписать заметку целиком?",
+  "It would go from {0} to {1} characters.": "Было бы {0} символов, станет {1}.",
+  "Undo puts it back exactly as it was.": "«Отмени» вернёт её ровно в прежний вид.",
+  "Rewrote: {0}": "Переписал: {0}",
+  "One note per conversation, named after the assistant and the time. Empty means a folder called «{0}», created the first time something is saved.":
+    "По заметке на разговор, в названии — имя ассистента и время. Пусто — папка «{0}», она создастся при первом сохранении.",
   "Made by Elton": "Сделал Элтон",
   "Who made this": "Кто это сделал",
   "Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ":
@@ -1076,7 +1084,13 @@ const DEFAULT_SETTINGS = {
   // end up reading the answer and then listening to it a second time.
   showReplyText: false,
   showActions: true,
-  saveConversations: false,
+  // On. A conversation you cannot find afterwards may as well not have
+  // happened — and the thing people ask their vault about is usually the
+  // thing they will want again next week.
+  saveConversations: true,
+  // Empty no longer means the vault root. It means the folder below, created
+  // on the first save: dropping loose conversation notes into the root is how
+  // you end up deleting the feature rather than tidying it.
   conversationFolder: "",
 };
 

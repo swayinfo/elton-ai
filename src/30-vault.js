@@ -423,10 +423,24 @@ class VaultBridge {
   }
 
   /* ── reads ──────────────────────────────────────────────── */
+  /**
+   * A note, exactly as it is written.
+   *
+   * This used to run the text through `stripMarkdown` first, and that one line
+   * made the assistant unable to edit anything. Editing works by quoting a
+   * piece of the note back and asking for it to be replaced — but what it had
+   * been shown was the note with the links, the bold, the headings and the
+   * properties taken out. The quote never matched the file, every edit was
+   * refused, and the assistant fell back to explaining to the user what they
+   * should do by hand. Which is exactly what it looked like from outside:
+   * "it copied the tasks but did not delete them, and gave me advice".
+   *
+   * Stripping still belongs in search snippets and in the embedding index,
+   * where nobody has to match the text again afterwards. Not here.
+   */
   async read(file, maxChars = 6000) {
     const raw = await this.app.vault.cachedRead(file);
-    const body = stripMarkdown(raw);
-    return body.length > maxChars ? body.slice(0, maxChars) + "\n…" : body;
+    return raw.length > maxChars ? raw.slice(0, maxChars) + "\n…" : raw;
   }
 
   async snippet(file, query, len = 400) {
@@ -740,6 +754,12 @@ class VaultBridge {
     while (end > at + 1 && !lines[end - 1].trim()) end--;
     lines.splice(end, 0, add);
     await this.app.vault.modify(file, lines.join("\n"));
+  }
+
+  /** The whole file at once. Snapshotted first, like every other write. */
+  async rewriteNote(file, content) {
+    await this.remember(file);
+    await this.app.vault.modify(file, String(content));
   }
 
   async replaceInNote(file, find, replace) {

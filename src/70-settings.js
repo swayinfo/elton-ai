@@ -1727,7 +1727,7 @@ class AssistantSettingTab extends PluginSettingTab {
     if (s.saveConversations) {
       this.folderField(
         new Setting(c).setName(t("Conversations folder"))
-          .setDesc(t("One note per conversation, named after the assistant and the time. Empty means the root of your vault.")),
+          .setDesc(t("One note per conversation, named after the assistant and the time. Empty means a folder called «{0}», created the first time something is saved.", t("Assistant conversations"))),
         () => s.conversationFolder,
         async (v) => { s.conversationFolder = v.trim().replace(/^\/+|\/+$/g, ""); await this.plugin.saveSettings(); },
         "Conversations");

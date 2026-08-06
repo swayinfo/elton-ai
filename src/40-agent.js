@@ -102,7 +102,7 @@ const PROMISE_RE = new RegExp(
 
 /** Tools that change something or put something on screen. */
 const ACTION_TOOLS = new Set([
-  "create_note", "create_board", "append_note", "replace_in_note", "delete_note",
+  "create_note", "create_board", "append_note", "replace_in_note", "rewrite_note", "delete_note",
   "open_note", "open_beside", "open_url", "close_tab", "undo_last",
 ]);
 
@@ -158,7 +158,7 @@ function buildTools(s, plugin) {
       "Search the user's notes by meaning and by words. Call it more than once with different wording if the first attempt finds nothing useful — the user's phrasing often differs from what they wrote.",
       { query: { type: "string", description: "What to look for, in your own words." } }, ["query"]);
     fn("read_note",
-      "Read a whole note. Use it when the search snippet is not enough to answer accurately.",
+      "Read a whole note, exactly as it is written — the raw markdown, with its properties, links and formatting intact. Use it when the search snippet is not enough, and ALWAYS before editing: the text you get here is the text replace_in_note has to match, character for character.",
       { path: { type: "string", description: "Path or title of the note" } }, ["path"]);
     fn("open_note",
       "Show a note on screen. Only when the user actually asks to open, show or go to it — not to answer a question about it.",
@@ -267,6 +267,20 @@ function buildTools(s, plugin) {
       "Replace exact text inside a note. Use for corrections and rewording. The find text must match the note exactly.",
       { path: { type: "string" }, find: { type: "string" }, replace: { type: "string" } },
       ["path", "find", "replace"]);
+    /* Rewriting a whole note in one call.
+       "Move the finished tasks into a collapsed callout" is one edit to a
+       person and a dozen replace_in_note calls to a model — each one a
+       separate round trip, each one able to fail on a stray character, and
+       the note left half-done when one of them does. Given the file and
+       asked for the file back, it is a single call that either lands or does
+       not. Watched live: the same job went from eleven calls to one. */
+    fn("rewrite_note",
+      "Replace the ENTIRE contents of a note. Use this for any change touching more than a line or two — reordering, moving things between sections, restructuring — instead of a chain of replace_in_note calls. Read the note first, then send back the whole file as it should now read. Everything you leave out is deleted, so include all the parts you are keeping, unchanged.",
+      {
+        path: { type: "string" },
+        content: { type: "string", description: "The complete new contents of the note, including the frontmatter and every section you are keeping." },
+      },
+      ["path", "content"]);
     fn("undo_last", "Undo the last change you made to a note. For \"undo that\" or \"put it back\".", {}, []);
   }
   if (s.canDelete) {
@@ -340,6 +354,10 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     // promise is not an action, and there is no later in which to keep it.
     lines.push("• NEVER announce work instead of doing it. \"I'll create it\", \"let me write that\", \"I'm making the note\" are forbidden unless the tool call is already in this same turn. Call the tool first, then say what you did, in the past tense. If you cannot, say why — do not promise.");
     lines.push("• Asked for several notes, create all of them, one create_note call each. Do not stop after the first and do not offer to continue.");
+    // The failure this replaces: a dozen replace_in_note calls, one of them
+    // off by a character, the note left half-rearranged, and an apology.
+    lines.push("• Restructuring a note — moving things between sections, reordering, folding things away — is one rewrite_note call, not a chain of small replacements. Read the note, work out how the whole file should read, send it back. Never leave a note half-rearranged.");
+    lines.push("• You are never allowed to end a job by telling the user which steps to perform themselves. If a tool refused, say what it said. If you can do it, do it.");
     // The convention lives in the neighbours and nowhere else, so a note made
     // without looking at them comes out orphaned — no link back to its MOC, no
     // tags, filed nowhere.
@@ -701,7 +719,19 @@ class Agent {
         if (!f) return `No note called "${args.path}".`;
         this.noteSource(f);
         onEvent({ kind: "action", text: t("Read: {0}", f.basename) });
-        return `"${f.basename}" (${f.path}):\n\n${await V.read(f)}`;
+        /* Long enough to hold a real note.
+           At 6000 characters a working daily note arrives as a third of
+           itself, and nothing said so — so a rewrite built on it would have
+           replaced the file with its own opening. Raised, and when a note is
+           still longer than this the model is told which tool it may no
+           longer use. */
+        const READ_LIMIT = 20000;
+        const body = await V.read(f, READ_LIMIT);
+        const clipped = body.endsWith("…");
+        const warn = clipped
+          ? `\n\n[This note is longer than what you can see here — the text above stops partway through. Do NOT call rewrite_note on it: you would replace the whole note with this fragment. Use replace_in_note for the parts you can see, or grep to find the rest.]`
+          : "";
+        return `"${f.basename}" (${f.path}):\n\n${body}${warn}`;
       }
 
       case "search_web": {
@@ -941,9 +971,46 @@ class Agent {
           if (!ok) return "The user declined. Do not retry.";
         }
         try { await V.replaceInNote(f, args.find, args.replace); }
-        catch { return `That exact text is not in "${f.basename}". Read the note and use text that matches it.`; }
+        catch {
+          return `That exact text is not in "${f.basename}". Call read_note("${f.path}") and copy the lines you want to change out of what it returns — that is the file itself, with the links and formatting in it. Do not retype them from memory or from a search snippet.`;
+        }
         onEvent({ kind: "action", text: t("Edited: {0}", f.basename) });
         return `Changed it in "${f.basename}".`;
+      }
+
+      case "rewrite_note": {
+        if (!s.canEdit) return "Editing notes is switched off in settings.";
+        const f = V.resolve(args.path);
+        if (!f) return `No note called "${args.path}".`;
+        const body = String(args.content || "");
+        // A rewrite that arrives empty is a truncated call, not a request to
+        // empty the note — and the difference matters, because this one
+        // replaces everything.
+        if (!body.trim()) {
+          return "The new contents came through empty, so nothing was changed. Send the whole note back, or use replace_in_note if you only meant to change part of it.";
+        }
+        const before = await plugin.app.vault.read(f);
+        // Losing most of a note to a call that stopped early is the one
+        // failure here worth guarding against; the user is asked first.
+        if (before.length > 400 && body.length < before.length * 0.4) {
+          const ok = await confirm({
+            title: t("Rewrite this note?"),
+            body: `${f.basename}\n\n${t("It would go from {0} to {1} characters.", before.length, body.length)}`,
+            note: t("Undo puts it back exactly as it was."),
+            danger: true,
+          });
+          if (!ok) {
+            return "The rewrite was refused because it would have cut the note down to a fraction of its size — "
+              + "which usually means you were working from a partial read rather than the whole file. "
+              + "Nothing was changed. Use replace_in_note on the specific parts instead.";
+          }
+        } else if (s.confirmEveryEdit) {
+          const ok = await confirm({ title: t("Confirm change"), body: f.basename, danger: false });
+          if (!ok) return "The user declined. Do not retry.";
+        }
+        await V.rewriteNote(f, body);
+        onEvent({ kind: "action", text: t("Rewrote: {0}", f.basename) });
+        return `Rewrote "${f.basename}". The old version is one "undo that" away.`;
       }
 
       case "delete_note": {

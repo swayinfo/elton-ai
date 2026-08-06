@@ -282,16 +282,19 @@ class EltonAI extends ObsidianPlugin {
   async saveConversation(messages) {
     if (!messages.length) return;
     try {
-      const folder = this.settings.conversationFolder || "";
-      if (folder) await this.vault.ensureFolder(folder);
+      // A folder of its own rather than the vault root, and made if it is not
+      // there. The name is translated, because it is a folder the plugin
+      // creates in someone else's vault and they have to recognise it.
+      const folder = this.settings.conversationFolder || t("Assistant conversations");
+      await this.vault.ensureFolder(folder);
       let announce = false;
       if (!this._convPath) {
         const stamp = new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "-");
-        this._convPath = normalizePath((folder ? folder + "/" : "") + `${this.settings.assistantName} ${stamp}.md`);
-        // Once, when the file for this conversation is decided. Saving that
-        // nobody can find is the same as not saving: the setting is off by
-        // default, the folder is usually blank, and the note then lands in the
-        // vault root under a name nobody went looking for.
+        this._convPath = normalizePath(folder + "/" + `${this.settings.assistantName} ${stamp}.md`);
+        // Said once, when the file for this conversation is decided. Saving
+        // that nobody can find is the same as not saving — and now that this
+        // is on by default, the first note appears in a folder the user never
+        // asked for. Better to be told where than to find it later.
         announce = true;
       }
       const body = messages.map((m) =>

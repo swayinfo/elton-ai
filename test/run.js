@@ -1016,6 +1016,41 @@ function eq(actual, expected, name) {
     ok(!A.brokenPromise("Сейчас создам заметку."), "если действие было — неловкая формулировка не считается обманом");
   }
 
+  /* ── Saved conversations land somewhere findable ───────── */
+  describe("Разговоры сохраняются, и в папку, а не в корень");
+  {
+    eq(T.DEFAULT_SETTINGS.saveConversations, true, "сохранение включено по умолчанию");
+
+    const made = [];
+    const folders = [];
+    const app = H.fakeApp({});
+    app.vault.getAbstractFileByPath = () => null;
+    app.vault.getMarkdownFiles = () => [];
+    app.vault.create = async (p, body) => { made.push(p); return new H.TFile(p); };
+    app.vault.createFolder = async (p) => { folders.push(p); };
+
+    const run = async (settings) => {
+      made.length = 0; folders.length = 0;
+      const plugin = H.fakePlugin(app, settings);
+      plugin.saveConversation = T.EltonAI.prototype.saveConversation.bind(plugin);
+      await plugin.saveConversation([{ role: "user", content: "привет" }]);
+      return { made, folders };
+    };
+
+    T.setLang("ru");
+    const auto = await run({ assistantName: "Джарвис", conversationFolder: "" });
+    ok(auto.made[0] && auto.made[0].startsWith("Разговоры с ассистентом/"),
+      "без указанной папки заметка ложится в свою папку, а не в корень: " + auto.made[0]);
+    ok(auto.folders.includes("Разговоры с ассистентом"), "и папка создаётся");
+
+    const chosen = await run({ assistantName: "Джарвис", conversationFolder: "2. Areas/Общение с ИИ" });
+    ok(chosen.made[0].startsWith("2. Areas/Общение с ИИ/"), "указанная папка используется как есть");
+
+    T.setLang("en");
+    const eng = await run({ assistantName: "Jarvis", conversationFolder: "" });
+    ok(eng.made[0].startsWith("Assistant conversations/"), "по-английски папка называется по-английски");
+  }
+
   /* ── The daily note is made by Obsidian, not by us ─────── */
   describe("Ежедневная заметка создаётся через плагин Obsidian");
   {
