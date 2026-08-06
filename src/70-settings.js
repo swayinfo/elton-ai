@@ -1695,7 +1695,9 @@ class AssistantSettingTab extends PluginSettingTab {
         d.setValue(s.lang).onChange(async (v) => {
           s.lang = v; setLang(v === "auto" ? null : v);
           await this.plugin.saveSettings();
-          this.plugin.refreshViews();
+          // Everything at once, including the palette entries and the ribbon
+          // tooltip — no restart, which is what a language switch should be.
+          this.plugin.applyLanguage();
           this.display();
         });
       });

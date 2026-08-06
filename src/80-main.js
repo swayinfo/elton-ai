@@ -26,40 +26,8 @@ class EltonAI extends ObsidianPlugin {
 
     this.registerView(VIEW_TYPE, (leaf) => new AssistantView(leaf, this));
 
-    this.addRibbonIcon("bot", "💡 " + t("Elton AI"), () => this.activateView());
-
-    // Not named after the plugin: the palette already prefixes every entry
-    // with it, and "Elton AI: Elton AI" tells you nothing.
-    this.addCommand({ id: "open", name: t("Open the panel"), callback: () => this.activateView() });
-    this.addCommand({
-      id: "talk",
-      name: t("Start talking"),
-      callback: async () => { const v = await this.activateView(); if (v) v.toggleTalk(); },
-    });
-    this.addCommand({
-      id: "onboarding",
-      name: t("Open the setup guide"),
-      callback: () => new OnboardingModal(this.app, this).open(),
-    });
-    this.addCommand({
-      id: "scenario",
-      name: t("Run a scenario"),
-      callback: () => new ScenarioPickerModal(this.app, this).open(),
-    });
-
-    // Highlight a paragraph and ask about it. Every assistant plugin worth
-    // using has this and it is how most people first reach for one: the
-    // question starts from something already in front of them, not from a
-    // blank panel they have to describe their way back to.
-    this.addCommand({
-      id: "ask-selection",
-      name: t("Ask about the selected text"),
-      editorCheckCallback: (checking, editor) => {
-        const has = !!(editor && editor.getSelection && editor.getSelection().trim());
-        if (!checking && has) this.askAboutSelection(editor.getSelection());
-        return has;
-      },
-    });
+    this.ribbon = this.addRibbonIcon("bot", "💡 " + t("Elton AI"), () => this.activateView());
+    this.registerCommands();
 
     this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor) => {
       const sel = editor && editor.getSelection ? editor.getSelection().trim() : "";
@@ -111,6 +79,61 @@ class EltonAI extends ObsidianPlugin {
     for (const ev of ["create", "delete", "rename", "modify"]) {
       this.registerEvent(this.app.vault.on(ev, stale));
     }
+  }
+
+  /**
+   * The palette entries.
+   *
+   * Their own method because they carry translated names, and those are fixed
+   * at the moment they are registered — which is load time. Changing the
+   * language then left five commands and a ribbon tooltip speaking the old
+   * one until Obsidian was restarted, and "restart for the rest of it" is a
+   * poor answer to a setting that otherwise takes effect instantly. Calling
+   * this again re-registers them under the same ids, which replaces them.
+   */
+  registerCommands() {
+    // Not named after the plugin: the palette already prefixes every entry
+    // with it, and "Elton AI: Elton AI" tells you nothing.
+    this.addCommand({ id: "open", name: t("Open the panel"), callback: () => this.activateView() });
+    this.addCommand({
+      id: "talk",
+      name: t("Start talking"),
+      callback: async () => { const v = await this.activateView(); if (v) v.toggleTalk(); },
+    });
+    this.addCommand({
+      id: "onboarding",
+      name: t("Open the setup guide"),
+      callback: () => new OnboardingModal(this.app, this).open(),
+    });
+    this.addCommand({
+      id: "scenario",
+      name: t("Run a scenario"),
+      callback: () => new ScenarioPickerModal(this.app, this).open(),
+    });
+
+    // Highlight a paragraph and ask about it. Every assistant plugin worth
+    // using has this and it is how most people first reach for one: the
+    // question starts from something already in front of them, not from a
+    // blank panel they have to describe their way back to.
+    this.addCommand({
+      id: "ask-selection",
+      name: t("Ask about the selected text"),
+      editorCheckCallback: (checking, editor) => {
+        const has = !!(editor && editor.getSelection && editor.getSelection().trim());
+        if (!checking && has) this.askAboutSelection(editor.getSelection());
+        return has;
+      },
+    });
+  }
+
+  /** Everything that has to be redrawn or re-registered when the language changes. */
+  applyLanguage() {
+    this.registerCommands();
+    if (this.ribbon) this.ribbon.setAttr("aria-label", "💡 " + t("Elton AI"));
+    this.refreshViews();
+    // The bot's menu is built from scenario names, which are the user's own
+    // words — but /help around them is not.
+    if (this.telegram) this.telegram.syncCommands();
   }
 
   /**

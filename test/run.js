@@ -1426,6 +1426,29 @@ function eq(actual, expected, name) {
     }
     eq(onScreen.slice(0, 5), [], "всё, что показывается на экране, идёт через перевод");
 
+    /* Changing the language must not need a restart.
+       Command names and the ribbon tooltip are translated once, at load, so
+       they used to keep the old language until Obsidian was restarted —
+       a poor answer for a setting that otherwise applies instantly. */
+    {
+      const names = {};
+      const plugin = Object.create(T.EltonAI.prototype);
+      plugin.addCommand = (c) => { names[c.id] = c.name; };
+      plugin.refreshViews = () => {};
+      plugin.telegram = null;
+      let tooltip = "";
+      plugin.ribbon = { setAttr: (k, v) => { tooltip = v; } };
+
+      T.setLang("ru");
+      plugin.registerCommands();
+      const before = names.open;
+      T.setLang("en");
+      plugin.applyLanguage();
+      ok(before !== names.open, "названия команд меняются вместе с языком, без перезапуска");
+      eq(names.open, "Open the panel", "и это именно английское название");
+      ok(tooltip.includes("Elton AI"), "подсказка иконки на ленте тоже обновляется");
+    }
+
     // And the switch itself works in both directions.
     T.setLang("en");
     eq(T.t("Voice replies"), "Voice replies", "по-английски строка остаётся исходной");
