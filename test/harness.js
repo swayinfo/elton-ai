@@ -57,7 +57,13 @@ const OBSIDIAN_STUB = {
   TFile, TFolder,
   // Remembers what it was told, so a test can assert that a failure actually
   // reached the screen rather than only the console.
-  Notice: class { constructor(msg) { this.message = msg; (OBSIDIAN_STUB.Notice.seen ||= []).push(String(msg)); } },
+  // `setMessage` and `hide` are what a long-running notice uses to follow
+  // along and then get out of the way.
+  Notice: class {
+    constructor(msg) { this.message = msg; (OBSIDIAN_STUB.Notice.seen ||= []).push(String(msg)); }
+    setMessage(msg) { this.message = msg; (OBSIDIAN_STUB.Notice.seen ||= []).push(String(msg)); }
+    hide() { this.hidden = true; }
+  },
   normalizePath: (p) => String(p).replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
   requestUrl: async () => { throw new Error("network is not available in tests"); },
   setIcon: () => {},

@@ -343,6 +343,23 @@
   border-color: var(--text-normal);
   color: var(--background-primary);
 }
+/* Push-to-talk: the button is something you hold, not something you have
+   pressed. An outline that pulses says "waiting for you" where the filled
+   circle said "already running". */
+.oa-mic.is-hold {
+  background: var(--background-primary);
+  border-color: var(--interactive-accent);
+  color: var(--text-accent);
+  animation: oaHold 1.6s var(--oa-ease) infinite;
+}
+.oa-mic.is-hold:active { transform: scale(0.96); animation: none; }
+@keyframes oaHold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--color-accent-rgb), 0.30); }
+  60% { box-shadow: 0 0 0 9px rgba(var(--color-accent-rgb), 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oa-mic.is-hold { animation: none; }
+}
 
 /* Hidden until a delete is waiting for a yes: the row is the confirmation,
    so it must not take up space in the controls the rest of the time. */

@@ -299,6 +299,20 @@ class AssistantView extends ItemView {
     setIcon(this.voiceBtn, this.plugin.settings.voiceEnabled ? "volume-2" : "volume-x");
   }
 
+  /**
+   * "Hold to talk" — hold WHAT?
+   *
+   * The old line said neither what to hold nor that a key would do, on a
+   * screen whose only visible control is a round button that looks like stop.
+   * So it names the button, and names the key combination too when one is set,
+   * because that is the thing you actually want to be using.
+   */
+  holdHint() {
+    const hk = this.plugin.settings.holdKey;
+    return hk ? t("Hold the button below, or {0}", hotkeyLabel(hk))
+      : t("Hold the button below to speak");
+  }
+
   syncMicModeBtn() {
     if (!this.micModeBtn) return;
     const push = this.plugin.settings.micMode === "push";
@@ -524,10 +538,17 @@ class AssistantView extends ItemView {
     if (this.statusEl) this.statusEl.setText(label != null ? label : (DEFAULT[phase] || ""));
 
     const live = this.mode === "conversation";
+    // In push-to-talk the button is the thing you hold, so it stays a
+    // microphone: a stop square on a button whose whole job is "hold me" is
+    // the reason nobody could tell what to hold.
+    const push = this.plugin.settings.micMode === "push";
     if (this.micBtn) {
-      setIcon(this.micBtn, live ? "square" : "mic");
+      setIcon(this.micBtn, live && !push ? "square" : "mic");
       this.micBtn.classList.toggle("is-live", live);
-      this.micBtn.setAttr("aria-label", live ? t("Stop talking") : t("Start talking"));
+      this.micBtn.classList.toggle("is-hold", live && push);
+      this.micBtn.setAttr("aria-label", live
+        ? (push ? t("Hold to speak") : t("Stop talking"))
+        : t("Start talking"));
     }
     const confirming = phase === "confirm";
     if (this.confirmRow) this.confirmRow.toggleClass("is-open", !!confirming);
@@ -940,7 +961,7 @@ class AssistantView extends ItemView {
     const push = this.plugin.settings.micMode === "push";
     while (this.talking) {
       try {
-        this.setPhase("listening", push ? t("Hold to talk") : null);
+        this.setPhase("listening", push ? this.holdHint() : null);
         const { blob, format, hadSpeech } = await this.plugin.recorder.record({
           maxMs: push ? 60000 : 20000,
           getStop: () => !this.talking,

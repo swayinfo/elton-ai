@@ -890,6 +890,52 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── The daily note is made by Obsidian, not by us ─────── */
+  describe("Ежедневная заметка создаётся через плагин Obsidian");
+  {
+    // Writing the file ourselves produced an empty one: no template, no
+    // Templater, none of the properties the user's own daily notes carry.
+    // The core command knows the format, the folder and the template, and it
+    // is what lets Templater see a new file at all.
+    const made = [];
+    const ran = [];
+    const app = H.fakeApp({});
+    app.vault.getMarkdownFiles = () => made;
+    app.vault.getAbstractFileByPath = (p) => made.find((f) => f.path === p) || null;
+    app.vault.create = async (p) => { const f = new H.TFile(p); made.push(f); return f; };
+    app.commands = {
+      executeCommandById: (id) => {
+        ran.push(id);
+        // What the real command does: creates today's note from the template.
+        if (id === "daily-notes") made.push(new H.TFile("Дневник/" + T.todayKey() + ".md"));
+        return true;
+      },
+    };
+    const V = H.fakePlugin(app, { dailyFolder: "Дневник" }).vault;
+
+    const f = await V.ensureDailyNote("today");
+    eq(ran, ["daily-notes"], "зовётся команда ядра, а не создаётся пустой файл");
+    ok(f && f.path.startsWith("Дневник/"), "и заметка после неё находится");
+
+    // Second time it already exists, so the command must not run again.
+    ran.length = 0;
+    const again = await V.ensureDailyNote("today");
+    eq(ran, [], "существующую заметку заново не создаём");
+    eq(again.path, f.path, "и возвращаем ту же самую");
+
+    // Obsidian has no command for yesterday, so that falls back honestly.
+    const app2 = H.fakeApp({});
+    const made2 = [];
+    app2.vault.getMarkdownFiles = () => made2;
+    app2.vault.getAbstractFileByPath = (p) => made2.find((x) => x.path === p) || null;
+    app2.vault.create = async (p) => { const x = new H.TFile(p); made2.push(x); return x; };
+    const ran2 = [];
+    app2.commands = { executeCommandById: (id) => { ran2.push(id); return true; } };
+    const V2 = H.fakePlugin(app2, { dailyFolder: "Дневник" }).vault;
+    await V2.ensureDailyNote("вчера");
+    eq(ran2, [], "для вчера команды нет — она не зовётся");
+  }
+
   /* ── Privacy: what must never leave the machine ────────── */
   describe("Приватность: личные папки не уходят наружу");
   {
@@ -948,6 +994,33 @@ function eq(actual, expected, name) {
     ok(parts.every((p) => p.length <= 4096), "ни один кусок не превышает лимит Telegram");
     ok(parts.every((p) => p.trim().length), "пустых сообщений не появляется");
     eq(parts.join(" ").replace(/\s+/g, " "), long.replace(/\s+/g, " "), "текст не теряется при нарезке");
+
+    /* A message that never left must not report success.
+       Every attempt used to end in `.catch(console.warn)`, so `push()`
+       returned true whatever happened — an automation that failed to reach
+       Telegram looked exactly like one that arrived. */
+    {
+      const dead = new T.TelegramBridge({
+        settings: { telegram: { enabled: true, token: "x", userId: "1" } },
+        saveSettings: async () => {},
+      });
+      dead.api = async () => { throw new Error("нет сети"); };
+      let threw = false;
+      try { await dead.send("1", "текст"); } catch { threw = true; }
+      ok(threw, "когда не прошла ни одна попытка — отправка сообщает об ошибке");
+
+      const alive = new T.TelegramBridge({
+        settings: { telegram: { enabled: true, token: "x", userId: "1" } },
+        saveSettings: async () => {},
+      });
+      const calls = [];
+      // Rich refused, plain accepted: the message did arrive, so no error.
+      alive.api = async (m) => { calls.push(m); if (m === "sendRichMessage") throw new Error("нет"); return {}; };
+      let ok2 = true;
+      try { await alive.send("1", "текст"); } catch { ok2 = false; }
+      ok(ok2, "а если сработал запасной путь — ошибки нет");
+      ok(calls.includes("sendMessage"), "и запасной путь действительно пробуется");
+    }
 
     const short = T.splitForTelegram("Короткий ответ.");
     eq(short, ["Короткий ответ."], "короткий ответ уходит одним сообщением");

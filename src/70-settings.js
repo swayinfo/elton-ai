@@ -1351,7 +1351,9 @@ class AssistantSettingTab extends PluginSettingTab {
       .setDesc(t("Blank, or start from one of the ready-made briefs."));
     add.addDropdown((d) => {
       const p = scenarioPresets();
-      for (const key of ["custom", "thoughts", "today", "wrapup", "week", "inbox", "loose", "explain", "links", "quiz", "forgotten", "draft"]) {
+      // The ones that do something come first: they are the reason to have
+      // scenarios at all, and they were buried under the ones that summarise.
+      for (const key of ["custom", "project", "tidy", "next", "brief", "thoughts", "today", "wrapup", "week", "inbox", "loose", "explain", "links", "quiz", "forgotten", "draft"]) {
         // Say so rather than hide it: a second copy is a fair thing to want,
         // and a preset vanishing from the list looks like a bug of its own.
         const seen = key !== "custom" && have.has((p[key].name || "").trim());
@@ -1473,12 +1475,11 @@ class AssistantSettingTab extends PluginSettingTab {
     run.setAttr("aria-label", t("Run now"));
     run.onclick = async () => {
       run.setAttr("disabled", "true");
-      // Says it started. The answer takes half a minute to arrive and the
-      // button going grey is not enough of a sign that anything is happening.
-      const notice = new Notice(t("{0} — running…", a.name || t("Custom automation")), 0);
+      // The "running…" notice belongs to the scheduler, so a run started by
+      // the clock shows it too — not only one started from this button.
       try { await this.plugin.scheduler.run(a, { manual: true }); }
       catch (e) { new Notice(t("Something went wrong: {0}", e.message), 8000); }
-      finally { notice.hide(); run.removeAttribute("disabled"); }
+      finally { run.removeAttribute("disabled"); }
     };
     const del = tools.createEl("button", { cls: "oa-row-btn is-danger" });
     setIcon(del, "trash-2");
@@ -1503,7 +1504,15 @@ class AssistantSettingTab extends PluginSettingTab {
     // Where it lands belongs on the summary line: an automation that messages
     // your phone at 08:30 is a different thing from one that quietly writes a
     // note, and you should not have to open it to tell them apart.
-    return `${a.time || "--:--"} · ${when}${a.telegram ? " · ✈️" : ""}`;
+    /* Whether it is going to run, on the line you already look at.
+       "It didn't fire" took a look inside data.json to explain, and the answer
+       was a field nothing on screen ever mentioned. */
+    const ran = a.lastRun === todayKey();
+    const state = !a.enabled ? t("off")
+      : ran ? t("already ran today")
+      : this.plugin.scheduler.due(a) ? t("due — runs within a minute")
+      : t("waiting");
+    return `${a.time || "--:--"} · ${when}${a.telegram ? " · ✈️" : ""} · ${state}`;
   }
 
   /* ── telegram ───────────────────────────────────────────── */

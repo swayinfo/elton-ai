@@ -570,6 +570,25 @@ const RU = {
     "То, чего не видно по названиям папок. Необязательно — можно заполнить потом.",
 
   // ── hold a key and talk ──
+  "Hold the button below to speak": "Зажмите кнопку ниже, чтобы говорить",
+  "Hold the button below, or {0}": "Зажмите кнопку ниже или {0}",
+  "Hold to speak": "Держите, чтобы говорить",
+  "Set up a project": "Собрать проект",
+  "set up a project, new project, start a project": "собрать проект, новый проект, заведи проект",
+  "Set up a new project for the thing I am about to name. Work out how projects are already done in this vault before you make anything: find the projects board or index, read one or two of the project notes it points at, and see what they carry — properties, headings, the link back to their parent. If the vault has a template for a project, read it and use that. Then create the project the same way, in the same place as the others, and add it wherever the existing ones are listed so it does not sit there unlinked. If a board fits — columns you drag cards between — make a real board rather than a note with headings. Ask me nothing you can work out by looking, and tell me at the end what you made and where.":
+    "Заведи проект под то, что я сейчас назову. Сначала разберись, как проекты вообще устроены в этом хранилище: найди доску или индекс проектов, прочитай одну-две заметки проектов, на которые она ссылается, посмотри, что в них есть — свойства, разделы, ссылка на родителя. Если в хранилище есть шаблон проекта — прочитай и используй его. Потом создай проект так же, там же, где лежат остальные, и добавь его туда, где перечислены существующие, чтобы он не остался болтаться без ссылок. Если по смыслу это доска — колонки, между которыми таскают карточки, — сделай настоящую доску, а не заметку с заголовками. Ничего не спрашивай, если можешь посмотреть сам, и в конце скажи, что создал и где.",
+  "Tidy this note up": "Причесать заметку",
+  "tidy this up, clean up this note, sort this note out": "причеши заметку, приведи в порядок, разгреби заметку",
+  "Take the note open on my screen and put it in order without losing anything I meant. Give it a clear structure — headings where the subject changes, lists where things are actually a list — cut the padding, and fix what is plainly broken: dead links, stray formatting, half-finished sentences. Keep my voice and every fact; if something is unclear rather than badly written, leave it and say so at the end. Edit the note itself, then tell me in one or two sentences what you changed.":
+    "Возьми заметку, открытую у меня на экране, и приведи её в порядок, не потеряв ни одной моей мысли. Сделай понятную структуру — заголовки там, где меняется тема, списки там, где это действительно список, — убери воду и почини явно сломанное: мёртвые ссылки, разъехавшееся форматирование, недописанные фразы. Сохрани мой язык и все факты; если что-то не плохо написано, а непонятно по сути — оставь как есть и скажи об этом в конце. Правь саму заметку, потом одним-двумя предложениями скажи, что изменил.",
+  "What should I do next": "Что делать дальше",
+  "what should I do next, what next, what to work on": "что делать дальше, чем заняться, что дальше",
+  "Look at what I have in flight — my projects, my recent notes, tasks I left open — and tell me what to do next. Three things at most, each one a concrete next action rather than a topic, with the reason it is next: it unblocks something, it has been sitting the longest, it is nearly finished. If something has quietly gone stale and should be dropped, say that too. Only what is in my notes.":
+    "Посмотри, что у меня в работе — проекты, свежие заметки, незакрытые задачи, — и скажи, что делать дальше. Максимум три пункта, каждый — конкретное следующее действие, а не тема, и почему именно оно: разблокирует другое, дольше всех висит, почти доделано. Если что-то тихо протухло и пора бросить — скажи и об этом. Только то, что есть в моих заметках.",
+  "Brief me on a topic": "Ввести в курс дела",
+  "brief me on, catch me up on, what do I know about": "введи в курс дела, что я знаю про, напомни что у меня по теме",
+  "I am about to name a subject. Gather everything I have written about it — search more than once, in different words, because I will not have used yours — and give it back to me as one connected briefing: what I already think, where I contradict myself, what I have decided and what is still open. End with the two or three questions my own notes do not answer. My material only; do not fill the gaps from your own knowledge, mark them as gaps.":
+    "Сейчас назову тему. Собери всё, что я о ней писал — ищи несколько раз и разными словами, потому что моими словами это вряд ли названо, — и верни одним связным вводом: что я уже думаю, где противоречу сам себе, что решено, а что открыто. В конце — два-три вопроса, на которые мои заметки не отвечают. Только мой материал: дыры не заполняй своими знаниями, а помечай как дыры.",
   "Hold a key and talk": "Зажать клавишу и говорить",
   "Works anywhere in Obsidian, from any note. Hold the keys, say what you want, let go — the panel opens itself if it was closed. It is a combination the plugin watches directly, so it is set by pressing it rather than by typing it.":
     "Работает в любом месте Obsidian, из любой заметки. Зажали, сказали, отпустили — панель откроется сама, если была закрыта. Сочетание плагин слушает напрямую, поэтому его не вписывают, а нажимают.",
@@ -608,6 +627,13 @@ const RU = {
     "Это телефон — бот работает на компьютере, где лежит хранилище.",
   "Send it to Telegram too": "Прислать ещё и в Telegram",
   "Automation": "Автоматизация",
+  "Show the result in a window": "Показывать результат окном",
+  "When it finishes, open the answer in a window — rendered, with where it was written and whether it reached Telegram. Turn off for something that runs while you are asleep; you still get a notice, and clicking it opens the same window.":
+    "Когда закончит — открыть ответ окном: с оформлением, с тем, куда он записан и дошёл ли до Telegram. Выключите для того, что работает, пока вы спите: уведомление всё равно придёт, а по клику откроется то же окно.",
+  "off": "выключена",
+  "already ran today": "сегодня уже выполнялась",
+  "due — runs within a minute": "время пришло — запустится в течение минуты",
+  "waiting": "ждёт",
   "{0} — running…": "{0} — выполняется…",
   "{0}: something went wrong": "{0}: что-то пошло не так",
   "The run came back with nothing to write.": "Ответ пришёл пустым — записывать нечего.",

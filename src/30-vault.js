@@ -661,6 +661,48 @@ class VaultBridge {
     return await this.createNote(title, text, folder);
   }
 
+  /**
+   * Today's daily note, made the way Obsidian would make it.
+   *
+   * Creating the file ourselves produced an empty one: no template, no
+   * Templater, none of the properties and buttons the user's own daily note
+   * carries — a stranger in the folder. The core Daily notes plugin already
+   * knows the format, the folder and the template, and running its command is
+   * what lets Templater see a new file and fill it in. So the file is asked
+   * for rather than written.
+   *
+   * Only today has a command; any other date falls back to a plain file, which
+   * is the honest thing — Obsidian itself offers no way to make yesterday's.
+   */
+  async ensureDailyNote(when = "today") {
+    const existing = this.dailyNote(when);
+    if (existing) return existing;
+
+    const today = /^(today|сегодня|)$/i.test(String(when || "").trim());
+    if (today) {
+      try {
+        const ran = this.app.commands.executeCommandById("daily-notes");
+        if (ran) {
+          // The command opens the note; the file appears a tick later.
+          for (let i = 0; i < 20; i++) {
+            const made = this.dailyNote("today");
+            if (made) return made;
+            await wait(50);
+          }
+        }
+      } catch (e) {
+        console.warn("[Elton AI] the daily notes command failed:", e && e.message);
+      }
+    }
+
+    const folder = this.dailyFolder();
+    if (!folder) return null;
+    await this.ensureFolder(folder);
+    const path = normalizePath(folder + "/" + todayKey() + ".md");
+    if (this.app.vault.getAbstractFileByPath(path)) return this.dailyNote(when);
+    return await this.app.vault.create(path, "");
+  }
+
   /** Snapshot before every write, so "undo that" is always available. */
   async remember(file) {
     try {

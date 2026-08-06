@@ -451,6 +451,12 @@ class TelegramBridge {
     const body = String(text || "");
     if (!body.trim()) return;
 
+    // The last thing that went wrong when even plain text would not go. This
+    // used to be swallowed: the final attempt ended in `.catch(console.warn)`,
+    // so a message that never left still reported success, and an automation
+    // that failed to reach Telegram looked exactly like one that arrived.
+    let failure = null;
+
     for (const part of splitForTelegram(body, TG_MAX_RICH)) {
       try {
         await this.api("sendRichMessage", { chat_id: chatId, rich_message: { markdown: part } });
@@ -469,11 +475,17 @@ class TelegramBridge {
         try {
           await this.api("sendMessage", { chat_id: chatId, text: small, parse_mode: "Markdown", disable_web_page_preview: true });
         } catch {
-          await this.api("sendMessage", { chat_id: chatId, text: small, disable_web_page_preview: true })
-            .catch((err) => console.warn("[Elton AI] telegram send:", err && err.message));
+          try {
+            await this.api("sendMessage", { chat_id: chatId, text: small, disable_web_page_preview: true });
+          } catch (err) {
+            console.error("[Elton AI] telegram send failed:", err && err.message);
+            failure = err;
+          }
         }
       }
     }
+
+    if (failure) throw failure;
   }
 
   /* ── the waiting animation ──────────────────────────────── */

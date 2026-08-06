@@ -94,6 +94,37 @@ function scenarioPresets() {
       triggers: t("draft it out, put together a draft, collect the material"),
       prompt: t("I want to write something on the subject I am about to name. Search my vault for everything I have already said about it — including notes that use other words for it — and lay it out as a draft: what I already think, in what order it holds together, and where the holes are that I have nothing on yet. My own material only; the gaps stay gaps."),
     },
+    /* The ones that do something rather than tell you something.
+       Written to work in any vault by looking first: none of them names a
+       folder, a template or a property, because the shape of a project note
+       lives in the neighbours and differs in every vault. Told to copy what is
+       already there, the assistant gets it right; told to follow a rule
+       someone typed here, it gets it right in one vault and wrong in the
+       rest. */
+    project: {
+      emoji: "📋",
+      name: t("Set up a project"),
+      triggers: t("set up a project, new project, start a project"),
+      prompt: t("Set up a new project for the thing I am about to name. Work out how projects are already done in this vault before you make anything: find the projects board or index, read one or two of the project notes it points at, and see what they carry — properties, headings, the link back to their parent. If the vault has a template for a project, read it and use that. Then create the project the same way, in the same place as the others, and add it wherever the existing ones are listed so it does not sit there unlinked. If a board fits — columns you drag cards between — make a real board rather than a note with headings. Ask me nothing you can work out by looking, and tell me at the end what you made and where."),
+    },
+    tidy: {
+      emoji: "✍️",
+      name: t("Tidy this note up"),
+      triggers: t("tidy this up, clean up this note, sort this note out"),
+      prompt: t("Take the note open on my screen and put it in order without losing anything I meant. Give it a clear structure — headings where the subject changes, lists where things are actually a list — cut the padding, and fix what is plainly broken: dead links, stray formatting, half-finished sentences. Keep my voice and every fact; if something is unclear rather than badly written, leave it and say so at the end. Edit the note itself, then tell me in one or two sentences what you changed."),
+    },
+    next: {
+      emoji: "🧭",
+      name: t("What should I do next"),
+      triggers: t("what should I do next, what next, what to work on"),
+      prompt: t("Look at what I have in flight — my projects, my recent notes, tasks I left open — and tell me what to do next. Three things at most, each one a concrete next action rather than a topic, with the reason it is next: it unblocks something, it has been sitting the longest, it is nearly finished. If something has quietly gone stale and should be dropped, say that too. Only what is in my notes."),
+    },
+    brief: {
+      emoji: "📚",
+      name: t("Brief me on a topic"),
+      triggers: t("brief me on, catch me up on, what do I know about"),
+      prompt: t("I am about to name a subject. Gather everything I have written about it — search more than once, in different words, because I will not have used yours — and give it back to me as one connected briefing: what I already think, where I contradict myself, what I have decided and what is still open. End with the two or three questions my own notes do not answer. My material only; do not fill the gaps from your own knowledge, mark them as gaps."),
+    },
     custom: {
       emoji: "✨",
       name: t("Custom scenario"),

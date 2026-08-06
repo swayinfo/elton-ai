@@ -119,8 +119,11 @@ function buildTools(s, plugin) {
     // read from Obsidian's own daily-notes settings when ours is empty.
     if (plugin.vault.dailyFolder()) {
       fn("daily_note",
-        "The user's daily note for one date. Needed for questions like \"what did I do yesterday\" — ordinary search does not find these reliably. For a span of days use recent_notes instead of calling this once per day.",
-        { when: { type: "string", description: "today, yesterday, or a date as DD-MM-YYYY" } }, ["when"]);
+        "The user's daily note for one date. Needed for questions like \"what did I do yesterday\" — ordinary search does not find these reliably. For a span of days use recent_notes instead of calling this once per day. Pass open: true when they asked to OPEN or SHOW it rather than asked a question about it — today's note is then created through Obsidian's own Daily notes command if it does not exist yet, so their template and Templater run exactly as if they had opened it themselves.",
+        {
+          when: { type: "string", description: "today, yesterday, or a date as DD-MM-YYYY" },
+          open: { type: "boolean", description: "Put it on screen, creating today's from their template if needed." },
+        }, ["when"]);
     }
   }
   if (webSearchOK(s)) {
@@ -228,6 +231,10 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     "• Your answers come from the user's own notes. Search before you answer anything about their material — do not answer from memory and do not invent note contents.",
     "• If a search finds nothing, try different words before giving up. Two or three attempts, then say honestly that you found nothing.",
     "• You may reason and give an opinion, not just retrieve. Ground it in their notes, and say which part is your own view.",
+    // The order matters and is easy to get backwards: the words are spoken
+    // aloud, so an answer that promises and then acts is heard as a promise,
+    // and whatever happens afterwards happens in silence.
+    "• Act first, speak afterwards. Every tool call you are going to make comes BEFORE the sentence describing it, and that sentence is in the past tense: \"opened it\", \"created it\", not \"I'll open it\" or \"one moment\". You are never speaking to someone who will wait for a second message — this reply is the whole turn.",
   ];
 
   if (channel === "telegram") {
@@ -275,6 +282,9 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
   if (s.canControlUI) {
     lines.push("• You control what is on their screen as well as what is in their notes. Put the thing you are talking about in front of them: open the note you are describing, open a source worth reading, open two notes side by side when you are comparing them. Close what is finished with when they ask.");
     lines.push("• Do this while you answer, not instead of answering — the screen and the words go together.");
+    // "Open today's note" was being answered by reading it out. The words are
+    // an instruction about the screen, not a question about the contents.
+    lines.push("• \"Open\", \"show me\", \"go to\", \"put it up\" are instructions to put a note ON SCREEN — open_note, or daily_note with open: true for a daily one. Reading its contents back is not what was asked. Only summarise it as well if they asked for that too.");
   }
   if (s.canDelete) {
     lines.push("• Deletion always stops for the user's confirmation. Never claim something is deleted before they confirm it.");
@@ -612,8 +622,21 @@ class Agent {
       }
 
       case "daily_note": {
-        const f = V.dailyNote(args.when);
-        if (!f) return `No daily note for "${args.when}".`;
+        // Asked to open it, make it if it isn't there — through Obsidian's own
+        // command, so the user's template and Templater do their work. Asked
+        // about it, never create anything: a question is not a request for a
+        // new file.
+        const f = args.open ? await V.ensureDailyNote(args.when) : V.dailyNote(args.when);
+        if (!f) {
+          return args.open
+            ? `There is no daily note for "${args.when}" and Obsidian could not make one — the Daily notes core plugin may be switched off.`
+            : `No daily note for "${args.when}".`;
+        }
+        if (args.open) {
+          await V.openNote(f);
+          onEvent({ kind: "action", text: t("Opened: {0}", f.basename) });
+          return `Opened the daily note "${f.basename}" (${f.path}) on screen. Say briefly that it is in front of them.`;
+        }
         onEvent({ kind: "action", text: t("Read: {0}", f.basename) });
         return `Daily note "${f.basename}":\n\n${await V.read(f, 4000)}`;
       }

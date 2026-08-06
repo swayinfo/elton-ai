@@ -63,6 +63,9 @@ function newAutomation(presetId) {
     folder: "",
     prompt: p.prompt || "",
     notify: true,
+    // Open the answer when it is done. On, because an automation whose result
+    // you have to go and look for is one you stop trusting.
+    showResult: true,
     // Also send the result to Telegram. Off by default — an automation that
     // starts messaging your phone without being asked is a surprise, not a
     // feature.
@@ -107,7 +110,13 @@ class AutomationEditModal extends Modal {
 
     new Setting(c).setName(t("Time")).addText((tx) => {
       tx.inputEl.type = "time";
-      tx.setValue(a.time || "09:00").onChange((v) => { a.time = v || "09:00"; });
+      tx.setValue(a.time || "09:00").onChange((v) => {
+        a.time = v || "09:00";
+        // Changing the time is asking for it to run at the new one. Keeping
+        // "already ran today" would mean setting a time and watching nothing
+        // happen — which is exactly how this looked from outside.
+        a.lastRun = "";
+      });
     });
 
     // Days: click to toggle, none selected means every day. Monday-first.
@@ -150,6 +159,11 @@ class AutomationEditModal extends Modal {
       tx.inputEl.addClass("oa-auto-prompt");
       tx.setValue(a.prompt || "").onChange((v) => { a.prompt = v; });
     });
+
+    new Setting(c)
+      .setName(t("Show the result in a window"))
+      .setDesc(t("When it finishes, open the answer in a window — rendered, with where it was written and whether it reached Telegram. Turn off for something that runs while you are asleep; you still get a notice, and clicking it opens the same window."))
+      .addToggle((x) => x.setValue(a.showResult !== false).onChange((v) => { a.showResult = v; }));
 
     new Setting(c).setName(t("Notify me when it's done"))
       .addToggle((x) => x.setValue(a.notify !== false).onChange((v) => { a.notify = v; }));
@@ -312,19 +326,36 @@ class AutomationScheduler {
   }
 
   /**
-   * Run one automation. `manual` is the "Run now" button — it ignores the
-   * schedule and still stamps lastRun, so a hand-run in the morning doesn't
-   * get repeated by the timer an hour later.
+   * Run one automation. `manual` is the "Run now" button.
+   *
+   * A hand-run deliberately does NOT claim the day. It used to: the idea was
+   * that running the morning digest by hand should stop the timer repeating
+   * it an hour later. In practice it meant pressing "Run now" once silently
+   * cancelled that day's scheduled run — so the way anyone tests an
+   * automation is also the way they stop it from firing, and the feature
+   * looks broken. A digest arriving twice is a smaller problem than one that
+   * never arrives.
    */
   async run(a, { manual = false } = {}) {
     if (this.running.has(a.id)) return null;
     this.running.add(a.id);
     const plugin = this.plugin;
+
+    /* A notice that stays up while it works.
+       An automation takes tens of seconds, and until it finished there was no
+       sign anywhere that anything had started — the first you knew of it was
+       the answer, or nothing at all if it failed. This says it began, then
+       follows along: searching, reading, writing. `0` means it stays until
+       hidden, and the `finally` below is what hides it. */
+    const name = a.name || t("Custom automation");
+    const notice = a.notify === false ? null : new Notice("⏳ " + t("{0} — running…", name), 0);
+
     try {
-      if (manual) { a.lastRun = todayKey(); await plugin.saveSettings(); }
       const agent = new Agent(plugin);
       const reply = await agent.run([], a.prompt || "", {
-        onEvent: () => {},
+        onEvent: (ev) => {
+          if (notice && ev && ev.kind === "action") notice.setMessage(`⏳ ${name}\n${ev.text}`);
+        },
         // An unattended run must never sit waiting on a keypress that will
         // never come, so any confirm is declined — it just won't edit or delete.
         confirm: async () => false,
@@ -338,13 +369,20 @@ class AutomationScheduler {
       out.text = answer;
       out.title = a.name || t("Morning digest");
 
-      // Run by hand: show it. The whole complaint about automations was that
-      // you press the button, something happens somewhere, and you have to go
-      // looking for it to find out what.
-      if (manual) new AutomationResultModal(plugin.app, plugin, a, out).open();
+      /* Show it, unless this one was told not to.
+         A run by hand always opens the window — you are standing right there.
+         A scheduled run does too by default: the whole complaint about
+         automations was that something happens somewhere and you have to go
+         looking for it. The switch exists because a window appearing over
+         your work at 08:30 is a fair thing to not want. */
+      // Down before the result appears, or the running notice sits under a
+      // window announcing that the running has finished.
+      if (notice) notice.hide();
+      if (manual || a.showResult !== false) new AutomationResultModal(plugin.app, plugin, a, out).open();
       else this.announce(a, out);
       return out;
     } finally {
+      if (notice) notice.hide();
       this.running.delete(a.id);
     }
   }
@@ -371,16 +409,13 @@ class AutomationScheduler {
         out.file = await V.createNote(`${title} ${stamp}`, `# ${title} — ${stamp}\n\n${body}\n`,
           a.folder || plugin.settings.newNoteFolder || "");
       } else {
-        // Into today's daily note — creating it if the day hasn't one yet.
-        let file = V.dailyNote("today");
-        // Same folder the daily_note tool uses, which falls back to
-        // Obsidian's own daily-notes settings when ours was never filled in.
-        const daily = V.dailyFolder();
-        if (!file && daily) {
-          await V.ensureFolder(daily);
-          file = await plugin.app.vault.create(normalizePath(daily + "/" + stamp + ".md"), "");
-        }
+        // Into today's daily note, made through Obsidian's own command if the
+        // day hasn't one yet — so a digest arriving before you have opened the
+        // vault does not leave you an empty note where your template should be.
+        let file = await V.ensureDailyNote("today");
         if (file) await V.appendToNote(file, body, a.heading || title);
+        // No daily notes at all in this vault — the answer still has to land
+        // somewhere rather than being thrown away.
         else file = await V.createNote(`${title} ${stamp}`, body, plugin.settings.newNoteFolder || "");
         out.file = file;
       }
