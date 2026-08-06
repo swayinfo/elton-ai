@@ -102,8 +102,8 @@ const PROMISE_RE = new RegExp(
 
 /** Tools that change something or put something on screen. */
 const ACTION_TOOLS = new Set([
-  "create_note", "create_board", "append_note", "replace_in_note", "rewrite_note", "delete_note",
-  "open_note", "open_beside", "open_url", "close_tab", "undo_last",
+  "create_note", "create_board", "append_note", "replace_in_note", "rewrite_note", "move_note", "delete_note", "create_folder", "run_command",
+  "open_note", "open_notes", "open_beside", "open_url", "close_tab", "undo_last",
 ]);
 
 const KEEP_PROMISE = {
@@ -211,9 +211,23 @@ function buildTools(s, plugin) {
       { name: { type: "string", description: "Title or part of it. Leave empty only when closing everything." },
         all: { type: "boolean", description: "Close every tab in the main area. The user is asked to confirm." } },
       []);
+    fn("open_notes",
+      "Open several notes at once, each in its own tab. Use it after making or finding a batch of them — \"open all of those\", \"show me the five you just wrote\" — instead of calling open_note over and over.",
+      { paths: { type: "array", items: { type: "string" }, description: "Paths or titles, in the order they should be opened." } },
+      ["paths"]);
     fn("open_beside",
       "Open a note beside what's already on screen instead of on top of it, so two things can be read together. Use it when the user wants to compare, or when you are pointing at a second note while they read the first.",
       { path: { type: "string" } }, ["path"]);
+
+    /* The rest of the vault's plugins, through the one door they all use.
+       Without this the assistant is limited to what this plugin implements;
+       with it, anything the user installed is reachable — spaced repetition,
+       the graph, Templater, QuickAdd. Named rather than listed, because a
+       real vault has several hundred commands and none of them belong in a
+       prompt. */
+    fn("run_command",
+      "Run one of Obsidian's commands — the same list the command palette shows, including everything the user's other plugins add. Use it when they ask for something this vault can do that you have no tool for: starting a review, opening the graph, switching a pane's mode, running a template. Name it the way they did; if several match you are told which, and you pick.",
+      { name: { type: "string", description: "What the command is called, or part of it" } }, ["name"]);
   }
   if (s.canCreate) {
     fn("create_note",
@@ -234,7 +248,8 @@ function buildTools(s, plugin) {
     // a note with headings in it.
     if (plugin.vault.kanbanReady()) {
       fn("create_board",
-        "Create a Kanban board: a project laid out as columns with cards you drag between them. Use this — NOT create_note — whenever the user asks for a board, a kanban, or a project broken into stages. A note with headings and checkboxes is not a board; it opens as plain text. If this vault has a board template, read it first: take its columns and its properties from there rather than inventing your own.",
+        "Create a Kanban board: a project laid out as columns with cards you drag between them. Use this — NOT create_note — whenever the user asks for a board, a kanban, or a project broken into stages. A note with headings and checkboxes is not a board; it opens as plain text. If this vault has a board template, read it first: take its columns and its properties from there rather than inventing your own. "
+        + "FILL IT IN. A board asked for as \"a project to learn X\" needs the real steps of learning X as cards — eight or ten of them, in the order they would actually be done, spread across the columns. An empty board, or one column with nothing in it, is not a project: it is a chore handed back to the user, and it will be rejected.",
         {
           title: { type: "string" },
           folder: { type: "string", description: "Optional folder" },
@@ -281,6 +296,20 @@ function buildTools(s, plugin) {
         content: { type: "string", description: "The complete new contents of the note, including the frontmatter and every section you are keeping." },
       },
       ["path", "content"]);
+    /* Filing and renaming.
+       Half of what anyone does in a vault is move things: emptying the inbox,
+       archiving what is finished, giving a note the name it should have had.
+       Without this the assistant could write anything and file nothing. */
+    fn("create_folder",
+      "Make a folder. Only when the user asked for one by name — creating a note already makes whatever folder it needs.",
+      { path: { type: "string", description: "Path from the vault root, e.g. \"3. Resources/Финансы\"" } }, ["path"]);
+    fn("move_note",
+      "Move a note to another folder, rename it, or both. Every link to it elsewhere is updated automatically, so this is always safer than creating a copy and deleting the original. Use it to file things out of the inbox, to archive what is done, and to rename.",
+      {
+        path: { type: "string", description: "The note to move" },
+        target: { type: "string", description: "A folder to move it into, or a full new path ending in .md to rename it as well." },
+      },
+      ["path", "target"]);
     fn("undo_last", "Undo the last change you made to a note. For \"undo that\" or \"put it back\".", {}, []);
   }
   if (s.canDelete) {
@@ -876,6 +905,27 @@ class Agent {
         return `Closed: ${closed.map((n) => `"${n}"`).join(", ")}.`;
       }
 
+      case "open_notes": {
+        if (!s.canControlUI) return "Working with tabs is switched off in settings.";
+        const list = Array.isArray(args.paths) ? args.paths : [];
+        // A cap, because "open everything about X" against a search result is
+        // a way to end up with sixty tabs and a wedged window.
+        const opened = [];
+        const missing = [];
+        for (const p of list.slice(0, 12)) {
+          const f = V.resolve(p);
+          if (!f) { missing.push(p); continue; }
+          await V.openNote(f);
+          this.noteSource(f);
+          opened.push(f.basename);
+        }
+        if (!opened.length) return `None of those could be found: ${missing.join(", ")}`;
+        onEvent({ kind: "action", text: t("Opened {0} notes", opened.length) });
+        return `Opened ${opened.length}: ${opened.join(", ")}.`
+          + (missing.length ? ` Not found: ${missing.join(", ")}.` : "")
+          + (list.length > 12 ? ` Only the first 12 were opened, out of ${list.length}.` : "");
+      }
+
       case "open_beside": {
         if (!s.canControlUI) return "Working with tabs is switched off in settings.";
         const f = V.resolve(args.path);
@@ -938,13 +988,28 @@ class Agent {
       case "create_board": {
         if (!s.canCreate) return "Creating notes is switched off in settings.";
         if (!V.kanbanReady()) return "The Kanban plugin is not enabled, so a board cannot be rendered. Offer an ordinary note instead.";
+        /* An empty board is the same failure as an empty note, and it kept
+           happening: asked for a project to learn ESP32, the model made one
+           column called "Idea" with nothing in it. That is not a project, it
+           is a chore with a title. Refused, with what to do instead. */
+        {
+          const cols = Array.isArray(args.columns) ? args.columns : [];
+          const cards = cols.reduce((n, c) => n + ((c && Array.isArray(c.cards)) ? c.cards.filter(Boolean).length : 0), 0);
+          if (cols.length < 2 || cards < 3) {
+            return "That board was not created: it has "
+              + `${cols.length} column(s) and ${cards} card(s). A board is a project broken into stages — `
+              + "give it the stages this vault uses (or Idea / In progress / Done) and fill them with the real steps of the work, "
+              + "eight or ten cards in the order they would be done. Call create_board again with the whole thing.";
+          }
+        }
         if (s.confirmEveryEdit) {
           const ok = await confirm({ title: t("Confirm change"), body: `${t("Created: {0}", safeTitle(args.title))}`, danger: false });
           if (!ok) return "The user declined. Do not retry.";
         }
         const f = await V.createBoard(args.title, args.columns, args.folder, args.properties);
         onEvent({ kind: "action", text: t("Board created: {0}", f.basename) });
-        await V.openNote(f);
+        // Opened AS a board, not as the markdown it is made of.
+        await V.showAsBoard(f);
         const names = (args.columns || []).map((c) => c && c.name).filter(Boolean).join(", ");
         return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. It is open and rendering as a board. ${V.folderConventions(f.parent && f.parent.path)}`.trim();
       }
@@ -976,6 +1041,52 @@ class Agent {
         }
         onEvent({ kind: "action", text: t("Edited: {0}", f.basename) });
         return `Changed it in "${f.basename}".`;
+      }
+
+      case "run_command": {
+        if (!s.canControlUI) return "Running commands is switched off in settings.";
+        const hits = V.findCommands(args.name);
+        if (!hits.length) return `Nothing in the command palette matches "${args.name}". Try the words the user actually used, or fewer of them.`;
+        // Several matches is a question, not a guess: "delete" matches both
+        // "Delete current file" and "Delete paragraph".
+        if (hits.length > 1 && hits[0].name.length > String(args.name).length + 12) {
+          return `Several commands match "${args.name}":\n`
+            + hits.map((c) => `— ${c.name}`).join("\n")
+            + `\nCall run_command again with the full name of the one you mean.`;
+        }
+        const cmd = hits[0];
+        const ok = V.runCommand(cmd.id);
+        onEvent({ kind: "action", text: t("Ran: {0}", cmd.name) });
+        return ok
+          ? `Ran the command "${cmd.name}". Tell the user briefly what you did.`
+          : `Obsidian refused to run "${cmd.name}" — it is probably unavailable right now (many commands only work with a note open and focused).`;
+      }
+
+      case "create_folder": {
+        if (!s.canCreate) return "Creating things is switched off in settings.";
+        const path = normalizePath(String(args.path || "").trim().replace(/^\/+|\/+$/g, ""));
+        if (!path) return "No folder name came through.";
+        if (!V.inScope(path)) return "That is outside the folders you are allowed to touch.";
+        if (plugin.app.vault.getAbstractFileByPath(path)) return `The folder "${path}" already exists.`;
+        await V.ensureFolder(path);
+        onEvent({ kind: "action", text: t("Created the folder: {0}", path) });
+        return `Created the folder "${path}".`;
+      }
+
+      case "move_note": {
+        if (!s.canEdit) return "Editing notes is switched off in settings.";
+        const f = V.resolve(args.path);
+        if (!f) return `No note called "${args.path}".`;
+        const from = f.path;
+        try {
+          const moved = await V.moveNote(f, args.target);
+          onEvent({ kind: "action", text: t("Moved: {0}", moved.basename) });
+          return `Moved "${from}" to "${moved.path}". Links to it elsewhere were updated.`;
+        } catch (e) {
+          if (e.message === "exists") return `There is already a note at "${args.target}". Pick another name, or say so instead of overwriting it.`;
+          if (e.message === "out-of-scope") return "That destination is outside the folders you are allowed to touch.";
+          return `Could not move it: ${e.message}`;
+        }
       }
 
       case "rewrite_note": {

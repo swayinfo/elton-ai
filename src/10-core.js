@@ -161,6 +161,7 @@ const RU = {
   "Let it open notes beside each other, open web pages inside the vault and close tabs you're done with. It never touches its own panel, and closing several at once still asks you.":
     "Разрешить открывать заметки рядом, открывать веб-страницы прямо в хранилище и закрывать вкладки, с которыми вы закончили. Свою панель он не трогает, а закрытие нескольких вкладок всё равно спросит подтверждение.",
   "Looking at what's open": "Смотрю, что открыто",
+  "Opened {0} notes": "Открыл заметок: {0}",
   "Opened beside: {0}": "Открыл рядом: {0}",
   "Closed: {0}": "Закрыл вкладок: {0}",
   "Close tabs?": "Закрыть вкладки?",
@@ -709,6 +710,9 @@ const RU = {
   "It would go from {0} to {1} characters.": "Было бы {0} символов, станет {1}.",
   "Undo puts it back exactly as it was.": "«Отмени» вернёт её ровно в прежний вид.",
   "Rewrote: {0}": "Переписал: {0}",
+  "Moved: {0}": "Перенёс: {0}",
+  "Ran: {0}": "Выполнил: {0}",
+  "Created the folder: {0}": "Создал папку: {0}",
   "One note per conversation, named after the assistant and the time. Empty means a folder called «{0}», created the first time something is saved.":
     "По заметке на разговор, в названии — имя ассистента и время. Пусто — папка «{0}», она создастся при первом сохранении.",
   "Made by Elton": "Сделал Элтон",

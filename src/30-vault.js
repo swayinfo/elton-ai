@@ -616,6 +616,26 @@ class VaultBridge {
     return lines.join("\n");
   }
 
+  /**
+   * Show a board as a board.
+   *
+   * A freshly created file opens in whatever mode the workspace was last in,
+   * which for a new note is markdown — so the board the assistant just built
+   * arrives as a wall of headings and checkboxes, and the user has to know
+   * that a menu item exists to fix it. Kanban ships a command for the switch;
+   * this runs it when the open leaf is still showing text.
+   */
+  async showAsBoard(file) {
+    await this.openNote(file);
+    const leaf = this.app.workspace.getMostRecentLeaf
+      ? this.app.workspace.getMostRecentLeaf() : this.app.workspace.activeLeaf;
+    const type = leaf && leaf.view && leaf.view.getViewType ? leaf.view.getViewType() : "";
+    if (type === "kanban") return true;
+    try {
+      return !!this.app.commands.executeCommandById("obsidian-kanban:toggle-kanban-view");
+    } catch { return false; }
+  }
+
   /** Is the Kanban plugin there to render a board at all? */
   kanbanReady() {
     const p = this.app.plugins;
@@ -754,6 +774,65 @@ class VaultBridge {
     while (end > at + 1 && !lines[end - 1].trim()) end--;
     lines.splice(end, 0, add);
     await this.app.vault.modify(file, lines.join("\n"));
+  }
+
+  /**
+   * Commands whose names contain what was asked for.
+   *
+   * Everything the vault's other plugins can do shows up in one place: the
+   * command palette. Being able to run from there is what lets the assistant
+   * reach the rest of the setup — start a spaced-repetition review, open the
+   * graph, insert a Templater template — without this plugin knowing anything
+   * about those plugins.
+   */
+  findCommands(query) {
+    const all = this.app.commands && this.app.commands.listCommands
+      ? this.app.commands.listCommands() : [];
+    const want = normalizePhrase(query);
+    if (!want) return [];
+    const words = want.split(" ").filter(Boolean);
+    return all
+      .filter((c) => {
+        const name = normalizePhrase(c.name || "");
+        return words.every((w) => name.includes(w));
+      })
+      // The shortest name containing every word is almost always the one
+      // meant: "graph view" beats "open graph view in new pane".
+      .sort((a, b) => String(a.name || "").length - String(b.name || "").length)
+      .slice(0, 12);
+  }
+
+  runCommand(id) {
+    return !!(this.app.commands && this.app.commands.executeCommandById(id));
+  }
+
+  /**
+   * Move or rename a note, keeping every link to it working.
+   *
+   * Through `fileManager.renameFile` rather than the vault's own rename: that
+   * is the call that rewrites the links in every other note pointing at this
+   * one. Doing it the direct way leaves a vault full of dead wiki-links, and
+   * the damage is spread across files nobody thought to look at.
+   */
+  async moveNote(file, target) {
+    const raw = String(target || "").trim().replace(/^\/+|\/+$/g, "");
+    if (!raw) throw new Error("no-target");
+
+    // A folder, a new name, or both. "Archive" moves it and keeps the name;
+    // "Archive/Old name.md" does both.
+    const asFolder = this.folder(raw) || (raw.endsWith(".md") ? null : raw);
+    const path = asFolder
+      ? normalizePath(asFolder + "/" + file.name)
+      : normalizePath(raw.endsWith(".md") ? raw : raw + ".md");
+
+    if (path === file.path) return file;
+    if (!this.inScope(path)) throw new Error("out-of-scope");
+    if (this.app.vault.getAbstractFileByPath(path)) throw new Error("exists");
+
+    const dir = path.slice(0, path.lastIndexOf("/"));
+    if (dir) await this.ensureFolder(dir);
+    await this.app.fileManager.renameFile(file, path);
+    return this.app.vault.getAbstractFileByPath(path) || file;
   }
 
   /** The whole file at once. Snapshotted first, like every other write. */

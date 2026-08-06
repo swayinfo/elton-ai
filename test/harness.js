@@ -201,7 +201,12 @@ function fakeApp({ tabs = [], webviewer = true } = {}) {
     vault: { getFiles: () => [], getAbstractFileByPath: () => null, on: () => ({}), adapter: {} },
     metadataCache: { getFirstLinkpathDest: () => null, getFileCache: () => null },
     internalPlugins: { getPluginById: (id) => (id === "webviewer" ? { enabled: webviewer } : null) },
-    fileManager: { async trashFile() {} },
+    fileManager: {
+      async trashFile() {},
+      // The real one rewrites every link pointing at the file; the fake only
+      // has to move it, so a test can see where it landed.
+      async renameFile(f, to) { f.path = to; f.basename = to.split("/").pop().replace(/.md$/, ""); },
+    },
   };
 }
 
