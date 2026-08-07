@@ -4,6 +4,10 @@
 
 A voice and text assistant that works on the notes you already have. It searches your vault, answers from it, creates and edits notes, files them where they belong and puts things on your screen — by voice, by typing, or from your phone through a Telegram bot of your own.
 
+![Asking the assistant about the note on screen](docs/elton-ai-demo.gif)
+
+▶ **[Watch the full two-minute demo](docs/elton-ai-demo.mp4)**
+
 The plugin ships no key of its own: every request goes to the provider you configured. With a local model, nothing leaves your machine at all.
 
 > [!IMPORTANT]
