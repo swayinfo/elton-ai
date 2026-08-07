@@ -94,6 +94,21 @@ class OnboardingModal extends Modal {
         Object.entries(PROVIDERS).forEach(([id, p]) => d.addOption(id, t(p.label)));
         d.setValue(s.provider).onChange(async (v) => { s.provider = v; await this.plugin.saveSettings(); this.draw(); });
       });
+
+    /* What the author's own service is, at the moment the choice is made.
+       Shown only when it is the one selected: an advert for it under someone
+       else's key would be an advert, and this is the one place it is an
+       answer to the question already on screen. */
+    if (s.provider === "obsimind") {
+      const box = c.createDiv({ cls: "oa-note" });
+      box.createDiv({ cls: "oa-note-title", text: t("A balance instead of a key") });
+      box.createDiv({ text: t("One balance for every model, topped up from a Telegram bot — no card left with a foreign provider and no separate signup. There is a free trial with the promo code «{0}».", t("Gift")) });
+      const line = box.createDiv();
+      line.appendText(t("Prices, models and how to top up: "));
+      const a = line.createEl("a", { text: siteLabel(), href: siteUrl() });
+      a.setAttr("target", "_blank");
+      a.setAttr("rel", "noopener");
+    }
     const p = PROVIDERS[s.provider];
     if (p.needsKey) {
       new Setting(c).setName(t("API key")).addText((tx) => {

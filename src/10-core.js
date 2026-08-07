@@ -726,6 +726,11 @@ const RU = {
   "Created the folder: {0}": "Создал папку: {0}",
   "One note per conversation, named after the assistant and the time. Empty means a folder called «{0}», created the first time something is saved.":
     "По заметке на разговор, в названии — имя ассистента и время. Пусто — папка «{0}», она создастся при первом сохранении.",
+  "A balance instead of a key": "Баланс вместо ключа",
+  "One balance for every model, topped up from a Telegram bot — no card left with a foreign provider and no separate signup. There is a free trial with the promo code «{0}».":
+    "Один баланс на все модели, пополняется из телеграм-бота: без карты у зарубежного провайдера и без отдельной регистрации. Есть бесплатный пробный доступ по промокоду «{0}».",
+  "Gift": "Подарок",
+  "Prices, models and how to top up: ": "Цены, модели и как пополнить: ",
   "Made by Elton": "Сделал Элтон",
   "Who made this": "Кто это сделал",
   "Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ":
