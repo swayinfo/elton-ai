@@ -82,7 +82,7 @@ In settings pick "Local model", address `http://localhost:11434/v1`, model `qwen
 
 Why that one: it answers and calls tools in under a second even on a laptop GPU. Reasoning models like qwen3 spend 15–20 seconds thinking before the first word, which is unusable for a spoken conversation. With a stronger GPU, try `qwen2.5:7b` — it is noticeably smarter.
 
-**Note:** a local model can neither transcribe nor synthesise speech. To keep voice working, turn on "Cloud fallback for voice" in settings and give it a cloud key — the text of your notes still stays local.
+**What a local setup can and cannot do.** A local model answers locally, and Piper reads the answers out locally — so asking in writing and being answered aloud costs nothing and sends nothing. The one thing that has no local option here is the other direction: turning your speech into text. For that, switch on "Cloud fallback for voice" and give it a cloud key; the text of your notes still never leaves the machine, only the few seconds of audio you just spoke.
 
 ---
 
