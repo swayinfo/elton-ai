@@ -55,7 +55,14 @@ jobs:
       - name: Attest the build
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: "main.js"
+          # All three assets, not just main.js. The catalogue's review checks
+          # every file in the release and reported styles.css as unattested —
+          # a user verifying provenance would have been able to prove where
+          # the code came from and not the stylesheet shipped beside it.
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
 
       - name: Publish
         env:
