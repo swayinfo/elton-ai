@@ -68,7 +68,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF#refs/tags/}" \
-            --title "${GITHUB_REF#refs/tags/}" \
+          TAG="${GITHUB_REF#refs/tags/}"
+          # A tag can be pushed again — to fix a workflow, to rebuild assets —
+          # and `gh release create` fails outright when the release is already
+          # there. Replacing it keeps a re-push working instead of turning
+          # into a red build with the old files still published.
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            --title "$TAG" \
             --generate-notes \
             main.js manifest.json styles.css
