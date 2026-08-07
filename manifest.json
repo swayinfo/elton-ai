@@ -3,7 +3,7 @@
   "name": "Elton AI",
   "version": "2.1.0",
   "minAppVersion": "1.8.7",
-  "description": "The AI from the films, living in your vault: speak to it and it searches, reads, writes and files your notes, opens what you ask for and works while you sleep. Voice or text, through your own provider — Elton AI, OpenRouter, a local model or OpenAI.",
+  "description": "The AI from the films, living in your vault: speak to it and it searches, reads, writes and files your notes, opens what you ask for and works while you sleep. Reach it from your phone through a Telegram bot of your own. Voice or text, through your own provider — Elton AI, OpenRouter, a local model or OpenAI.",
   "author": "Elton",
   "authorUrl": "https://eltonlabs.org/en/elton-ai",
   "isDesktopOnly": false

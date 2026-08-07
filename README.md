@@ -2,7 +2,7 @@
 
 *English · [Русский](README.ru.md) · [eltonlabs.org/en/elton-ai](https://eltonlabs.org/en/elton-ai)*
 
-A voice and text assistant that works on the notes you already have. It searches your vault, answers from it, and creates and edits notes — by voice or by typing.
+A voice and text assistant that works on the notes you already have. It searches your vault, answers from it, creates and edits notes, files them where they belong and puts things on your screen — by voice, by typing, or from your phone through a Telegram bot of your own.
 
 The plugin ships no key of its own: every request goes to the provider you configured. With a local model, nothing leaves your machine at all.
 
@@ -186,9 +186,10 @@ The timing is forgiving on purpose. Obsidian is not a server and your vault is c
 
 Every permission is separate. A permission that is off is not an instruction not to do something — the tool is simply absent, and the model never learns that it exists.
 
-- **Read** — search and read. Without this the assistant cannot see your vault at all.
-- **Create** — new notes, in a folder you name.
-- **Edit** — change existing ones. A copy is taken before every edit, so "undo that" always works.
+- **Read** — search by word and by meaning, read a note in full, grep for an exact phrase, look at what you wrote in the last few days, open your daily note for a date.
+- **Create** — notes, folders, and real Kanban boards. A note is built on your own template, with the properties its neighbours carry; a board comes out as a board, not as a note with headings in it.
+- **Edit** — change a line, rewrite a whole note, add under a heading, move or rename (every link to it is updated), undo the last change.
+- **Your screen** — open a note, open several at once, put two side by side, open a web page inside the vault, close what you are done with. And run any command from the palette, which is how it reaches everything your other plugins can do: start a review, open the graph, insert a template.
 - **Delete** — off by default. Even when it is on, **every deletion stops and waits for a keypress**. The assistant never deletes anything on its own.
 
 You can restrict it to particular folders — "only these" or "all but these". The restriction applies to search as well: notes outside the scope do not even appear in results.
