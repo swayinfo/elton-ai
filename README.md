@@ -17,7 +17,7 @@ The plugin ships no key of its own: every request goes to the provider you confi
 >
 > - **OpenRouter** or **OpenAI** — your own account and key, paid to them.
 > - **A local model** (Ollama or LM Studio) — nothing leaves your machine, and no payment at all.
-> - **Elton AI** — a proxy run by the author of this plugin at `api.eltonlabs.org`, forwarding to OpenRouter models. **It is a paid service**, sold separately through a Telegram bot; the address is fixed and cannot be changed in settings. It is the default choice in the setup guide, but the plugin is fully usable without it.
+> - **Elton AI** — a service run by the author of this plugin, at `api.eltonlabs.org`, giving access to current models without an account of your own anywhere. **It is a paid service**, sold separately through a Telegram bot; the address is fixed and cannot be changed in settings. It is the default choice in the setup guide, but the plugin is fully usable without it.
 >
 > No request is made until you have chosen a provider and entered a key. The plugin collects no analytics and sends nothing anywhere else. The exact list of addresses it can contact is in [Privacy and external services](#privacy-and-external-services) below.
 
@@ -281,11 +281,11 @@ The plugin never contacts anything except the provider you chose in settings. It
 | `media.giphy.com` | only the Telegram waiting animation, once | nothing — a picture is downloaded |
 | `api.eltonlabs.org/skills` | only with the Elton AI provider | nothing is sent; short guides to Obsidian's own file formats are fetched, so the assistant writes a Kanban board or a Base that actually renders |
 
-Elton AI is the author's proxy to OpenRouter models, for people who would rather not set up a key of their own; it is paid for through a separate Telegram bot. Every other provider works without it and the plugin loses nothing.
+Elton AI is the author's own service, for people who would rather not set up an account and a key somewhere first; it is paid for through a separate Telegram bot. Every other provider works without it and the plugin loses nothing.
 
-**No telemetry, and no self-updating.** The plugin collects nothing about you, keeps no statistics, and sends no analytics anywhere. It does not download code, dependencies or updates of itself — new versions come from the community catalogue or from BRAT, like any other plugin. The guides mentioned above are plain text for the model to read, not code, and the plugin ships with its own copies built in; the proxy only adds to them.
+**No telemetry, and no self-updating.** The plugin collects nothing about you, keeps no statistics, and sends no analytics anywhere. It does not download code, dependencies or updates of itself — new versions come from the community catalogue or from BRAT, like any other plugin. The guides mentioned above are plain text for the model to read, not code, and the plugin ships with its own copies built in; the service only adds to them.
 
-Requests to a provider are seen by that provider, as with any API. For Elton AI that is the author's proxy, which forwards them to OpenRouter and keeps no copies of your notes; if you would rather not rely on that, use your own OpenRouter or OpenAI key, or a local model, and the proxy is never contacted at all.
+Requests to a provider are seen by that provider, as with any API — that is true of OpenAI and OpenRouter as much as of Elton AI, which keeps no copies of your notes. If you would rather not rely on someone else's service at all, use your own key or a local model, and the author's service is never contacted.
 
 Your notes stay in your vault. Only the text needed to answer the question at hand is sent: the fragments found, the note on screen, and the context note.
 
