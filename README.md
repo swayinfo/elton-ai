@@ -16,6 +16,12 @@ Works on desktop and on mobile (Android / iOS).
 
 ![Elton AI](docs/promo-hero-en.jpg)
 
+### ▶ Two minutes of it actually running
+
+[![Watch on YouTube: talking to a second brain like it was ChatGPT](https://img.youtube.com/vi/UHazxHln1aM/maxresdefault.jpg)](https://www.youtube.com/watch?v=UHazxHln1aM)
+
+*[Talking to my SECOND BRAIN like it was ChatGPT — Obsidian without sync](https://www.youtube.com/watch?v=UHazxHln1aM)* — a real vault, a real phone, nothing sped up.
+
 |  |  |
 | --- | --- |
 | ![A project in one sentence](docs/promo-kanban-en.jpg) | ![Ask your own notes](docs/promo-ask-en.jpg) |
@@ -240,6 +246,12 @@ MIT — see [LICENSE](LICENSE).
 > OpenRouter или локальная Ollama подойдут не хуже — плагин работает с любым.
 
 ![Elton AI](docs/promo-hero.jpg)
+
+### ▶ Две минуты того, как это работает
+
+[![Смотреть на YouTube: общаюсь со вторым мозгом как с ChatGPT](https://img.youtube.com/vi/UHazxHln1aM/maxresdefault.jpg)](https://www.youtube.com/watch?v=UHazxHln1aM)
+
+*[Общаюсь со ВТОРЫМ мозгом как с ChatGPT — Obsidian без синхронизации](https://www.youtube.com/watch?v=UHazxHln1aM)* — живое хранилище, живой телефон, без ускорений.
 
 |  |  |
 | --- | --- |
