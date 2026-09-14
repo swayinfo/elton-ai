@@ -1933,6 +1933,189 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── Подсказки под ответом ──────────────────────────────── */
+  describe("Три следующих вопроса");
+  {
+    /* Подсказки строятся по карте смыслов, и проверять тут надо ровно то,
+       что в неё уходит: по списку заголовков модель может сочинить только
+       «расскажи про Сентябрь», а по тексту заметки — вопрос про то, что
+       в ней написано. Поэтому тесты смотрят на промпт, а не на ответ
+       модели: ответ здесь подставлен, а промпт — это и есть работа. */
+    const LONG = "Аренда 45000, продукты 18300, транспорт 4200, "
+      + "подписки 2600, кафе 7100 — итого за месяц вышло 77200 рублей.";
+
+    const build = (over = {}) => {
+      const asked = [];
+      const notes = over.notes || {};
+      const plugin = {
+        settings: Object.assign({
+          semanticSearch: true,
+          connector: { enabled: true, code: "abc", server: "s" },
+        }, over.settings || {}),
+        saveSettings: async () => {},
+        vault: {
+          semanticSearch: async (q, n) => {
+            asked.push({ probe: q, limit: n });
+            return over.hits || [];
+          },
+          resolve: (p) => (Object.prototype.hasOwnProperty.call(notes, p)
+            ? new H.TFile(p) : null),
+          snippet: async (file) => notes[file.path],
+        },
+        ai: {
+          chat: async (msgs, opts) => {
+            asked.push({ prompt: msgs[0].content, opts });
+            return { content: JSON.stringify(over.reply
+              || ["на что ушло больше всего", "сравни с августом", "запиши итог"]) };
+          },
+        },
+      };
+      const cn = new T.ConnectorBridge(plugin);
+      const prompt = () => (asked.find((x) => x.prompt) || {}).prompt || "";
+      const probe = () => (asked.find((x) => x.probe) || {}).probe || "";
+      return { cn, prompt, probe, asked };
+    };
+
+    // Главное: в промпт уходит текст заметки, а не только её имя.
+    {
+      const { cn, prompt } = build({
+        hits: [{ path: "Сентябрь - 2026.md", title: "Сентябрь - 2026", score: 0.71 }],
+        notes: { "Сентябрь - 2026.md": LONG },
+      });
+      const out = await cn.nextSteps("сколько я потратил", "за сентябрь 77200 рублей", []);
+      ok(prompt().includes("Сентябрь - 2026"), "название соседней заметки в промпте");
+      ok(prompt().includes("Аренда 45000"), "и её текст тоже — иначе вопрос не о чем");
+      eq(out.length, 3, "три подсказки");
+    }
+
+    // Ищем по вопросу И ответу: в вопросе может не быть ни месяца, ни темы.
+    {
+      const { cn, probe } = build({
+        hits: [{ path: "a.md", title: "a", score: 0.7 }],
+        notes: { "a.md": LONG },
+      });
+      await cn.nextSteps("сколько я потратил", "за сентябрь вышло 77200", []);
+      ok(probe().includes("сколько я потратил"), "вопрос в запросе к карте смыслов");
+      ok(probe().includes("77200"), "и ответ тоже");
+    }
+
+    // Далёкий сосед — это шум. Порог относительный, от лучшего попадания.
+    {
+      const { cn, prompt } = build({
+        hits: [
+          { path: "близкая.md", title: "близкая", score: 0.80 },
+          { path: "далёкая.md", title: "далёкая", score: 0.40 },
+        ],
+        notes: { "близкая.md": LONG, "далёкая.md": LONG },
+      });
+      await cn.nextSteps("вопрос", "ответ", []);
+      ok(prompt().includes("близкая"), "близкая заметка попадает");
+      ok(!prompt().includes("далёкая"), "далёкая отсекается");
+    }
+
+    // Пустой шаблон: вектор есть, текста нет, притягивается к чему угодно.
+    {
+      const { cn, prompt } = build({
+        hits: [
+          { path: "шаблон.md", title: "шаблон", score: 0.79 },
+          { path: "живая.md", title: "живая", score: 0.78 },
+        ],
+        notes: { "шаблон.md": "## Итоги", "живая.md": LONG },
+      });
+      await cn.nextSteps("вопрос", "ответ", []);
+      ok(!prompt().includes("шаблон"), "заметка-заглушка в подсказки не идёт");
+      ok(prompt().includes("живая"), "а настоящая идёт");
+    }
+
+    /* Порог заглушки легко задрать так, что он начнёт выбрасывать
+       короткие настоящие заметки — а именно они часто и есть лучшая
+       подсказка: одна строка с ценой и сроком. */
+    {
+      const short = "Тонометр Omron M3 — 4 900 ₽, забрать в пятницу. Манжета 22-42 см.";
+      const { cn, prompt } = build({
+        hits: [{ path: "Покупки.md", title: "Покупки", score: 0.66 }],
+        notes: { "Покупки.md": short },
+      });
+      await cn.nextSteps("что такое тонометр", "прибор для измерения давления", []);
+      ok(prompt().includes("Omron M3"), "короткая, но настоящая заметка заглушкой не считается");
+    }
+
+    // Приватную папку resolve не отдаёт — и текст её на экран не попадает.
+    {
+      const { cn, prompt } = build({
+        hits: [{ path: "Личное/дневник.md", title: "дневник", score: 0.9 }],
+        notes: {},
+      });
+      await cn.nextSteps("вопрос", "ответ", []);
+      ok(!prompt().includes("дневник"), "недоступная заметка не подсказывается");
+    }
+
+    /* Соседей по смыслу раньше вытесняли заметки, которые агент и так
+       прочитал: списки сливались в один и обрезались восьмым элементом. */
+    {
+      const readAlready = Array.from({ length: 9 },
+        (_, i) => ({ path: "ч" + i + ".md", title: "читал" + i }));
+      const { cn, prompt } = build({
+        hits: [{ path: "сосед.md", title: "сосед", score: 0.8 }],
+        notes: { "сосед.md": LONG },
+      });
+      await cn.nextSteps("вопрос", "ответ", readAlready);
+      ok(prompt().includes("сосед"), "сосед по смыслу не вытесняется прочитанным");
+      ok(prompt().includes("читал0"), "и прочитанное тоже названо");
+    }
+
+    // Подсказка, повторяющая вопрос, бесполезна как кнопка.
+    {
+      const { cn } = build({ reply: ["Сколько я потратил", "а в августе?", "запиши итог"] });
+      const out = await cn.nextSteps("сколько я потратил", "ответ", []);
+      eq(out.length, 2, "повтор вопроса выброшен");
+    }
+
+    /* Кнопка-таблетка хороша только в одну строку: просим 45 знаков,
+       пускаем до 60 — промах на слово терять подсказку не стоит, а абзац
+       разорвёт таблетку на две строки. */
+    {
+      const { cn } = build({ reply: [
+        "а".repeat(40), "б".repeat(55), "в".repeat(61),
+      ] });
+      const out = await cn.nextSteps("вопрос", "ответ", []);
+      eq(out.length, 2, "длиннее шестидесяти знаков в кнопку не пускаем");
+      ok(out[1].length === 55, "а запас сверх просимых 45 есть");
+    }
+
+    // Семантика выключена — подсказки всё равно есть, просто без соседей.
+    {
+      const { cn, prompt, asked } = build({
+        settings: { semanticSearch: false },
+        hits: [{ path: "a.md", title: "a", score: 0.9 }],
+        notes: { "a.md": LONG },
+      });
+      const out = await cn.nextSteps("вопрос", "ответ", []);
+      eq(out.length, 3, "подсказки строятся и без карты смыслов");
+      ok(!asked.some((x) => x.probe), "и в карту смыслов не ходим");
+      ok(!prompt().includes("Рядом по смыслу"), "раздела соседей в промпте нет");
+    }
+
+    // Индекс от другой модели: поиск бросает — подсказки не должны падать.
+    {
+      const asked = [];
+      const plugin = {
+        settings: { semanticSearch: true, connector: { enabled: true, code: "a", server: "s" } },
+        saveSettings: async () => {},
+        vault: { semanticSearch: async () => { throw new Error("другая модель"); } },
+        ai: {
+          chat: async (msgs) => {
+            asked.push(msgs[0].content);
+            return { content: '["раз","два","три"]' };
+          },
+        },
+      };
+      const out = await new T.ConnectorBridge(plugin).nextSteps("в", "о", []);
+      eq(out.length, 3, "сломанный индекс не отменяет подсказки");
+      ok(asked.length === 1, "к модели всё равно сходили");
+    }
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {
