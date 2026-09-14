@@ -130,6 +130,33 @@ network at all.
 
 ---
 
+## Who makes this
+
+I'm Elton. I work where marketing, AI and knowledge systems meet, and I have
+been building in digital for six years — the long version, with the numbers, is
+on **[eltonlabs.org/en/about](https://eltonlabs.org/en/about)**.
+
+Why that matters for a plugin that asks for a key and reads your notes: you are
+trusting a person, so here is where to check them.
+
+- **Two plugins in Obsidian's official catalogue**, reviewed by its maintainers,
+  not side-loaded: this one and
+  **[Book Reader](https://github.com/swayinfo/elton-reader)**. Both are listed in
+  [community-plugins.json](https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugins.json)
+  under `swayinfo`.
+- **A YouTube channel** the plugin grew out of —
+  **[@Elton_Labs](https://www.youtube.com/@Elton_Labs)** — where every feature
+  here has been shown running, on camera, before it shipped.
+- **A community that answers** — the Obsidian & Mind Club, and a Telegram
+  channel at **[@eltonlabs](https://t.me/eltonlabs)**. Bugs get answered by me,
+  not by a form.
+- **A real address and a real name** on the site, on the invoice and in the
+  plugin's own settings. Not a handle.
+
+If something here breaks, you know who to ask, and I am easy to find.
+
+---
+
 ## Privacy and external services
 
 ### Private folders
@@ -358,6 +385,32 @@ Obsidian, находится в `src/`, а `main.js` в каждом релиз�
 
 Если не хочется зависеть ни от кого — плагин полностью работает и без релея:
 панель, голос, задания и локальная модель в Ollama не требуют сети совсем.
+
+---
+
+## Кто это делает
+
+Меня зовут Элтон. Работаю на стыке маркетинга, ИИ и систем знаний, в digital
+шесть лет — подробно и с цифрами на
+**[eltonlabs.org/about](https://eltonlabs.org/about)**.
+
+Почему это вообще важно для плагина, который просит ключ и читает ваши заметки:
+вы доверяете человеку, поэтому вот где его можно проверить.
+
+- **Два плагина в официальном каталоге Obsidian**, прошедшие проверку его
+  сопровождающих, а не поставленные в обход: этот и
+  **[Book Reader](https://github.com/swayinfo/elton-reader)**. Оба есть в
+  [community-plugins.json](https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugins.json)
+  под `swayinfo`.
+- **Ютуб-канал**, из которого плагин и вырос —
+  **[@Elton_Labs](https://www.youtube.com/@Elton_Labs)**: каждая функция отсюда
+  показана в работе, на камеру, до того как попала в релиз.
+- **Сообщество, где отвечают** — «Obsidian & Mind Club» и телеграм-канал
+  **[@eltonlabs](https://t.me/eltonlabs)**. На баг отвечаю я, а не форма.
+- **Настоящий адрес и настоящее имя** — на сайте, в чеке и в самих настройках
+  плагина. Не ник.
+
+Если что-то сломается — понятно, кого спрашивать, и найти меня легко.
 
 ---
 
