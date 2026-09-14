@@ -29,6 +29,100 @@ const ObsidianPlugin = obsidian.Plugin;
 const isPhone = () => !!(Platform && (Platform.isPhone || (Platform.isMobile && !Platform.isTablet)));
 const isMobile = () => !!(Platform && Platform.isMobile);
 
+/* ── сквозное шифрование переписки ────────────────────────────────────────
+ *
+ * Обе стороны обмениваются открытыми ключами через сервер, а общий секрет
+ * считают у себя. Сервер видит только открытые ключи и шифротекст: вывести
+ * из них содержимое нельзя, на этом стоит половина интернета.
+ *
+ * Obsidian — это тот же браузерный движок, поэтому здесь работает ровно
+ * тот же WebCrypto, что и в приложении на телефоне.
+ */
+const cnEnc = new TextEncoder();
+const cnDec = new TextDecoder();
+// По частям: развернуть весь массив в аргументы вызова нельзя — на ста
+// килобайтах переполняется стек, а голосовое столько и весит.
+const cnB64 = (buf) => {
+  const a = new Uint8Array(buf);
+  let out = "";
+  for (let i = 0; i < a.length; i += 8192) {
+    out += String.fromCharCode.apply(null, a.subarray(i, i + 8192));
+  }
+  return btoa(out).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+const cnUnb64 = (s) => {
+  const t = String(s).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(t + "=".repeat((4 - (t.length % 4)) % 4));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+};
+
+async function cnMakeKeys() {
+  const kp = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  return {
+    pub: cnB64(await crypto.subtle.exportKey("raw", kp.publicKey)),
+    priv: await crypto.subtle.exportKey("jwk", kp.privateKey),
+  };
+}
+
+async function cnShared(privJwk, peerPub) {
+  const priv = await crypto.subtle.importKey(
+    "jwk", privJwk, { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
+  const peer = await crypto.subtle.importKey(
+    "raw", cnUnb64(peerPub), { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const bits = await crypto.subtle.deriveBits({ name: "ECDH", public: peer }, priv, 256);
+  const base = await crypto.subtle.importKey("raw", bits, "HKDF", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    {
+      name: "HKDF", hash: "SHA-256",
+      salt: cnEnc.encode("elton-connector"),
+      info: cnEnc.encode("message-key-v1"),
+    },
+    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+
+async function cnSeal(key, text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const body = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv }, key, cnEnc.encode(String(text)));
+  return "e1." + cnB64(iv) + "." + cnB64(body);
+}
+
+async function cnOpen(key, packed) {
+  const s = String(packed || "");
+  if (!s.startsWith("e1.")) return s;      // старое, незашифрованное
+  const parts = s.split(".");
+  try {
+    const out = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: cnUnb64(parts[1]) }, key, cnUnb64(parts[2]));
+    return cnDec.decode(out);
+  } catch { return ""; }
+}
+
+const cnSealed = (s) => String(s || "").startsWith("e1.");
+
+/* Код подключения: без похожих друг на друга знаков, чтобы его можно было
+   без ошибок переписать с экрана на телефон. */
+/** «две минуты назад» вместо отметки времени — так читается быстрее. */
+function whenWord(ms) {
+  const mins = Math.max(0, Math.round((Date.now() - Number(ms || 0)) / 60000));
+  if (mins < 2) return "только что";
+  if (mins < 60) return `${mins} мин назад`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  const days = Math.round(hours / 24);
+  return days === 1 ? "вчера" : `${days} дн назад`;
+}
+
+function newConnectorCode(n = 12) {
+  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = new Uint8Array(n);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (let i = 0; i < n; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
+
 const VIEW_TYPE = "obsimind-assistant-view";
 /* Версия набора скиллов на прокси. Скиллы лежат в папке версии контента
    (scripts/<версия>/skills) и объясняют модели устройство этого хранилища:
@@ -41,6 +135,98 @@ const SKILLS_VERSION = "v2";
  * to find a language switch before they can read the onboarding.
  */
 const RU = {
+  // ── устройства ──
+  "Connected devices": "Подключённые устройства",
+  "Nothing connected yet. Type the code on your phone.":
+    "Пока ничего не подключено. Введите код на телефоне.",
+  "Device": "Устройство",
+  "last seen {0}": "на связи {0}",
+  "Disconnect": "Отключить",
+  "Disconnecting…": "Отключаю…",
+  "Refresh the list": "Обновить список",
+  "Disconnect all": "Отключить все",
+  "Disconnect all — press again": "Отключить все — нажмите ещё раз",
+  "Loading…": "Загружаю…",
+  // ── вкладка коннектора ──
+  "Notifications": "Уведомления",
+  "Automations can send their result to the phone: a notification arrives, and the text waits inside the app. Switch notifications on in the app itself — the drawer with your chats — and pick the automations on the Tasks tab.":
+    "Автоматизации умеют присылать результат на телефон: приходит уведомление, а сам текст ждёт внутри приложения. Включите уведомления в самом приложении — в панели со списком чатов, — а нужные автоматизации отметьте на вкладке «Задачи».",
+  "Check the app is reachable": "Проверить уведомления",
+  "Sends a test notification to every phone where notifications are on.":
+    "Отправит пробное уведомление на все телефоны, где они включены.",
+  "Send a test": "Отправить пробное",
+  "Sending…": "Отправляю…",
+  "Test": "Проверка",
+  "If you can read this, notifications are working.": "Если вы это читаете, уведомления работают.",
+  "Sent. Look at your phone.": "Отправлено. Посмотрите на телефон.",
+  // ── уведомления в приложение ──
+  "Send it to the app too": "Отправлять и в приложение",
+  "A notification arrives on the phone, and the text waits inside the app.":
+    "На телефон придёт уведомление, а сам текст будет ждать внутри приложения.",
+  "Switch the Connector on first — then this can notify your phone.":
+    "Сначала включите «Коннектор» — тогда это сможет присылать уведомления на телефон.",
+  "The Connector is off, so nothing was sent to the app.":
+    "Коннектор выключен, в приложение ничего не ушло.",
+  "Nobody has switched notifications on in the app yet.":
+    "В приложении ещё никто не включил уведомления.",
+  "Could not notify the app: {0}": "Не удалось отправить уведомление: {0}",
+  // ── коннектор ──
+  "Quick capture": "Быстрая запись",
+  "Stopped.": "Остановил.",
+  "Taken from the note «{0}»": "Взято из заметки «{0}»",
+  "The field above is empty, so the description is read from this note in your vault: {0}": "Поле выше пустое, поэтому описание читается из этой заметки в хранилище: {0}",
+  "The note «{0}» is being ignored": "Заметка «{0}» не используется",
+  "The field above is filled in, and what you wrote wins. Clear it to go back to the note: {0}": "Поле выше заполнено, и написанное вами сильнее. Очистите его, чтобы вернуться к заметке: {0}",
+  "Where a quick note lands": "Куда попадает быстрая запись",
+  "A separate note, or one more line at the end of today's daily note.": "Отдельной заметкой или ещё одной строкой в конце сегодняшней ежедневной заметки.",
+  "A line in today's note": "Строкой в сегодняшнюю заметку",
+  "Folder for quick notes": "Папка для быстрых заметок",
+  "Start typing and pick from your own folders. Empty means the folder for new notes from the Vault tab.": "Начните печатать и выберите из своих папок. Пусто — папка новых заметок из вкладки «Хранилище».",
+  "Added to {0}": "Дописал в {0}",
+  "There is no daily note and Obsidian could not make one.": "Ежедневной заметки нет, и Obsidian не смог её создать.",
+  "Editing notes is switched off in settings.": "Правка заметок выключена в настройках.",
+  "No key": "Нет ключа",
+  "Creating notes is switched off in settings.": "Создание заметок выключено в настройках.",
+  "A key for a phone button or widget: it can only create a note, nothing else. No reading, no editing, no deleting — the assistant is not even started.": "Ключ для кнопки или виджета на телефоне: умеет только создать заметку и больше ничего. Ни читать, ни править, ни удалять — ассистент даже не запускается.",
+  "The key has not been created yet — press the button below.": "Ключ ещё не создан — нажмите кнопку ниже.",
+  "Create the key": "Создать ключ",
+  "Revoke": "Отозвать",
+  "Paste this into the shortcut on your phone:": "Вставьте это в команду на телефоне:",
+  "The key is shown once. Lost it — revoke and create a new one.": "Ключ показывается один раз. Потеряли — отзовите и создайте новый.",
+  "No code yet — create a connection code first.": "Кода ещё нет — сначала создайте код подключения.",
+  "Could not create the key: {0}": "Не удалось создать ключ: {0}",
+  "Could not read the device list — try again.": "Не удалось прочитать список устройств — попробуйте ещё раз.",
+  "Quick capture is on. The key is stored on the phone, not here.": "Быстрая запись включена. Ключ лежит на телефоне, здесь его нет.",
+  "Written from the phone": "Записано с телефона",
+  "Saved: {0}": "Записал: {0}",
+  "Connector": "Коннектор",
+  "Your vault from any browser. Open the address on your phone, type the code once, and write to your notes the same way you do in the panel — the answers come from this computer.":
+    "Хранилище из любого браузера. Открываете адрес на телефоне, один раз вводите код — и пишете заметкам так же, как в панели. Отвечает этот компьютер.",
+  "Answer from the browser": "Отвечать браузеру",
+  "Only while Obsidian is open here. Anything sent while it is closed waits in a queue and arrives when you open the vault.":
+    "Только пока здесь открыт Obsidian. Написанное при выключенном компьютере ждёт в очереди и придёт, когда вы откроете хранилище.",
+  "Connection code": "Код подключения",
+  "It is a password: anyone who has it can write to your vault. Resetting it disconnects every phone at once.":
+    "Это пароль: у кого он есть, тот пишет в ваше хранилище. Сброс мгновенно отвязывает все телефоны.",
+  "Generate": "Сгенерировать",
+  "Reset": "Сбросить",
+  "Open on your phone and type the code:": "Откройте на телефоне и введите код:",
+  "No code yet — press Generate.": "Кода пока нет — нажмите «Сгенерировать».",
+  "The connector is switched off.": "Выключено.",
+  "Listening. The browser can reach this vault.": "На связи. Браузер достучится до этого хранилища.",
+  "No connection to the server: {0}": "Нет связи с сервером: {0}",
+  "The connector is not running — reopen the vault or switch it off and on.":
+    "Не работает — переоткройте хранилище или выключите и включите заново.",
+  "Check the connection": "Проверить связь",
+  "The server answers. Waiting in the queue: {0}": "Сервер отвечает. В очереди сообщений: {0}",
+  "The server is unreachable: {0}": "Сервер недоступен: {0}",
+  "The browser talks to the computer that holds your vault, so a phone is where you write TO it, not where it runs.":
+    "Браузер разговаривает с компьютером, на котором лежит хранилище. Телефон — то место, откуда пишут, а не где всё крутится.",
+  "It is switched on for this vault.": "Для этого хранилища включено.",
+  "The connector is not switched on yet.": "Пока не включено.",
+  "Relay address": "Адрес сервера",
+  "Where the browser and this computer meet. Change it only if you run your own relay.":
+    "Место встречи браузера и этого компьютера. Меняйте, только если поднимаете свой сервер.",
   // ── generic ──
   "Elton AI": "Elton AI",
   "Assistant": "Ассистент",
@@ -420,6 +606,9 @@ const RU = {
   "Where it writes": "Куда пишет",
   "Today's daily note": "В сегодняшнюю ежедневную заметку",
   "A new note": "В новую заметку",
+  "Nowhere — only into the chat": "Никуда — только в чат",
+  "The answer is not saved to the vault. Switch on the app or Telegram below, otherwise it will be seen only in the window.":
+    "Ответ не сохраняется в хранилище. Включите ниже приложение или телеграм, иначе его будет видно только в окне.",
   "Heading": "Заголовок раздела",
   "Under this heading in the daily note.": "Под этим заголовком в ежедневной заметке.",
   "Folder": "Папка",
@@ -711,6 +900,26 @@ const RU = {
     "Разрешить ассистенту смотреть в интернет — новости, факты, всё, чего нет в хранилище. Отвечать он всё равно будет сначала по вашим заметкам.",
   // The Russian page of the site; the English one is the key above it.
   "https://eltonlabs.org/en/elton-ai": "https://eltonlabs.org/elton-ai",
+  "What’s new in {0}": "Что нового в {0}",
+  "The short version. Everything here is optional — the plugin works exactly as before if you change nothing.": "Коротко. Всё это по желанию — если ничего не трогать, плагин работает ровно как раньше.",
+  "An app on your phone": "Приложение на телефоне",
+  "The headline of this version. The Connector tab gives you a code; type it once in the app and the whole vault is with you — ask it something, dictate a note, add a line to today’s. The same assistant, in the same words. The app puts itself on the home screen straight from the browser: no app store, no account.":
+    "Главное в этой версии. На вкладке «Коннектор» появляется код; введите его один раз в приложении — и всё хранилище с вами: спросить, надиктовать заметку, дописать строку в сегодняшнюю. Тот же ассистент, теми же словами. Приложение ставится на домашний экран прямо из браузера: ни магазина приложений, ни учётной записи не нужно.",
+  "What it needs: this computer, awake": "Что для этого нужно: включённый компьютер",
+  "Nothing answers on a server — your own computer does, which is why the notes never leave it. So there is one condition: the computer on, Obsidian open, the connector switched on. While it sleeps the app says it is not connected; whatever you send waits in the queue and arrives the moment the computer is back.":
+    "Отвечает не сервер, а ваш компьютер — потому заметки и не уезжают никуда. Отсюда единственное условие: компьютер включён, Obsidian открыт, коннектор включён. Пока компьютер спит, приложение покажет, что связи нет; всё отправленное дождётся в очереди и уедет, как только он вернётся.",
+  "A button for one thought": "Кнопка для одной мысли",
+  "A separate key that can only create a note — for a shortcut on the lock screen. No reading, no editing, no deleting.": "Отдельный ключ, который умеет только создать заметку — для кнопки на экране блокировки. Ни читать, ни править, ни удалять.",
+  "End-to-end encryption": "Сквозное шифрование",
+  "The phone and this computer work out a shared secret between themselves. The relay in the middle carries text it cannot read.": "Телефон и этот компьютер договариваются об общем секрете между собой. Промежуточный сервер несёт текст, который не может прочитать.",
+  "Voice on OpenAI works again": "Голос на OpenAI снова работает",
+  "Speech is transcribed through OpenAI’s own endpoint. The other providers are unchanged.": "Речь расшифровывается через собственный адрес OpenAI. Остальных провайдеров это не касается.",
+  "Where to read about it properly": "Где прочитать подробно",
+  "Setting the connector up, what it costs, what it sends and what it deliberately cannot do — written out step by step here: ": "Как подключить, сколько стоит, что уходит наружу и чего коннектор нарочно не умеет — по шагам здесь: ",
+  "Open the Connector tab": "Открыть вкладку «Коннектор»",
+  "Got it": "Понятно",
+  "What’s new": "Что нового",
+  "https://eltonlabs.org/en/elton-ai-app": "https://eltonlabs.org/elton-ai-app",
   "Language changed. Anything already open keeps its old wording until you restart Obsidian.":
     "Язык переключён. То, что уже открыто, останется на прежнем языке до перезапуска Obsidian.",
   "The interface switches immediately. Restart Obsidian afterwards so anything already open picks it up too. What the assistant answers in does not depend on this — it replies in the language you write or speak to it.":
@@ -730,6 +939,42 @@ const RU = {
   "One balance for every model, topped up from a Telegram bot — no card left with a foreign provider and no separate signup. There is a free trial with the promo code «{0}».":
     "Один баланс на все модели, пополняется из телеграм-бота: без карты у зарубежного провайдера и без отдельной регистрации. Есть бесплатный пробный доступ по промокоду «{0}».",
   "Gift": "Подарок",
+  "Encryption":
+    "Шифрование",
+  "Everything is encrypted end to end. The phone and this computer exchange public keys through the relay and each works out the shared secret on its own side, so the relay carries ciphertext it cannot read. The secret is different for every device, so one phone cannot read another's messages.":
+    "Переписка зашифрована сквозно. Телефон и этот компьютер обмениваются открытыми ключами через релей, а общий секрет каждый считает у себя — релей передаёт шифротекст и прочитать его не может. Секрет свой на каждое устройство, поэтому один телефон не прочитает переписку другого.",
+  "A device connected before this existed keeps working without encryption until it is reconnected — the list above says which is which.":
+    "Устройство, подключённое до появления шифрования, работает по-старому, пока его не переподключат, — в списке выше видно, какое из них какое.",
+  "encrypted":
+    "шифруется",
+  "no encryption — reconnect it":
+    "без шифрования, переподключите",
+  "What the app can do":
+    "Что умеет приложение",
+  "Voice. What you say into the phone is transcribed here, by your own provider — the same one that hears the panel. The transcript lands in the input field rather than being sent straight off, because speech is misheard and the notes it edits are real.":
+    "Голос. Сказанное в телефон расшифровывается здесь, вашим же провайдером — тем самым, что слышит панель. Текст попадает в поле ввода, а не улетает сразу: услышать можно неверно, а заметки правятся настоящие.",
+  "Balance. The app shows what is left on your Elton AI account and can top it up. It asks this computer for both, so the key stays here and never travels to the phone.":
+    "Счёт. Приложение показывает остаток на счёте Elton AI и умеет его пополнять. И то и другое оно спрашивает у этого компьютера, поэтому ключ остаётся здесь и на телефон не уезжает.",
+  "A spare entrance. If the phone or this computer cannot reach the relay — a VPN with a foreign exit is the usual reason — both quietly switch to a mirror and return on their own once the direct way works again.":
+    "Запасной вход. Если телефон или компьютер не достучится до релея — чаще всего из-за VPN с заграничным выходом, — оба молча переходят на зеркало и сами возвращаются, когда прямой путь заработает.",
+  "Check":
+    "Проверить",
+  "Asks the relay whether it hears this computer right now.":
+    "Спрашивает у релея, слышит ли он этот компьютер прямо сейчас.",
+  "Check notifications reach the phone":
+    "Проверить уведомления на телефоне",
+  "Sends a test notification to every phone where notifications are on. Switch them on in the app itself, and pick which automations may notify on the Tasks tab.":
+    "Отправляет пробное уведомление на все телефоны, где они включены. Включаются они в самом приложении, а какие автоматизации имеют право писать — на вкладке «Задачи».",
+  "Everything is encrypted end to end. The phone and this computer exchange public keys through the relay and each works out the shared secret on its own side, so the relay carries ciphertext it cannot read.":
+    "Переписка зашифрована сквозно. Телефон и этот компьютер обмениваются открытыми ключами через релей, а общий секрет каждый считает у себя — релей передаёт шифротекст и прочитать его не может.",
+  "The secret is different for every device, so one phone cannot read another's messages. A device connected before encryption existed keeps working without it until reconnected — the list above says which is which.":
+    "Секрет свой на каждое устройство, поэтому один телефон не прочитает переписку другого. Устройство, подключённое до появления шифрования, работает по-старому, пока его не переподключат, — в списке видно, какое из них какое.",
+  "{0} notes are not in the search index yet. Settings → Elton AI → Vault → Index.":
+    "Заметок вне поискового индекса: {0}. Настройки → Elton AI → Хранилище → Индекс.",
+  "Remind me to update it":
+    "Напоминать об обновлении",
+  "Once a week, if notes have piled up outside the index. A line in the corner, nothing more.":
+    "Раз в неделю, если вне индекса накопились заметки. Строчка в углу, больше ничего.",
   "Prices, models and how to top up: ": "Цены, модели и как пополнить: ",
   "Made by Elton": "Сделал Элтон",
   "Who made this": "Кто это сделал",
@@ -962,16 +1207,22 @@ MODEL_CATALOG.openrouter = MODEL_CATALOG.obsimind;
  * The model that runs the searching, per provider, for `fastModel: "auto"`.
  *
  * Chosen by measurement through the proxy, on the same tool-calling request:
- * gemini-2.5-flash 0.9s, gpt-4.1-mini 1.0s, haiku-4.5 1.1s, sonnet-4.5 2.6s —
- * and every one of them picked the same tool. Note that a newer name is not
- * automatically quicker: gemini-3.5-flash took 3.1s on the same call.
+ * gemini-2.5-flash 0.9s, gpt-4.1-mini 1.0s, haiku-4.5 1.1s, sonnet-4.5 2.6s.
+ * Note that a newer name is not automatically quicker: gemini-3.5-flash took
+ * 3.1s on the same call.
+ *
+ * Speed is not the whole of it, though, and haiku-4.5 wins on the part that
+ * matters more. The quick model is what decides which note you meant, and
+ * gemini-2.5-flash would answer "not found" while the note sat in the vault
+ * under a name it had not thought to try. Two tenths of a second is a price
+ * worth paying for a search that finds the thing.
  *
  * Local is deliberately empty. There is one small model on the machine
  * already; a second would compete for the same GPU rather than overlap.
  */
 const FAST_MODELS = {
-  obsimind: "google/gemini-2.5-flash",
-  openrouter: "google/gemini-2.5-flash",
+  obsimind: "anthropic/claude-haiku-4.5",
+  openrouter: "anthropic/claude-haiku-4.5",
   openai: "gpt-4.1-mini",
   local: "",
 };
@@ -988,6 +1239,9 @@ function canListModels(providerId) {
 
 const DEFAULT_SETTINGS = {
   onboarded: false,
+  // Версия, о которой человеку уже рассказали. Пусто у всех, кто ставил
+  // плагин до появления этого окна, — им «что нового» и предназначено.
+  seenVersion: "",
   lang: "auto",
 
   provider: "obsimind",
@@ -1072,6 +1326,17 @@ const DEFAULT_SETTINGS = {
   // animation is sent, so it is never downloaded twice.
   telegram: { enabled: false, token: "", userId: "", thinkingGif: true, thinkingGifUrl: "", gifId: "" },
 
+  // Коннектор: тот же ассистент, но вход через браузер телефона.
+  // Выключен по умолчанию — он открывает доступ к заметкам извне.
+  connector: { enabled: false, code: "", server: "https://app.eltonlabs.org",
+               // Отдельный ключ для кнопки на телефоне: номер устройства
+               // и папка, куда складывать. Сам токен здесь не хранится —
+               // он показывается один раз и живёт на телефоне.
+               quick: "", quickFolder: "", quickTo: "note" },
+
+  // Пара ключей для сквозного шифрования. Закрытый не покидает компьютер.
+  connectorKeys: null,
+
   // Let the assistant reach the public internet. Only providers that route
   // through OpenRouter (Elton AI, OpenRouter) can do it, so the tool is
   // offered only for those — see buildTools.
@@ -1089,6 +1354,11 @@ const DEFAULT_SETTINGS = {
   scenarios: null,
 
   semanticSearch: false,
+
+  // Раз в неделю напоминать, что в индексе не хватает свежих заметок.
+  // Работает только вместе со смысловым поиском — без него индекса нет.
+  indexRemind: true,
+  indexRemindAt: 0,
   embedModel: "baai/bge-m3",
   // Point at an index another tool already built instead of paying to
   // rebuild one. Empty means the plugin keeps its own inside its folder.
@@ -1123,6 +1393,8 @@ const DEFAULT_SETTINGS = {
 };
 
 /* ── small helpers ─────────────────────────────────────────── */
+const QUICK_NAME = "Quick capture";
+
 const wait = (ms) => new Promise((r) => window.setTimeout(r, ms));
 
 /* ── a key combination you hold ────────────────────────────────
@@ -1223,6 +1495,8 @@ function clickable(el) {
  */
 function siteUrl() { return t("https://eltonlabs.org/en/elton-ai"); }
 function siteLabel() { return siteUrl().replace(/^https?:\/\//, ""); }
+/** The companion guide for the browser app and the phone button. */
+function appUrl() { return t("https://eltonlabs.org/en/elton-ai-app"); }
 
 /** The last segment of a path — what a folder is actually called. */
 function tail(path) {

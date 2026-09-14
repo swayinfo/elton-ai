@@ -603,6 +603,10 @@
   line-height: 1.5;
 }
 .oa-note-title { font-weight: 600; color: var(--text-normal); margin-bottom: 3px; }
+/* Иконка перед заголовком карточки: выравнивается по тексту, а не по
+   строке, иначе на двухстрочном заголовке уезжает вниз. */
+.oa-note-icon { display: inline-flex; vertical-align: -3px; margin-right: 6px; color: var(--text-accent); }
+.oa-note-icon .svg-icon { width: 15px; height: 15px; }
 /* The state of the semantic index, as a single block rather than a number
    floating between two settings rows. */
 .oa-index-panel {
@@ -1500,3 +1504,58 @@ body.is-mobile .oa-scen-row { gap: 8px; }
 
 /* An automation's notice opens the note it wrote when clicked. */
 .oa-notice-click { cursor: pointer; }
+
+
+/* ── коннектор: карточка с кодом подключения ─────────────────────────────
+   Оформление классами, а не из скрипта: заданные из JavaScript стили
+   пользовательская тема перебить не может, и каталог их не пропускает. */
+.oa-cn-card { text-align: center; }
+.oa-cn-addr { font-size: var(--font-ui-medium); color: var(--text-muted); }
+.oa-cn-code {
+  font-family: var(--font-monospace);
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  margin-top: var(--size-2-2);
+  color: var(--text-normal);
+  user-select: all;
+}
+
+
+/* ── коннектор: список подключённых устройств ──────────────────────────
+   Список — карточка с рамкой, а не строки в воздухе: вокруг стоят настройки
+   в рамках, и без неё устройства выглядели обрывком чужого экрана. */
+.oa-cn-devs {
+  margin-bottom: var(--size-4-3);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 0 var(--size-4-3);
+}
+.oa-cn-dev {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-3);
+  padding: var(--size-4-2) 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.oa-cn-dev-name { font-size: var(--font-ui-medium); }
+.oa-cn-dev-when { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.oa-cn-dev-none {
+  padding: var(--size-4-2) 0;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+/* Обновление живёт внутри карточки и держится тихо: это не то действие,
+   ради которого сюда пришли, а способ переспросить. */
+.oa-cn-dev-foot { padding: var(--size-2-3) 0 var(--size-4-2); }
+.oa-cn-dev-foot button {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: none;
+  box-shadow: none;
+  padding: var(--size-2-1) var(--size-2-3);
+}
+.oa-cn-dev-foot button:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}

@@ -543,6 +543,38 @@ class VaultBridge {
    * Templates plugin and Templater both record it, and either answer is the
    * truth about this vault.
    * ────────────────────────────────────────────────────────── */
+  /**
+   * The vault's own description of itself.
+   *
+   * The settings field for "what else should it know about your system" is
+   * empty in almost every vault, and it is the single most valuable thing
+   * anyone can fill in: without it the assistant guesses where a task goes
+   * and what a folder is for. Typing it is a chore nobody does twice — and
+   * a vault built from someone's template should not need it typed at all.
+   *
+   * So it can also live as a note called `elton-ai`, anywhere in the vault.
+   * A template ships that note, and every vault made from it arrives with
+   * the assistant already knowing the layout. Exact name only: a partial
+   * match would happily pick up an article about the plugin.
+   */
+  guideNote() {
+    const f = this.app.vault.getMarkdownFiles()
+      .find((x) => x.basename.toLowerCase() === "elton-ai" && this.inScope(x.path));
+    return f || null;
+  }
+
+  /** Its text, without the frontmatter — that is Obsidian's, not the model's. */
+  /* Три тысячи знаков — примерно страница. Столько нужно, чтобы описать
+     хранилище и оставить место человеку дописать своё; платится это в
+     каждом запросе, поэтому больше давать незачем. */
+  async readGuide(maxChars = 3500) {
+    const f = this.guideNote();
+    if (!f) return "";
+    const raw = await this.app.vault.cachedRead(f);
+    const body = raw.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
+    return body.length > maxChars ? body.slice(0, maxChars) + "…" : body;
+  }
+
   templateFolder() {
     // What the user pointed at wins over anything we can work out: a vault can
     // have templates in a folder no plugin was ever told about.

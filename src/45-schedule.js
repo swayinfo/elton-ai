@@ -134,10 +134,16 @@ class AutomationEditModal extends Modal {
     new Setting(c).setName(t("Where it writes")).addDropdown((d) => {
       d.addOption("daily", t("Today's daily note"));
       d.addOption("note", t("A new note"));
+      /* Не всякая автоматизация должна что-то оставлять в хранилище.
+         Вечернее «как прошёл день» нужно как разговор: ответить с телефона,
+         а запись человек сделает сам — или не сделает. */
+      d.addOption("none", t("Nowhere — only into the chat"));
       d.setValue(a.target || "daily").onChange((v) => { a.target = v; this.draw(); });
     });
 
-    if ((a.target || "daily") === "daily") {
+    if ((a.target || "daily") === "none") {
+      new Setting(c).setDesc(t("The answer is not saved to the vault. Switch on the app or Telegram below, otherwise it will be seen only in the window."));
+    } else if ((a.target || "daily") === "daily") {
       new Setting(c).setName(t("Heading")).setDesc(t("Under this heading in the daily note."))
         .addText((tx) => tx.setPlaceholder(a.name || "").setValue(a.heading || "")
           .onChange((v) => { a.heading = v; }));
@@ -169,9 +175,9 @@ class AutomationEditModal extends Modal {
       .addToggle((x) => x.setValue(a.notify !== false).onChange((v) => { a.notify = v; }));
 
     /* Send it to the phone as well.
-       The note is still written either way — an automation's job is to leave
-       something in the vault. This is about being told, at eight in the
-       morning, without opening the laptop to find out. */
+       Раньше заметка писалась в любом случае, и это был только способ узнать
+       о ней, не открывая ноутбук. С вариантом «никуда» это стало
+       единственным местом, куда ответ вообще попадёт. */
     const tg = this.plugin.telegram;
     const ready = tg && tg.configured() && this.plugin.settings.telegram.userId;
     new Setting(c)
@@ -182,6 +188,20 @@ class AutomationEditModal extends Modal {
       .addToggle((x) => {
         x.setValue(!!a.telegram && !!ready).onChange((v) => { a.telegram = v; });
         if (!ready) x.setDisabled(true);
+      });
+
+    /* Второй адрес доставки — приложение с домашнего экрана. Смысл тот же,
+       что у Telegram: узнать результат утром, не открывая ноутбук. */
+    const cn = this.plugin.connector;
+    const cnReady = cn && cn.configured();
+    new Setting(c)
+      .setName(t("Send it to the app too"))
+      .setDesc(cnReady
+        ? t("A notification arrives on the phone, and the text waits inside the app.")
+        : t("Switch the Connector on first — then this can notify your phone."))
+      .addToggle((x) => {
+        x.setValue(!!a.connector && !!cnReady).onChange((v) => { a.connector = v; });
+        if (!cnReady) x.setDisabled(true);
       });
 
     const row = c.createDiv({ cls: "oa-modal-buttons" });
@@ -405,7 +425,9 @@ class AutomationScheduler {
     const out = { text, file: null, sent: false, errors: [] };
 
     try {
-      if (a.target === "note") {
+      // «Никуда» — значит никуда: ни новой заметки, ни строки в ежедневной.
+      if (a.target === "none") { /* ничего не пишем */ }
+      else if (a.target === "note") {
         out.file = await V.createNote(`${title} ${stamp}`, `# ${title} — ${stamp}\n\n${body}\n`,
           a.folder || plugin.settings.newNoteFolder || "");
       } else {
@@ -421,6 +443,23 @@ class AutomationScheduler {
       }
     } catch (e) {
       out.errors.push(t("Could not write the note: {0}", (e && e.message) || e));
+    }
+
+    if (a.connector) {
+      try {
+        const cn = plugin.connector;
+        if (!cn || !cn.configured()) {
+          out.errors.push(t("The Connector is off, so nothing was sent to the app."));
+        } else {
+          // Свой чат у каждой автоматизации: её же номер. Тот же номер
+          // уезжает в уведомление, поэтому нажатие открывает именно её.
+          await cn.post(text, a.id, title);
+          const ok = await cn.notify(title, text, a.id);
+          if (!ok) out.errors.push(t("Nobody has switched notifications on in the app yet."));
+        }
+      } catch (e) {
+        out.errors.push(t("Could not notify the app: {0}", (e && e.message) || e));
+      }
     }
 
     if (a.telegram) {

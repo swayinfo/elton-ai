@@ -209,6 +209,87 @@ class OnboardingModal extends Modal {
 }
 
 /* ============================================================
+ *  What changed since last time
+ *
+ *  Shown once per version, and never on a fresh install — someone
+ *  who has just been walked through onboarding does not need to be
+ *  told what is new in a plugin they have never seen.
+ *
+ *  It names three or four things and stops. A changelog belongs on
+ *  the site, where there is room for it; here the only job is to
+ *  make sure a feature that took a month is not missed because it
+ *  lives behind a tab nobody opened.
+ * ========================================================== */
+class WhatsNewModal extends Modal {
+  constructor(app, plugin, version) {
+    super(app);
+    this.plugin = plugin;
+    this.version = version;
+  }
+
+  onClose() { this.contentEl.empty(); }
+
+  onOpen() {
+    const c = this.contentEl;
+    this.modalEl.addClass("oa-onb");
+
+    const ic = c.createDiv({ cls: "oa-onb-icon" });
+    setIcon(ic, "sparkles");
+    c.createEl("h2", { text: t("What’s new in {0}", this.version), cls: "oa-onb-title" });
+    c.createDiv({ cls: "oa-onb-body", text: t("The short version. Everything here is optional — the plugin works exactly as before if you change nothing.") });
+
+    const form = c.createDiv({ cls: "oa-onb-form" });
+
+    /* Порядок не случайный: коннектор — то, ради чего версия и вышла,
+       остальное человек прочтёт по инерции, уже открыв окно. */
+    const item = (icon, title, text) => {
+      const box = form.createDiv({ cls: "oa-note" });
+      const head = box.createDiv({ cls: "oa-note-title" });
+      const i = head.createSpan({ cls: "oa-note-icon" });
+      setIcon(i, icon);
+      head.appendText(title);
+      box.createDiv({ text });
+    };
+
+    item("smartphone", t("An app on your phone"),
+      t("The headline of this version. The Connector tab gives you a code; type it once in the app and the whole vault is with you — ask it something, dictate a note, add a line to today’s. The same assistant, in the same words. The app puts itself on the home screen straight from the browser: no app store, no account."));
+    /* Условие — отдельным пунктом, а не сноской к первому: человек, узнавший
+       про приложение и не узнавший про включённый компьютер, решит, что плагин
+       сломан, при первом же «не на связи». */
+    item("monitor", t("What it needs: this computer, awake"),
+      t("Nothing answers on a server — your own computer does, which is why the notes never leave it. So there is one condition: the computer on, Obsidian open, the connector switched on. While it sleeps the app says it is not connected; whatever you send waits in the queue and arrives the moment the computer is back."));
+    item("zap", t("A button for one thought"),
+      t("A separate key that can only create a note — for a shortcut on the lock screen. No reading, no editing, no deleting."));
+    item("lock", t("End-to-end encryption"),
+      t("The phone and this computer work out a shared secret between themselves. The relay in the middle carries text it cannot read."));
+    item("mic", t("Voice on OpenAI works again"),
+      t("Speech is transcribed through OpenAI’s own endpoint. The other providers are unchanged."));
+
+    const where = form.createDiv({ cls: "oa-note" });
+    where.createDiv({ cls: "oa-note-title", text: t("Where to read about it properly") });
+    const line = where.createDiv();
+    line.appendText(t("Setting the connector up, what it costs, what it sends and what it deliberately cannot do — written out step by step here: "));
+    const a = line.createEl("a", { text: appUrl().replace(/^https?:\/\//, ""), href: appUrl() });
+    a.setAttr("target", "_blank");
+    a.setAttr("rel", "noopener");
+
+    const nav = c.createDiv({ cls: "oa-onb-nav" });
+    const open = nav.createEl("button", { text: t("Open the Connector tab") });
+    open.onclick = () => {
+      this.close();
+      /* Открыть настройки сразу на нужной вкладке: своего API у Obsidian
+         для этого нет, зато вкладка — состояние самой страницы настроек,
+         и её достаточно выставить до открытия. */
+      if (this.plugin.settingTab) this.plugin.settingTab._tab = "connector";
+      this.app.setting.open();
+      this.app.setting.openTabById(this.plugin.manifest.id);
+    };
+    const done = nav.createEl("button", { cls: "mod-cta", text: t("Got it") });
+    done.onclick = () => this.close();
+  }
+}
+
+/* ============================================================
  *  A group of settings, in a window
  *
  *  The tab lists what there is and what state it is in; the window
@@ -319,6 +400,7 @@ class AssistantSettingTab extends PluginSettingTab {
       { id: "access", label: t("Vault") },
       { id: "scenarios", label: t("Tasks") },
       { id: "telegram", label: t("Telegram") },
+      { id: "connector", label: t("Connector") },
       { id: "ui", label: t("Interface") },
     ];
     if (!TABS.some((x) => x.id === this._tab)) this._tab = "connection";
@@ -342,6 +424,7 @@ class AssistantSettingTab extends PluginSettingTab {
       access: () => this.tabAccess(body),
       scenarios: () => this.tabTasks(body),
       telegram: () => this.tabTelegram(body),
+      connector: () => this.tabConnector(body),
       ui: () => this.tabUI(body),
     })[this._tab]();
 
@@ -1166,6 +1249,25 @@ class AssistantSettingTab extends PluginSettingTab {
         tx.inputEl.addClass("oa-auto-prompt");
         tx.setValue(s.vaultNotes || "").onChange(async (v) => { s.vaultNotes = v; await this.plugin.saveSettings(); });
       });
+
+    /* Описание может лежать заметкой в самом хранилище — так его привозит
+       шаблон. Сказать об этом надо здесь: иначе человек видит пустое поле
+       и думает, что ассистент ничего о хранилище не знает. */
+    const guide = this.plugin.vault.guideNote();
+    if (guide) {
+      const box = c.createDiv({ cls: "oa-note" });
+      box.createDiv({
+        cls: "oa-note-title",
+        text: s.vaultNotes
+          ? t("The note «{0}» is being ignored", guide.basename)
+          : t("Taken from the note «{0}»", guide.basename),
+      });
+      box.createDiv({
+        text: s.vaultNotes
+          ? t("The field above is filled in, and what you wrote wins. Clear it to go back to the note: {0}", guide.path)
+          : t("The field above is empty, so the description is read from this note in your vault: {0}", guide.path),
+      });
+    }
   }
 
   /* ── group: search and the web ──────────────────────────── */
@@ -1270,6 +1372,18 @@ class AssistantSettingTab extends PluginSettingTab {
    * the top of a window, its button at the bottom past everything else — you
    * have to remember one to make sense of the other.
    */
+  /** Выключатель напоминания. Стоит рядом с индексом, к которому относится. */
+  indexRemindToggle(c) {
+    const s = this.s;
+    new Setting(c)
+      .setName(t("Remind me to update it"))
+      .setDesc(t("Once a week, if notes have piled up outside the index. A line in the corner, nothing more."))
+      .addToggle((x) => x.setValue(!!s.indexRemind).onChange(async (v) => {
+        s.indexRemind = v;
+        await this.plugin.saveSettings();
+      }));
+  }
+
   indexPanel(c) {
     const panel = c.createDiv({ cls: "oa-index" });
     const left = panel.createDiv({ cls: "oa-index-text" });
@@ -1285,6 +1399,8 @@ class AssistantSettingTab extends PluginSettingTab {
       problem.setText(text || "");
       problem.toggleClass("is-hidden", !text);
     };
+
+    this.indexRemindToggle(c);
 
     const refresh = async () => {
       const n = await this.plugin.vault.indexSize();
@@ -1565,6 +1681,276 @@ class AssistantSettingTab extends PluginSettingTab {
       : this.plugin.scheduler.due(a) ? t("due — runs within a minute")
       : t("waiting");
     return `${a.time || "--:--"} · ${when}${a.telegram ? " · ✈️" : ""} · ${state}`;
+  }
+
+  /* ── connector ──────────────────────────────────────────── */
+  tabConnector(c) {
+    const s = this.s;
+    if (!s.connector) s.connector = { enabled: false, code: "", server: "https://app.eltonlabs.org" };
+    const cn = s.connector;
+    if (typeof cn.quick !== "string") cn.quick = "";
+    if (typeof cn.quickFolder !== "string") cn.quickFolder = "";
+    if (cn.quickTo !== "daily") cn.quickTo = "note";
+
+    c.createDiv({ cls: "oa-note", text: t("Your vault from any browser. Open the address on your phone, type the code once, and write to your notes the same way you do in the panel — the answers come from this computer.") });
+
+    // Разбирает очередь тот компьютер, на котором лежит хранилище. Показывать
+    // телефону включатель, который ничего не включает, — обманывать.
+    if (isMobile()) {
+      const box = c.createDiv({ cls: "oa-note" });
+      box.createDiv({ cls: "oa-note-title", text: t("Set this up on your computer") });
+      box.createDiv({ text: t("The browser talks to the computer that holds your vault, so a phone is where you write TO it, not where it runs.") });
+      box.createDiv({ text: cn.enabled ? t("It is switched on for this vault.") : t("The connector is not switched on yet.") });
+      return;
+    }
+
+    new Setting(c)
+      .setName(t("Answer from the browser"))
+      .setDesc(t("Only while Obsidian is open here. Anything sent while it is closed waits in a queue and arrives when you open the vault."))
+      .addToggle((x) => x.setValue(!!cn.enabled).onChange(async (v) => {
+        cn.enabled = v;
+        await this.plugin.saveSettings();
+        if (v) this.plugin.connector.restart(); else this.plugin.connector.stop();
+        this.display();
+      }));
+
+    new Setting(c).setName(t("Connection")).setHeading();
+
+    new Setting(c)
+      .setName(t("Connection code"))
+      .setDesc(t("It is a password: anyone who has it can write to your vault. Resetting it disconnects every phone at once."))
+      .addText((tx) => {
+        tx.inputEl.type = "password";
+        tx.setValue(cn.code || "").onChange(async (v) => {
+          cn.code = v.trim(); await this.plugin.saveSettings();
+        });
+      })
+      .addButton((b) => b.setButtonText(t("Generate")).onClick(async () => {
+        cn.code = newConnectorCode();
+        await this.plugin.saveSettings();
+        if (cn.enabled) this.plugin.connector.restart();
+        this.display();
+      }))
+      .addButton((b) => b.setButtonText(t("Reset")).setWarning().onClick(async () => {
+        cn.code = "";
+        await this.plugin.saveSettings();
+        this.plugin.connector.stop();
+        this.display();
+      }));
+
+    if (cn.code) {
+      const box = c.createDiv({ cls: "oa-note oa-cn-card" });
+      box.createDiv({ cls: "oa-note-title", text: t("Open on your phone and type the code:") });
+      box.createDiv({ cls: "oa-cn-addr", text: cn.server.replace(/^https?:\/\//, "") });
+      box.createDiv({ cls: "oa-cn-code", text: cn.code });
+    }
+
+    const status = c.createDiv({ cls: "oa-index-status" });
+    const paint = () => {
+      const b = this.plugin.connector;
+      status.setText(!cn.code ? t("No code yet — press Generate.")
+        : !cn.enabled ? t("The connector is switched off.")
+        : b.lastError ? t("No connection to the server: {0}", b.lastError)
+        : b.running ? t("Listening. The browser can reach this vault.")
+        : t("The connector is not running — reopen the vault or switch it off and on."));
+    };
+    paint();
+
+    new Setting(c)
+      .addButton((b) => b.setButtonText(t("Check the connection")).onClick(async () => {
+        if (!cn.code) { new Notice(t("No code yet — press Generate.")); return; }
+        b.setButtonText(t("Checking…")).setDisabled(true);
+        try {
+          const r = await this.plugin.connector.req("/api/status?code=" + encodeURIComponent(cn.code));
+          new Notice(t("The server answers. Waiting in the queue: {0}", r.queued), 6000);
+        } catch (e) {
+          new Notice(t("The server is unreachable: {0}", e.message), 8000);
+        } finally { b.setButtonText(t("Check the connection")).setDisabled(false); paint(); }
+      }));
+
+    new Setting(c).setName(t("Connected devices")).setHeading();
+    const devBox = c.createDiv({ cls: "oa-cn-devs" });
+    const drawDevices = async () => {
+      devBox.empty();
+      if (!cn.code) {
+        devBox.createDiv({ cls: "oa-cn-dev-none", text: t("No code yet — press Generate.") });
+        return;
+      }
+      devBox.createDiv({ cls: "oa-cn-dev-none", text: t("Loading…") });
+      const list = await this.plugin.connector.listDevices();
+      devBox.empty();
+      if (!list.length) {
+        devBox.createDiv({ cls: "oa-cn-dev-none", text: t("Nothing connected yet. Type the code on your phone.") });
+      }
+      for (const d of list) {
+        const row = devBox.createDiv({ cls: "oa-cn-dev" });
+        const left = row.createDiv();
+        left.createDiv({ cls: "oa-cn-dev-name", text: d.name || t("Device") });
+        left.createDiv({ cls: "oa-cn-dev-when",
+          text: t("last seen {0}", whenWord(d.seen))
+            + " · " + (d.pub && d.paired ? t("encrypted") : t("no encryption — reconnect it")) });
+        const off = row.createEl("button", { text: t("Disconnect") });
+        off.onclick = async () => {
+          off.setText(t("Disconnecting…"));
+          off.disabled = true;
+          await this.plugin.connector.dropDevice(d.id);
+          drawDevices();
+        };
+      }
+      // Обновление живёт внутри карточки: в отдельной настроечной строке
+      // оно рисовалось пустой рамкой во всю ширину.
+      const foot = devBox.createDiv({ cls: "oa-cn-dev-foot" });
+      const again = foot.createEl("button", { text: t("Refresh the list") });
+      again.onclick = () => drawDevices();
+
+      /* Отключить все разом — когда телефонов накопилось больше, чем
+         помнишь, а отключать их по одному незачем. Это не то же самое,
+         что сброс кода: код остаётся, и любой из них можно подключить
+         обратно, введя его заново.
+
+         Спрашиваем не окном, а самой кнопкой: одно лишнее нажатие
+         защищает не хуже, а окно посреди списка выглядит паникой. */
+      if (list.length) {
+        const all = foot.createEl("button", { cls: "mod-warning", text: t("Disconnect all") });
+        let armed = false;
+        all.onclick = async () => {
+          if (!armed) { armed = true; all.setText(t("Disconnect all — press again")); return; }
+          all.disabled = true;
+          all.setText(t("Disconnecting…"));
+          for (const d of list) await this.plugin.connector.dropDevice(d.id).catch(() => {});
+          // Кнопка быстрой записи — такое же устройство: её номер больше
+          // ничего не значит, и оставить его значило бы соврать разделу
+          // ниже, что быстрая запись всё ещё включена.
+          cn.quick = "";
+          await this.plugin.saveSettings();
+          this.display();
+        };
+      }
+    };
+    drawDevices();
+
+    /* ── Быстрая запись ──────────────────────────────────────────────
+     * Отдельный ключ для кнопки на телефоне. Стоит после списка
+     * устройств не случайно: заведённая кнопка появляется в том же
+     * списке и отключается той же кнопкой, что и телефон.
+     */
+    new Setting(c).setName(t("Quick capture")).setHeading();
+    c.createDiv({ cls: "oa-note", text: t("A key for a phone button or widget: it can only create a note, nothing else. No reading, no editing, no deleting — the assistant is not even started.") });
+
+    new Setting(c)
+      .setName(t("Where a quick note lands"))
+      .setDesc(t("A separate note, or one more line at the end of today's daily note."))
+      .addDropdown((d) => d
+        .addOption("note", t("A new note"))
+        .addOption("daily", t("A line in today's note"))
+        .setValue(cn.quickTo)
+        .onChange(async (v) => { cn.quickTo = v; await this.plugin.saveSettings(); this.display(); }));
+
+    // Папка нужна только для отдельной заметки: строке в сегодняшнем дне
+    // выбирать нечего, и пустое поле рядом с ней только сбивает.
+    if (cn.quickTo === "note") {
+      this.folderField(
+        new Setting(c)
+          .setName(t("Folder for quick notes"))
+          .setDesc(t("Start typing and pick from your own folders. Empty means the folder for new notes from the Vault tab.")),
+        () => cn.quickFolder || "",
+        async (v) => { cn.quickFolder = v; await this.plugin.saveSettings(); },
+        "Inbox",
+      );
+    }
+
+    const qbox = c.createDiv({ cls: "oa-note oa-cn-card" });
+    const paintQuick = (token) => {
+      qbox.empty();
+      if (token) {
+        qbox.createDiv({ cls: "oa-note-title", text: t("Paste this into the shortcut on your phone:") });
+        qbox.createDiv({ cls: "oa-cn-code", text: token });
+        const foot = qbox.createDiv({ cls: "oa-cn-dev-foot" });
+        const cp = foot.createEl("button", { text: t("Copy") });
+        cp.onclick = async () => {
+          try { await navigator.clipboard.writeText(token); cp.setText(t("Copied")); } catch { /* буфера может не быть */ }
+        };
+        qbox.createDiv({ text: t("The key is shown once. Lost it — revoke and create a new one.") });
+      } else {
+        qbox.createDiv({ text: cn.quick
+          ? t("Quick capture is on. The key is stored on the phone, not here.")
+          : !cn.code
+            ? t("No code yet — create a connection code first.")
+            : t("The key has not been created yet — press the button below.") });
+      }
+    };
+    paintQuick("");
+
+    new Setting(c)
+      .addButton((b) => b.setButtonText(t("Create the key")).onClick(async () => {
+        if (!cn.code) { new Notice(t("No code yet — create a connection code first.")); return; }
+        b.setDisabled(true);
+        try {
+          const r = await this.plugin.connector.makeQuickKey();
+          cn.quick = r.device || "";
+          await this.plugin.saveSettings();
+          paintQuick(r.token);
+          drawDevices();
+        } catch (e) {
+          new Notice(t("Could not create the key: {0}", (e && e.message) || String(e)), 8000);
+        } finally { b.setDisabled(false); }
+      }))
+      .addButton((b) => b.setButtonText(t("Revoke")).setWarning().onClick(async () => {
+        if (cn.quick) await this.plugin.connector.dropDevice(cn.quick).catch(() => {});
+        cn.quick = "";
+        await this.plugin.saveSettings();
+        this.display();
+      }));
+
+    c.createDiv({ cls: "oa-note", text: t("Everything is encrypted end to end. The phone and this computer exchange public keys through the relay and each works out the shared secret on its own side, so the relay carries ciphertext it cannot read.") });
+
+    /* Всё, к чему возвращаются раз в год, — под складку. Настройки эти
+       нужные, но глаз обязан пройти мимо них к тому, за чем пришёл. */
+    this.advanced(c, "connector", (a) => {
+      new Setting(a)
+        .setName(t("Check the connection"))
+        .setDesc(t("Asks the relay whether it hears this computer right now."))
+        .addButton((b) => b.setButtonText(t("Check")).onClick(async () => {
+          if (!cn.code) { new Notice(t("No code yet — press Generate.")); return; }
+          b.setButtonText(t("Checking…")).setDisabled(true);
+          try {
+            const r = await this.plugin.connector.req("/api/status?code=" + encodeURIComponent(cn.code));
+            new Notice(t("The server answers. Waiting in the queue: {0}", r.queued), 6000);
+          } catch (e) {
+            new Notice(t("The server is unreachable: {0}", e.message), 8000);
+          } finally { b.setButtonText(t("Check")).setDisabled(false); paint(); }
+        }));
+
+      new Setting(a)
+        .setName(t("Check notifications reach the phone"))
+        .setDesc(t("Sends a test notification to every phone where notifications are on. Switch them on in the app itself, and pick which automations may notify on the Tasks tab."))
+        .addButton((b) => b.setButtonText(t("Send a test")).onClick(async () => {
+          if (!cn.code) { new Notice(t("No code yet — press Generate.")); return; }
+          b.setButtonText(t("Sending…")).setDisabled(true);
+          try {
+            const ok = await this.plugin.connector.notify(
+              t("Test"), t("If you can read this, notifications are working."), "auto");
+            new Notice(ok
+              ? t("Sent. Look at your phone.")
+              : t("Nobody has switched notifications on in the app yet."), 6000);
+          } finally { b.setButtonText(t("Send a test")).setDisabled(false); }
+        }));
+
+      new Setting(a)
+        .setName(t("Relay address"))
+        .setDesc(t("Where the browser and this computer meet. Change it only if you run your own relay."))
+        .addText((tx) => tx.setValue(cn.server).onChange(async (v) => {
+          cn.server = v.trim() || "https://app.eltonlabs.org";
+          await this.plugin.saveSettings();
+        }));
+
+      const more = a.createDiv({ cls: "oa-note" });
+      more.createDiv({ cls: "oa-note-title", text: t("What the app can do") });
+      more.createDiv({ text: t("Voice. What you say into the phone is transcribed here, by your own provider — the same one that hears the panel. The transcript lands in the input field rather than being sent straight off, because speech is misheard and the notes it edits are real.") });
+      more.createDiv({ text: t("Balance. The app shows what is left on your Elton AI account and can top it up. It asks this computer for both, so the key stays here and never travels to the phone.") });
+      more.createDiv({ text: t("A spare entrance. If the phone or this computer cannot reach the relay — a VPN with a foreign exit is the usual reason — both quietly switch to a mirror and return on their own once the direct way works again.") });
+      more.createDiv({ text: t("The secret is different for every device, so one phone cannot read another's messages. A device connected before encryption existed keeps working without it until reconnected — the list above says which is which.") });
+    });
   }
 
   /* ── telegram ───────────────────────────────────────────── */

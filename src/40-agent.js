@@ -339,6 +339,9 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
   const name = s.assistantName || "Assistant";
   const persona = s.persona === "custom" && s.personaCustom ? s.personaCustom : (PERSONAS[s.persona] || PERSONAS.calm);
   const who = s.userName ? `The person you are talking to is ${s.userName}.` : "";
+  // Телефон и телеграм: человек не видит экран компьютера, и единственный
+  // контекст у него — переписка. Часть правил ниже держится на этом.
+  const remoteChannel = channel === "connector" || channel === "telegram";
 
   const lines = [
     `You are ${name}, an assistant living inside the user's Obsidian vault. ${who}`,
@@ -385,6 +388,20 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
   } else {
     lines.push("• Answers are spoken aloud, so write them to be heard: plain sentences, no markdown, no bullet lists, no headings, no code blocks.");
     lines.push("• Keep it to a few sentences unless asked for detail.");
+  }
+
+  /* Куда писать, когда место названо местоимением.
+   *
+   * Живой случай: две записи подряд ушли в «Сентябрь - 2026», а на «напиши
+   * туда телефон 650₽» третья легла в «Мысли» сегодняшнего дня. «Туда»
+   * указывало на заметку из того же разговора, но правило про разделы дня
+   * из описания хранилища оказалось сильнее. У экрана этого не бывает: там
+   * открытая заметка подсказывает сама. С телефона подсказки нет, и весь
+   * контекст — переписка, поэтому сказать об этом надо прямо.
+   */
+  if (remoteChannel) {
+    lines.push("• \"Туда\", \"там же\", \"добавь ещё\", \"допиши\" without a name mean the note you have already been working with IN THIS CONVERSATION — not the daily note and not the inbox. Look back at what you last opened, created or edited, and write there.");
+    lines.push("• A note named in the conversation beats any default rule about where things go. Rules like \"quick thoughts go in the daily note\" are for when no place was named at all.");
   }
 
   if (webSearchOK(s)) {
@@ -468,8 +485,17 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     }
     if (plugin.vault._map) lines.push("", "How this vault is laid out:", plugin.vault._map);
   }
-  if (s.vaultNotes) {
-    lines.push("", "What the user says about how their vault works:", String(s.vaultNotes).slice(0, 2000));
+  /* Что человек сам рассказал про своё хранилище. Либо полем в настройках,
+     либо заметкой «elton-ai» в самом хранилище — тогда описание уезжает
+     вместе с шаблоном, и в новом хранилище ассистент знает структуру, пока
+     никто ничего не настраивал. Поле сильнее: если его заполнили руками,
+     значит именно это и хотели сказать. */
+  let vaultNotes = String(s.vaultNotes || "").trim();
+  if (!vaultNotes) {
+    try { vaultNotes = await plugin.vault.readGuide(); } catch { vaultNotes = ""; }
+  }
+  if (vaultNotes) {
+    lines.push("", "What the user says about how their vault works:", vaultNotes.slice(0, 3500));
   }
 
   // The note that carries the user's own context. Read fresh each turn so
@@ -605,8 +631,17 @@ class Agent {
       ...history,
     ];
 
-    // The note on screen is the strongest clue to what "this" refers to.
-    const active = plugin.lastNote;
+    /* The note on screen is the strongest clue to what "this" refers to —
+       but only for someone who is looking at that screen.
+       From a phone there is no screen: the note open in Obsidian is whatever
+       was left there hours ago, and calling it "the note the user is looking
+       at" makes it win over the conversation. Live case: the reply about
+       «сентябрь-2026» was followed by «добавь туда ещё расходы», and the
+       expenses went into the daily note — because the daily note was open on
+       the computer and had been announced as the thing in front of the user.
+       For remote channels the history is the only honest context. */
+    const remote = channel === "connector" || channel === "telegram";
+    const active = remote ? null : plugin.lastNote;
     let opener = userText;
     if (active && s.canRead && V.inScope(active.path)) {
       try {

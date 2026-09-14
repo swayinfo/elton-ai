@@ -1,7 +1,7 @@
 {
   "id": "elton-ai",
   "name": "Elton AI",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "minAppVersion": "1.8.7",
   "description": "Talk to your vault: ask questions by voice or text, and it searches your notes, writes and files new ones from your own templates, and answers the same way from your Telegram bot.",
   "author": "Elton",

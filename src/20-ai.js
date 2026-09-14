@@ -368,12 +368,64 @@ class AIClient {
    * give webm/opus, iOS gives mp4/AAC — sending one under the other's name is
    * how the assistant ends up "mishearing everything on the phone".
    */
+  /**
+   * Прочитать текст с фотографии.
+   *
+   * Тем же путём, что и звук, — через обычный чат: это единственная форма,
+   * которую понимают все облачные провайдеры. Модель берётся быстрая: здесь
+   * не нужно рассуждать, нужно аккуратно переписать увиденное.
+   *
+   * Просим именно переписать, а не пересказать. Снимок бумажной страницы —
+   * это чужой текст, и додумывать за него нельзя: неразобранное честнее
+   * пометить, чем угадать.
+   */
+  async readPhoto(base64Image, mime = "image/jpeg") {
+    const p = this.profile(true);
+    if (p.id === "local") throw new Error("no-cloud");
+    const spoken = this.s.speechLang || LANG;
+    const named = spoken === "ru" ? "Russian" : "English";
+    const res = await this.post("/v1/chat/completions", {
+      model: p.id === "openai" ? "gpt-4o-mini" : "google/gemini-2.5-flash",
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Read every piece of text in this photo and write it out. "
+              + `It is most likely handwritten or printed ${named}. `
+              + "Copy it, do not summarise and do not rephrase. Keep the original "
+              + "structure: headings, lists, numbering, indentation. Keep formulas "
+              + "and numbers exactly as written. "
+              // Кириллица и латиница делят вид у половины букв, и модель
+              // переписывает CAC как САС. Для сокращений это важно: искать
+              // потом по заметкам будут латиницей.
+              + "Latin abbreviations and terms (LTV, CAC, ARPU, SQL, KPI and the like) "
+              + "must stay in Latin letters, never transliterated into Cyrillic. "
+              + "If a word is genuinely unreadable, write [неразборчиво] in its place "
+              + "instead of guessing. If the photo has no text at all, reply with "
+              + "the single word: NOTEXT. Reply with the text only — no commentary.",
+          },
+          { type: "image_url", image_url: { url: `data:${mime};base64,${base64Image}` } },
+        ],
+      }],
+      max_tokens: 4000,
+      temperature: 0,
+    }, { profile: p });
+    // Ответ лежит в res.json, а не в самом res: post отдаёт ответ запроса
+    // целиком — со статусом и заголовками. Без .json здесь всегда выходила
+    // пустая строка, а человек в ответ получал «на фотографии не видно
+    // текста» — при том что модель текст прочитала.
+    const out = res.json && res.json.choices && res.json.choices[0]
+      && res.json.choices[0].message;
+    return String((out && out.content) || "").trim();
+  }
+
   async transcribe(base64Audio, format = "webm") {
     const p = this.profile(true);
     if (p.id === "local") throw new Error("no-cloud");
-    // Audio goes through the chat endpoint rather than /audio/transcriptions:
-    // it is the one shape all three cloud providers accept, and it lets us
-    // pass a hint about what the audio is likely to contain.
+    // Everything but OpenAI direct goes through the chat endpoint rather than
+    // /audio/transcriptions: that is the shape those providers accept, and it
+    // lets us pass a hint about what the audio is likely to contain.
     /* The language is stated, not guessed.
      *
      * Left to work it out, the model hears Russian and sometimes writes
@@ -388,8 +440,9 @@ class AIClient {
     const spoken = this.s.speechLang || LANG;
     const named = spoken === "ru" ? "Russian" : "English";
     const script = spoken === "ru" ? " Write it in Cyrillic." : "";
+    if (p.id === "openai") return this.transcribeDirect(p, base64Audio, format, spoken);
     const res = await this.post("/v1/chat/completions", {
-      model: p.id === "openai" ? "gpt-4o-mini-transcribe" : "google/gemini-2.5-flash",
+      model: "google/gemini-2.5-flash",
       messages: [{
         role: "user",
         content: [
@@ -407,6 +460,64 @@ class AIClient {
     }, { profile: p });
     const txt = res.json?.choices?.[0]?.message?.content;
     return String(txt || "").trim();
+  }
+
+  /**
+   * OpenAI direct: the transcript comes from /v1/audio/transcriptions.
+   *
+   * Its chat endpoint refuses a transcription model outright — HTTP 404,
+   * "this is not a chat model" — and the chat models that do take audio only
+   * accept wav and mp3, never the webm or mp4 a recorder hands us. The
+   * dedicated endpoint takes both, so that is the door for this provider.
+   * It wants multipart, which requestUrl will not build, so it is built here.
+   */
+  async transcribeDirect(p, base64Audio, format, spoken) {
+    const bin = atob(base64Audio);
+    const audio = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) audio[i] = bin.charCodeAt(i);
+
+    const boundary = "----EltonAI" + Date.now().toString(36);
+    /* Заголовки и границы в multipart/form-data разделяются именно CRLF.
+       На обычном переводе строки разборщик OpenAI отвечает 400 и жалуется
+       на форму, а не на звук, — и голос не работает вообще ни на чём.
+       Поэтому перевод строки здесь вынесен в константу: настоящий CRLF
+       внутри шаблонной строки не виден глазом и его уже однажды
+       выпрямил автоформат, после чего запись голоса замолчала. */
+    const CRLF = "\r\n";
+    const field = (name, value) =>
+      `--${boundary}${CRLF}`
+      + `Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}`
+      + `${value}${CRLF}`;
+    const enc = new TextEncoder();
+    const head = enc.encode(
+      field("model", "gpt-transcribe")
+      + field("language", spoken)
+      + `--${boundary}${CRLF}`
+      + `Content-Disposition: form-data; name="file"; filename="audio.${format}"${CRLF}`
+      + `Content-Type: audio/${format}${CRLF}${CRLF}`);
+    const tail = enc.encode(`${CRLF}--${boundary}--${CRLF}`);
+    const body = new Uint8Array(head.length + audio.length + tail.length);
+    body.set(head, 0);
+    body.set(audio, head.length);
+    body.set(tail, head.length + audio.length);
+
+    const res = await requestUrl({
+      url: joinUrl(p.base, "/v1/audio/transcriptions"),
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + p.key,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      },
+      body: body.buffer,
+      throw: false,
+    });
+    if (res.status < 200 || res.status >= 300) {
+      let detail = "";
+      try { detail = (res.json && res.json.error && res.json.error.message) || String(res.text || "").slice(0, 200); }
+      catch { detail = String(res.text || "").slice(0, 200); }
+      throw new Error(`HTTP ${res.status} — ${detail}`);
+    }
+    return String((res.json && res.json.text) || "").trim();
   }
 
   /**

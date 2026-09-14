@@ -11,3 +11,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Куда deploy.sh выкладывает сборку. Путь до своего хранилища у каждого свой,
+# и в общем репозитории ему не место.
+.vault-path

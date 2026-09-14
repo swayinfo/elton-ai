@@ -1502,6 +1502,437 @@ function eq(actual, expected, name) {
     ok(/^Puck/.test(T.t("Puck")) || true, "неизвестная строка не ломает перевод");
   }
 
+  /* ── Quick capture: the one path that must not reach the agent ── */
+  describe("Быстрая запись с телефона");
+  {
+    /* Собираем ровно то, что нужно мосту: настройки, хранилище и ответ.
+       Агента здесь нет намеренно — если перехват сломается, тест упадёт
+       не проверкой, а исключением, и это тоже правильный сигнал. */
+    const build = (over = {}) => {
+      const made = [];
+      const replies = [];
+      const plugin = {
+        settings: Object.assign({
+          canCreate: true,
+          newNoteFolder: "",
+          connector: { enabled: true, code: "abc", server: "s", quick: "d1", quickFolder: "" },
+        }, over.settings || {}),
+        saveSettings: async () => {},
+        vault: {
+          createNote: async (title, body, folder) => {
+            made.push({ title, body, folder });
+            return new H.TFile((folder ? folder + "/" : "") + title + ".md");
+          },
+        },
+      };
+      const cn = new T.ConnectorBridge(plugin);
+      cn.running = true;
+      cn.reply = async (ref, text) => { replies.push(text); };
+      cn.req = async () => { throw new Error("сеть в тестах недоступна"); };
+      return { cn, made, replies, plugin };
+    };
+
+    // Сообщение от ключа кнопки: заметка есть, ассистента нет.
+    {
+      const { cn, made, replies } = build();
+      await cn.handle({ id: "m1", device: "d1", body: "купить билеты в Батуми" });
+      eq(made.length, 1, "заметка создаётся");
+      eq(made[0].title, "купить билеты в Батуми", "заголовок — первая строка");
+      ok(made[0].body.includes("купить билеты в Батуми"), "текст попадает в тело");
+      eq(replies.length, 1, "телефону отвечают");
+      ok(replies[0].includes("Записал"), "и говорят, что записали");
+    }
+
+    // Тот же мост, но сообщение с обычного телефона — перехвата быть не должно.
+    // Ассистента в заглушке нет, поэтому дальше по общему пути код упадёт:
+    // именно это и доказывает, что до общего пути он дошёл.
+    {
+      const { cn, made } = build();
+      let opened = 0;
+      const real = cn.openFrom.bind(cn);
+      cn.openFrom = async (from, raw) => { opened++; return real(from, raw); };
+
+      await cn.handle({ id: "m2a", device: "d1", body: "мысль" });
+      eq(opened, 0, "сообщение кнопки до общего пути не доходит");
+
+      await cn.handle({ id: "m2b", device: "d2", body: "что я вчера писал?" }).catch(() => {});
+      eq(opened, 1, "а сообщение обычного телефона — доходит, к ассистенту");
+      eq(made.length, 1, "и заметку без ассистента создало только первое");
+    }
+
+    // Многострочная мысль: заголовок из первой строки, всё остальное — в теле.
+    {
+      const { cn, made } = build();
+      await cn.handle({ id: "m3", device: "d1", body: "Идея: канал про Obsidian\nснимать по субботам" });
+      eq(made[0].title, "Идея канал про Obsidian", "из заголовка убраны запрещённые в имени файла знаки");
+      ok(made[0].body.includes("снимать по субботам"), "вторая строка остаётся в теле");
+    }
+
+    // Пустое сообщение — не повод плодить заметки «Untitled».
+    {
+      const { cn, made, replies } = build();
+      await cn.handle({ id: "m4", device: "d1", body: "   \n  " });
+      eq(made.length, 0, "пустое сообщение не создаёт заметку");
+      eq(replies.length, 0, "и не порождает ответа");
+    }
+
+    // Запрет на создание заметок — тот же, что и везде: тут его не обойти.
+    {
+      const { cn, made, replies } = build({ settings: { canCreate: false } });
+      await cn.handle({ id: "m5", device: "d1", body: "мысль" });
+      eq(made.length, 0, "выключенное создание заметок закрывает и этот путь");
+      ok(replies[0].includes("выключено"), "и человеку говорят почему");
+    }
+
+    /* Куда падают заметки. Пустое поле в настройке обещает «папку новых
+       заметок из вкладки Хранилище» — обещание проверяется здесь, потому
+       что раньше в этом месте стояло жёстко вписанное «inbox». */
+    {
+      const a = build({ settings: { newNoteFolder: "0. Files/5. Inbox" } });
+      await a.cn.handle({ id: "m6", device: "d1", body: "мысль" });
+      eq(a.made[0].folder, "0. Files/5. Inbox", "пусто — берётся папка новых заметок");
+
+      const b = build({
+        settings: {
+          newNoteFolder: "0. Files/5. Inbox",
+          connector: { enabled: true, code: "abc", server: "s", quick: "d1", quickFolder: "Идеи" },
+        },
+      });
+      await b.cn.handle({ id: "m7", device: "d1", body: "мысль" });
+      eq(b.made[0].folder, "Идеи", "заполненное поле сильнее");
+
+      const c = build();
+      await c.cn.handle({ id: "m8", device: "d1", body: "мысль" });
+      eq(c.made[0].folder, "inbox", "не настроено ничего — входящие");
+    }
+
+    /* Выдача ключа. Дважды нажатая кнопка «Создать ключ» когда-то оставляла
+       прошлое устройство жить на сервере — а плагин уже не считал его
+       кнопкой и пускал его сообщения к ассистенту со всеми правами. */
+    {
+      const { cn } = build();
+      const dropped = [];
+      let devices = [
+        { id: "old1", name: "Quick capture", seen: 1 },
+        { id: "phone", name: "iPhone", seen: 2 },
+      ];
+      cn.listDevices = async () => devices;
+      cn.dropDevice = async (id) => { dropped.push(id); return true; };
+      cn.req = async (path, body) => {
+        ok(path === "/api/pair", "ключ заводится тем же способом, что и телефон");
+        eq(body.pub, "", "но без открытого ключа — «Команды» шифровать не умеют");
+        devices = [{ id: "new1", name: "Quick capture", seen: 9 }];
+        return { token: "t-новый" };
+      };
+      const r = await cn.makeQuickKey();
+      eq(dropped, ["old1"], "старая кнопка отзывается, чужой телефон не трогают");
+      eq(r.device, "new1", "номер нового устройства возвращается");
+      eq(r.token, "t-новый", "и сам ключ");
+    }
+
+    // А если номер устройства выяснить не удалось — ключ не отдаём вовсе.
+    {
+      const { cn } = build();
+      cn.listDevices = async () => [];
+      cn.dropDevice = async () => true;
+      cn.req = async () => ({ token: "t" });
+      let threw = false;
+      try { await cn.makeQuickKey(); } catch { threw = true; }
+      ok(threw, "без номера устройства ключ не выдаётся: иначе он был бы с полными правами");
+    }
+  }
+
+  /* ── What changed since last time ──────────────────────── */
+  describe("Окно «Что нового»");
+  {
+    eq(T.DEFAULT_SETTINGS.seenVersion, "", "у тех, кто ставил плагин раньше, версия не отмечена — окно им и предназначено");
+    T.setLang("en");
+    eq(T.appUrl(), "https://eltonlabs.org/en/elton-ai-app", "по-английски ссылка ведёт на английскую страницу");
+    T.setLang("ru");
+    eq(T.appUrl(), "https://eltonlabs.org/elton-ai-app", "по-русски — на русскую");
+  }
+
+  /* ── Куда попадает быстрая запись ───────────────────────── */
+  describe("Быстрая запись: заметка или строка в дне");
+  {
+    const build = (over = {}) => {
+      const made = [];
+      const appended = [];
+      const replies = [];
+      const plugin = {
+        settings: Object.assign({
+          canCreate: true,
+          canEdit: true,
+          newNoteFolder: "",
+          connector: { enabled: true, code: "abc", server: "s", quick: "d1", quickFolder: "", quickTo: "note" },
+        }, over.settings || {}),
+        saveSettings: async () => {},
+        vault: {
+          createNote: async (title, body, folder) => {
+            made.push({ title, folder });
+            return new H.TFile((folder ? folder + "/" : "") + title + ".md");
+          },
+          ensureDailyNote: async () => (over.noDaily ? null : new H.TFile("Дневники/06-09-2026.md")),
+          appendToNote: async (file, line, heading) => { appended.push({ file: file.basename, line, heading }); },
+        },
+      };
+      const cn = new T.ConnectorBridge(plugin);
+      cn.running = true;
+      cn.reply = async (ref, text) => { replies.push(text); };
+      cn.req = async () => { throw new Error("сеть в тестах недоступна"); };
+      return { cn, made, appended, replies };
+    };
+
+    // По умолчанию — как было: отдельная заметка.
+    {
+      const { cn, made, appended } = build();
+      await cn.handle({ id: "q1", device: "d1", body: "купить билеты" });
+      eq(made.length, 1, "по умолчанию создаётся отдельная заметка");
+      eq(appended.length, 0, "и ничего никуда не дописывается");
+    }
+
+    // Выбран день — строка уходит в конец сегодняшней заметки.
+    {
+      const { cn, made, appended, replies } = build({
+        settings: { connector: { enabled: true, code: "abc", server: "s", quick: "d1", quickFolder: "", quickTo: "daily" } },
+      });
+      await cn.handle({ id: "q2", device: "d1", body: "потратил 400 на такси" });
+      eq(made.length, 0, "новой заметки не появляется");
+      eq(appended.length, 1, "строка уходит в ежедневную заметку");
+      eq(appended[0].heading, undefined, "и именно в конец файла, без раздела");
+      ok(/^- \d\d:\d\d потратил 400 на такси$/.test(appended[0].line), "строка — пункт списка со временем");
+      ok(replies[0].includes("Дописал"), "телефону отвечают, что дописали");
+    }
+
+    // Многострочную мысль в дневник кладём одной строкой: иначе список рвётся.
+    {
+      const { cn, appended } = build({
+        settings: { connector: { enabled: true, code: "abc", server: "s", quick: "d1", quickFolder: "", quickTo: "daily" } },
+      });
+      await cn.handle({ id: "q3", device: "d1", body: "мысль\nпродолжение" });
+      ok(!appended[0].line.includes("\n"), "переносов в строке не остаётся");
+      ok(appended[0].line.includes("мысль продолжение"), "текст при этом целый");
+    }
+
+    // Дописывание — правка, и отдельный выключатель правки её закрывает.
+    {
+      const { cn, appended, replies } = build({
+        settings: {
+          canEdit: false,
+          connector: { enabled: true, code: "abc", server: "s", quick: "d1", quickFolder: "", quickTo: "daily" },
+        },
+      });
+      await cn.handle({ id: "q4", device: "d1", body: "мысль" });
+      eq(appended.length, 0, "с выключенной правкой в дневник не пишем");
+      ok(replies[0].includes("Правка"), "и говорим об этом человеку");
+    }
+
+    // Ежедневной заметки нет и создать её нечем — молчать нельзя.
+    {
+      const { cn, appended, replies } = build({
+        noDaily: true,
+        settings: { connector: { enabled: true, code: "abc", server: "s", quick: "d1", quickFolder: "", quickTo: "daily" } },
+      });
+      await cn.handle({ id: "q5", device: "d1", body: "мысль" });
+      eq(appended.length, 0, "дописывать некуда");
+      ok(replies[0].length > 0, "но человеку отвечают, а не молчат");
+    }
+  }
+
+  /* ── «туда» с телефона ──────────────────────────────────── */
+  describe("Открытая на компьютере заметка и телефон");
+  {
+    /* Живой случай: спросили про «сентябрь-2026», следом сказали «добавь туда
+       ещё расходы» — и расходы ушли в ежедневную заметку, потому что она была
+       открыта на компьютере и подавалась модели как «то, на что человек
+       сейчас смотрит». С телефона на неё никто не смотрел. */
+    const askedWith = async (channel) => {
+      const app = H.fakeApp();
+      // Дерево папок пустое, но спросить его инструменты обязаны — без этого
+      // сборка инструментов падает раньше, чем дело доходит до сообщений.
+      app.vault.getRoot = () => ({ children: [] });
+      app.vault.getMarkdownFiles = () => [];
+      const plugin = H.fakePlugin(app, {});
+      plugin.lastNote = new H.TFile("Дневники/06-09-2026.md");
+      plugin.ai = { skillIndex: async () => [] };
+      plugin.vault.read = async () => "тело ежедневной заметки";
+      plugin.vault.inScope = () => true;
+      const agent = new T.Agent(plugin);
+      // Ход состоит из нескольких заходов к модели; нас интересует первый —
+      // именно в нём лежит то, что человек сказал, и подсказка про экран.
+      let seen = null;
+      agent.ask = async (messages) => {
+        if (!seen) seen = messages.slice();
+        return { content: "готово" };
+      };
+      await agent.run([], "добавь туда ещё расходы", {
+        onEvent: () => {}, confirm: async () => false, onSegment: null, written: true, channel,
+      });
+      return String((seen[seen.length - 1] || {}).content || "");
+    };
+
+    const local = await askedWith("");
+    ok(local.includes("open on the user's screen"), "в панели открытая заметка по-прежнему подсказка");
+
+    for (const ch of ["connector", "telegram"]) {
+      const remote = await askedWith(ch);
+      ok(!remote.includes("open on the user's screen"), `с канала «${ch}» открытая заметка не навязывается`);
+      eq(remote, "добавь туда ещё расходы", `и до модели доходит ровно сказанное (${ch})`);
+    }
+
+    /* Раз экрана нет, «туда» может опереться только на переписку — и об этом
+       модели надо сказать словами, иначе побеждает правило «куда класть по
+       умолчанию» из описания хранилища. Живой случай: две записи ушли в
+       «Сентябрь - 2026», а третья — в «Мысли» сегодняшнего дня. */
+    const sysFor = async (channel) => {
+      const app = H.fakeApp();
+      app.vault.getRoot = () => ({ children: [] });
+      app.vault.getMarkdownFiles = () => [];
+      const plugin = H.fakePlugin(app, {});
+      plugin.lastNote = null;
+      plugin.ai = { skillIndex: async () => [] };
+      const agent = new T.Agent(plugin);
+      let seen = null;
+      agent.ask = async (messages) => { if (!seen) seen = messages.slice(); return { content: "ок" }; };
+      await agent.run([], "привет", {
+        onEvent: () => {}, confirm: async () => false, onSegment: null, written: true, channel,
+      });
+      return String((seen[0] || {}).content || "");
+    };
+
+    for (const ch of ["connector", "telegram"]) {
+      const sys = await sysFor(ch);
+      ok(sys.includes("IN THIS CONVERSATION"), `с канала «${ch}» сказано, что «туда» — заметка из разговора`);
+      ok(sys.includes("beats any default rule"), `и что разговор сильнее правил по умолчанию (${ch})`);
+    }
+    const panel = await sysFor("");
+    ok(!panel.includes("IN THIS CONVERSATION"), "в панели этого правила нет — там подсказывает открытая заметка");
+  }
+
+  /* ── Описание хранилища из заметки ──────────────────────── */
+  describe("Хранилище рассказывает о себе само");
+  {
+    /* Поле «что ещё стоит знать о вашей системе» пустое почти у всех, а без
+       него ассистент гадает, куда класть задачу и что лежит в папке. Шаблон
+       может привезти это описание заметкой — тогда в новом хранилище знание
+       есть с первой минуты, и настраивать нечего. */
+    const systemFor = async (settings, withGuide) => {
+      const app = H.fakeApp();
+      app.vault.getRoot = () => ({ children: [] });
+      const guide = new H.TFile("0. Files/0. Settings/elton-ai.md");
+      app.vault.getMarkdownFiles = () => (withGuide ? [guide] : []);
+      app.vault.cachedRead = async () => "---\ntags: x\n---\nЗадачи живут в разделе «Мои планы на день».";
+      const plugin = H.fakePlugin(app, settings);
+      plugin.lastNote = null;
+      plugin.ai = { skillIndex: async () => [] };
+      plugin.vault.inScope = () => true;
+      const agent = new T.Agent(plugin);
+      let seen = null;
+      agent.ask = async (messages) => { if (!seen) seen = messages.slice(); return { content: "готово" }; };
+      await agent.run([], "привет", {
+        onEvent: () => {}, confirm: async () => false, onSegment: null, written: true, channel: "",
+      });
+      return String((seen[0] || {}).content || "");
+    };
+
+    const fromNote = await systemFor({ vaultNotes: "" }, true);
+    ok(fromNote.includes("Мои планы на день"), "с пустым полем описание берётся из заметки «elton-ai»");
+    ok(!fromNote.includes("tags: x"), "свойства заметки в промпт не уезжают");
+
+    const typed = await systemFor({ vaultNotes: "Своё описание руками" }, true);
+    ok(typed.includes("Своё описание руками"), "заполненное поле сильнее заметки");
+    ok(!typed.includes("Мои планы на день"), "и заметка тогда не подмешивается");
+
+    const none = await systemFor({ vaultNotes: "" }, false);
+    ok(!none.includes("What the user says about how their vault works"),
+      "нет ни поля, ни заметки — раздела в промпте нет вовсе");
+  }
+
+  /* ── Файлы, которые не заметки ──────────────────────────── */
+  describe("Данные системы вне markdown");
+  {
+    /* Тренировки в этом хранилище живут не в заметках, а в двух json рядом
+       с ними: план считает скрипт, отметки лежат по датам. Поиск такие файлы
+       не индексирует и не должен — но прочитать и переписать их по точному
+       пути обязан, иначе «отметь, что сделал» невозможно в принципе. */
+    const app = H.fakeApp();
+    const log = new H.TFile("2. Areas/Занятие спортом/training-log.json");
+    let written = null;
+    app.vault.getAbstractFileByPath = (p) => (p === log.path ? log : null);
+    app.vault.getMarkdownFiles = () => [];
+    app.vault.read = async () => '{"2026-09-06": {"Присед": {"done": false}}}';
+    app.vault.modify = async (f, body) => { written = { path: f.path, body }; };
+    const plugin = H.fakePlugin(app, {});
+    const V = plugin.vault;
+
+    const f = V.resolve(log.path);
+    ok(!!f, "json находится по точному пути");
+    eq(f && f.extension, "json", "и это именно он, а не одноимённая заметка");
+
+    eq(V.files().length, 0, "в поиск такие файлы не попадают — там только заметки");
+
+    await V.rewriteNote(f, '{"2026-09-06": {"Присед": {"done": true}}}');
+    ok(written && written.path === log.path, "переписывается тот же файл");
+    ok(written && written.body.includes('"done": true'), "и отметка в нём меняется");
+  }
+
+  /* ── Остановить ход с телефона ──────────────────────────── */
+  describe("Кнопка «остановить»");
+  {
+    /* Пока агент думает, цикл коннектора стоит на нём и очередь не разбирает.
+       Значит про отмену надо спрашивать отдельно — и так, чтобы старый релей,
+       который про такой адрес не знает, ничего не ломал. */
+    const bridge = (answer) => {
+      const plugin = {
+        settings: { connector: { enabled: true, code: "abc", server: "s" } },
+        saveSettings: async () => {},
+      };
+      const cn = new T.ConnectorBridge(plugin);
+      cn.running = true;
+      const asked = [];
+      cn.req = async (path) => { asked.push(path); return answer(path); };
+      return { cn, asked };
+    };
+
+    // Сервер говорит «остановлено» — агент помечен и запрос к модели оборван.
+    {
+      const { cn, asked } = bridge(() => ({ cancelled: true }));
+      let aborted = false;
+      const agent = { cancelled: false, abort: { abort: () => { aborted = true; } } };
+      const stop = cn.watchCancel("m1", agent);
+      await new Promise((r) => setTimeout(r, 2900));
+      stop();
+      ok(asked.length > 0, "плагин спрашивает сервер про отмену");
+      ok(asked[0].startsWith("/api/cancelled?code="), "и спрашивает по своему адресу, с кодом и ссылкой");
+      ok(asked[0].includes("ref=m1"), "передаёт номер сообщения");
+      ok(agent.cancelled, "агент помечен как остановленный");
+      ok(aborted, "запрос к модели оборван, чтобы за него не платить");
+    }
+
+    // Старый релей отвечает ошибкой — это не должно ничего ронять.
+    {
+      const { cn, asked } = bridge(() => { throw new Error("404"); });
+      const agent = { cancelled: false, abort: null };
+      const stop = cn.watchCancel("m2", agent);
+      await new Promise((r) => setTimeout(r, 2900));
+      stop();
+      ok(asked.length > 0, "запрос всё равно уходит");
+      ok(!agent.cancelled, "но без ответа сервера ход не обрывается");
+    }
+
+    // Остановка опроса выключает и сам цикл: сторож не должен жить вечно.
+    {
+      const { cn, asked } = bridge(() => ({ cancelled: false }));
+      const agent = { cancelled: false, abort: null };
+      const stop = cn.watchCancel("m3", agent);
+      await new Promise((r) => setTimeout(r, 2900));
+      stop();
+      const after = asked.length;
+      await new Promise((r) => setTimeout(r, 3000));
+      eq(asked.length, after, "после остановки сторож больше не спрашивает");
+    }
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {

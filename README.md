@@ -178,6 +178,25 @@ Worth knowing up front:
 
 ---
 
+## The connector
+
+Your vault from a phone browser, with nothing installed on the phone. You open the address, type a code once, and write to the same assistant you use in the panel — it runs here, on this computer, and answers from your notes.
+
+**Connecting one.** Connector tab → "Answer from the browser" → "Generate". A code appears; type it on the phone once. The code is a password: anyone holding it can write to your vault, and resetting it disconnects every device at once.
+
+**End to end.** The phone and this computer exchange public keys through the relay and each works out the shared secret on its own side, so what the relay carries is ciphertext it cannot read. A device connected before this existed is listed as "no encryption — reconnect it" until you do.
+
+**Quick capture.** A separate key that can create a note and nothing else — for a Shortcut on an iPhone lock screen, or a widget on Android. No reading, no editing, no deleting: a message from that key is diverted before it ever reaches the assistant. It travels without end-to-end encryption, because a Shortcut cannot derive a shared secret — which is exactly why it is cut down to one action.
+
+Worth knowing up front:
+
+- Same rule as the bot: the computer answers **only while Obsidian is open** on it. Anything sent meanwhile waits in a queue and arrives when you open the vault.
+- The plugin only ever makes outgoing requests. It opens no ports and accepts no incoming connections, which is the only arrangement that works from behind a home router.
+- **It cannot delete notes**, for the same reason the bot cannot: deletion waits for a key press at the keyboard.
+- The connector is off until you switch it on, and switching it off stops every device at once.
+
+---
+
 ## Automations
 
 An automation is an ordinary turn with a saved prompt, fired on a schedule — a morning digest into today's daily note, a weekly summary of your thoughts into a new one.
@@ -268,7 +287,7 @@ There is also a weaker list, **"Left out of the index"**: those notes can still 
 
 ### Where requests go
 
-The plugin never contacts anything except the provider you chose in settings. It carries no key of its own and no hidden addresses; this list is exhaustive.
+The plugin contacts the provider you chose in settings, and — only if you switched them on yourself — the bot and the connector. It carries no key of its own and no hidden addresses; this list is exhaustive.
 
 | Address | When it is used | What is sent |
 |---|---|---|
@@ -279,6 +298,9 @@ The plugin never contacts anything except the provider you chose in settings. It
 | `localhost:5000` | the local Piper voice | only the answer text, to be spoken |
 | `api.telegram.org` | only if you connected a bot | your messages to the bot and the assistant's replies |
 | `media.giphy.com` | only the Telegram waiting animation, once | nothing — a picture is downloaded |
+| `app.eltonlabs.org` | only if you switched the **connector** on | your messages from the app and the assistant's replies — encrypted end to end, so the relay carries text it cannot read. Besides those, your Elton AI key, once every few hours: a connection code is only claimed against a working key, or anyone could reach a vault by inventing twelve characters. The key itself is not stored on the server |
+| `relay.eltonlabs.org` | the same, as a fallback address | the same |
+| `base.eltonlabs.org` | only when you top the balance up from the app | the amount and your key, to get a payment link back |
 | `api.eltonlabs.org/skills` | only with the Elton AI provider | nothing is sent; short guides to Obsidian's own file formats are fetched, so the assistant writes a Kanban board or a Base that actually renders |
 
 Elton AI is the author's own service, for people who would rather not set up an account and a key somewhere first: one balance, topped up from a Telegram bot, no card details left with a foreign provider and no separate signup. There is a free trial to see whether the whole thing suits you — promo code `Gift` — and what it costs, which models it covers and how to top it up is on **[eltonlabs.org/en/elton-ai](https://eltonlabs.org/en/elton-ai)**. Using it is also what pays for this plugin being worked on. Every other provider works without it and the plugin loses nothing.

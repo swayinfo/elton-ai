@@ -2,6 +2,24 @@
  *  Plugin
  * ========================================================== */
 class EltonAI extends ObsidianPlugin {
+  /** Раз в неделю — сколько заметок ждёт индексации. Ничего не делает сама. */
+  async remindIndex() {
+    const s = this.settings;
+    if (!s.indexRemind || !s.semanticSearch) return;
+
+    const WEEK = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - (s.indexRemindAt || 0) < WEEK) return;
+
+    let pending = 0;
+    try { pending = await this.vault.pendingCount(); } catch { return; }
+    // Две-три заметки погоды не делают, а сообщение из-за них — назойливость.
+    if (pending < 15) return;
+
+    s.indexRemindAt = Date.now();
+    await this.saveSettings();
+    new Notice(t("{0} notes are not in the search index yet. Settings → Elton AI → Vault → Index.", pending), 9000);
+  }
+
   async onload() {
     await this.loadSettings();
     setLang(this.settings.lang === "auto" ? null : this.settings.lang);
@@ -22,6 +40,7 @@ class EltonAI extends ObsidianPlugin {
     this.speaker = new Speaker(this);
     this.scheduler = new AutomationScheduler(this);
     this.telegram = new TelegramBridge(this);
+    this.connector = new ConnectorBridge(this);
     this.lastNote = null;
 
     this.registerView(VIEW_TYPE, (leaf) => new AssistantView(leaf, this));
@@ -38,9 +57,23 @@ class EltonAI extends ObsidianPlugin {
         .onClick(() => this.askAboutSelection(sel)));
     }));
 
-    this.addSettingTab(new AssistantSettingTab(this.app, this));
+    // Держим ссылку: окно «что нового» открывает настройки сразу
+    // на вкладке коннектора, а вкладка живёт в самой странице.
+    this.settingTab = new AssistantSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
 
     this.registerHoldKey();
+
+    /*
+     * Индекс стареет молча: поиск не ломается, он просто перестаёт видеть
+     * написанное на прошлой неделе. Раз в неделю говорим об этом вслух.
+     *
+     * Через минуту после запуска, а не сразу: человек открыл хранилище,
+     * чтобы работать, а не читать сообщения. Дальше — раз в сутки, этого
+     * с запасом хватает для недельного напоминания.
+     */
+    this.registerInterval(window.setInterval(() => this.remindIndex(), 24 * 60 * 60 * 1000));
+    window.setTimeout(() => this.remindIndex(), 60 * 1000);
 
     // Which note is on screen decides what "this" and "here" mean. The
     // workspace's own idea of the active file goes stale the moment focus
@@ -61,16 +94,26 @@ class EltonAI extends ObsidianPlugin {
       // The bot answers from the vault, so it must not start before the vault
       // is there to answer from.
       this.telegram.start();
+      this.connector.start();
 
       if (!this.settings.onboarded) {
         // Persist the flag before opening: a sync writing data.json can
         // re-trigger onload, and greeting someone twice is worse than not
         // greeting them at all.
         this.settings.onboarded = true;
+        // Новичку рассказывать, что изменилось, нечего: он ничего
+        // предыдущего не видел, и онбординг покажет то же самое подробнее.
+        this.settings.seenVersion = this.manifest.version;
         await this.saveSettings();
         new OnboardingModal(this.app, this).open();
-      } else if (this.settings.openOnStartup) {
-        this.activateView();
+      } else {
+        if (this.settings.openOnStartup) this.activateView();
+        if (this.settings.seenVersion !== this.manifest.version) {
+          // Флаг раньше окна по той же причине, что и выше.
+          this.settings.seenVersion = this.manifest.version;
+          await this.saveSettings();
+          new WhatsNewModal(this.app, this, this.manifest.version).open();
+        }
       }
     });
 
@@ -104,6 +147,11 @@ class EltonAI extends ObsidianPlugin {
       id: "onboarding",
       name: t("Open the setup guide"),
       callback: () => new OnboardingModal(this.app, this).open(),
+    });
+    this.addCommand({
+      id: "whats-new",
+      name: t("What’s new"),
+      callback: () => new WhatsNewModal(this.app, this, this.manifest.version).open(),
     });
     this.addCommand({
       id: "scenario",
@@ -190,6 +238,7 @@ class EltonAI extends ObsidianPlugin {
     this.recorder.stop();
     this.ambience.stop();
     this.telegram.stop();
+    if (this.connector) this.connector.stop();
   }
 
   async loadSettings() {
@@ -226,6 +275,20 @@ class EltonAI extends ObsidianPlugin {
       this._syncCmds = obsidian.debounce(() => { this.telegram.syncCommands(); }, 4000);
     }
     this._syncCmds();
+
+    /* Список промптов приложение узнаёт один раз, когда подключается. Значит
+       после правки сценария в телефоне остаётся вчерашний список — до
+       перезапуска Obsidian. Сверяем отпечаток и, если он изменился, просим
+       коннектор рассказать о себе заново: он сделает это на ближайшем круге,
+       в пределах полуминуты. Отпечаток нужен потому, что сюда приходят на
+       каждое нажатие клавиши в настройках. */
+    const stamp = JSON.stringify((this.settings.scenarios || [])
+      .filter((x) => x && x.enabled && x.prompt)
+      .map((x) => [x.emoji, x.name, x.prompt]));
+    if (stamp !== this._promptStamp) {
+      this._promptStamp = stamp;
+      if (this.connector) this.connector.refreshAbout();
+    }
   }
 
   /** Open the panel where the user asked for it, reusing an existing one. */
@@ -309,3 +372,5 @@ class EltonAI extends ObsidianPlugin {
 }
 
 module.exports = EltonAI;
+
+/* nosourcemap */
