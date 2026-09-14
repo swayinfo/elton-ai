@@ -1,273 +1,126 @@
-# Elton AI
+# 🧠 Elton AI
 
-*English · [Русский](README.ru.md) · [eltonlabs.org/en/elton-ai](https://eltonlabs.org/en/elton-ai)*
+Talk to your Obsidian vault — by voice or in writing. It searches your notes,
+answers out of them, files new ones from your own templates, and reaches you on
+your phone from a browser or a Telegram bot.
 
-A voice and text assistant that works on the notes you already have. It searches your vault, answers from it, creates and edits notes, files them where they belong and puts things on your screen — by voice, by typing, or from your phone through a Telegram bot of your own.
+**[Русский](#-elton-ai-по-русски) · English**
 
-![Asking the assistant about the note on screen](docs/elton-ai-demo.gif)
+Works on desktop and on mobile (Android / iOS).
 
-▶ **[Watch the full two-minute demo](docs/elton-ai-demo.mp4)**
+> **A key and a free trial live in the Telegram bot
+> [@elton_ai_obsidian_bot](https://t.me/elton_ai_obsidian_bot).**
+> Open it, press Start, and you have a key. Promo code **Gift** gives you
+> credits to try the whole thing without putting anything in. Your own key from
+> OpenAI, OpenRouter or a local Ollama works just as well — the plugin takes any.
 
-The plugin ships no key of its own: every request goes to the provider you configured. With a local model, nothing leaves your machine at all.
+![Elton AI](docs/promo-hero-en.jpg)
 
-> [!IMPORTANT]
-> **This plugin sends note text to a remote service, and needs an account somewhere to work at all.**
->
-> To answer a question it sends the fragments of your notes that the question needs — plus, in voice mode, the recording of what you said — to whichever of these four you pick:
->
-> - **OpenRouter** or **OpenAI** — your own account and key, paid to them.
-> - **A local model** (Ollama or LM Studio) — nothing leaves your machine, and no payment at all.
-> - **Elton AI** — a service run by the author of this plugin, at `api.eltonlabs.org`, giving access to current models without an account of your own anywhere. **It is a paid service**, sold separately through a Telegram bot; the address is fixed and cannot be changed in settings. It is the default choice in the setup guide, but the plugin is fully usable without it.
->
-> No request is made until you have chosen a provider and entered a key. The plugin collects no analytics and sends nothing anywhere else. The exact list of addresses it can contact is in [Privacy and external services](#privacy-and-external-services) below.
-
-## Two modes
-
-Switched from the button in the panel header, at any time — the conversation survives the switch. Both run on the same engine: the same tools, the same permissions, the same search.
-
-**Reactor** — the voice mode. An instrument panel rather than a chat: the dial in the middle shows what is happening right now. At rest it is small and quiet; while you talk the core pulses with your voice; while it thinks the rings speed up. Clicking the reactor cuts off an answer that has gone on too long.
-
-**Text** — the reading mode. An ordinary conversation with bubbles, markdown in the answers, a copy button on hover, and a list of sources: you can see which notes an answer was built from and click through to them. There is a dictation button, so you can speak a question without leaving text mode. Answers are only read aloud on request — if you are typing, you want to read.
+|  |  |
+| --- | --- |
+| ![A project in one sentence](docs/promo-kanban-en.jpg) | ![Ask your own notes](docs/promo-ask-en.jpg) |
+| **A project in one sentence** — say what you want and get a real Kanban board, built from your own template, opened for you. | **Ask your own notes** — in plain words, not "find a file". The answer is assembled out of what you wrote, not out of the internet. |
+| ![My week in thoughts](docs/promo-recall-en.jpg) | ![Capture a thought](docs/promo-write-en.jpg) |
+| **My week in thoughts** — it reads back through the daily notes and tells you what you kept returning to. | **Capture a thought** — one line from the phone lands in today's note. Where exactly is decided by your own settings. |
+| ![Sort out the inbox](docs/promo-inbox-en.jpg) | ![Ready-made prompts](docs/promo-slash-en.jpg) |
+| **Sort out the inbox** — it proposes a folder for every loose note and moves nothing until you say the word. | **Ready-made prompts** — type `/` and pick. Your own saved tasks come first, twenty useful ones come after. |
+| ![By voice, on the move](docs/promo-voice-en.jpg) | ![Explain this note](docs/promo-explain-en.jpg) |
+| **By voice, on the move** — hold, speak, and the transcript lands in the input before anything is sent, so a misheard word is yours to fix. | **Explain this note** — it answers about the note in front of you, in plain words, and will give an example if you ask. |
+| ![A photo of your notes](docs/promo-photo-en.jpg) | ![One tap from the lock screen](docs/promo-quick-en.jpg) |
+| **A photo of your notes** — photograph a page, say where it goes, and the note is created from your template. | **One tap from the lock screen** — a write-only key for a shortcut that can create a note and nothing else. |
 
 ---
 
-## Installing
+## What it does
 
-### From the community catalogue
+**Answers out of your vault.** Keyword search and, if you switch it on, meaning
+search over an embedding index. It reads the note on screen, the daily notes, a
+folder, a span of days. It says when it found nothing instead of inventing an
+answer — and for a question about the world rather than about your notes, it
+simply answers, then points at where your own notes touch it.
 
-Settings → Community plugins → Browse → search for **Elton AI** → Install → Enable.
+**Writes and files.** New notes from your templates, into the folder the vault
+already uses for them. Appends a line under a heading. Edits a note in place.
+Builds Kanban boards and Bases that actually render. Never deletes without
+asking.
 
-### With BRAT
+**Voice both ways.** Hold a key and talk, or run a hands-free conversation.
+Speech in through your provider; speech out through a cloud voice or a local
+Piper, so the vault can talk without anything leaving the machine.
 
-1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from the community catalogue
-2. Settings → BRAT → **Add Beta Plugin** → paste `swayinfo/elton-ai`
-3. Enable **Elton AI** in the community plugins list
+**Tasks and automations.** A saved prompt behind a phrase ("what was I thinking
+about") or behind a time of day. Results land in a note, in a notification, in
+Telegram, or in the app.
+
+**Your choice of brain.** Elton AI, OpenRouter, OpenAI directly, or a local
+model in Ollama / LM Studio. You bring the key; the plugin keeps it in this
+vault and nowhere else.
+
+---
+
+## The app on your phone
+
+The headline of 3.0. The Connector tab gives you a code; type it once in the app
+and the whole vault is with you — ask it something, dictate a note, add a line to
+today's. The app installs onto the home screen straight from the browser at
+[app.eltonlabs.org](https://app.eltonlabs.org): no app store, no account.
+
+**Nothing answers on a server — your own computer does**, which is why the notes
+never leave it. So there is one condition: the computer on, Obsidian open, the
+connector switched on. While it sleeps the app says it is not connected, and
+whatever you send waits in the queue and arrives the moment the computer is back.
+
+The phone and the computer derive a shared secret between themselves
+(ECDH P-256 → HKDF → AES-GCM), so the relay in the middle carries text it cannot
+read.
+
+Setting it up step by step, with a short video per step:
+**[eltonlabs.org/en/elton-ai-app](https://eltonlabs.org/en/elton-ai-app)**
+
+---
+
+## Install
+
+Settings → Community plugins → Browse → search for **Elton AI** → Install →
+Enable. If *Restricted mode* is on at the top of that page, turn it off first —
+while it is on, Obsidian runs no community plugin at all.
+
+The setup guide opens the first time you run it, and can be reopened any time
+from Settings → Elton AI → **Show the setup guide again**.
+
+### Beta versions, with BRAT
+
+1. Install **BRAT** from the community plugins list.
+2. BRAT → *Add beta plugin* → `swayinfo/elton-ai`
+3. Enable **Elton AI** in Community plugins.
 
 ### By hand
 
-1. Download `main.js`, `manifest.json` and `styles.css` from the [releases page](https://github.com/swayinfo/elton-ai/releases)
-2. Put them in `<your vault>/.obsidian/plugins/elton-ai/`
-3. Settings → Community plugins → enable **Elton AI**
-
-The setup guide opens the first time you run it, and can be reopened any time from Settings → Elton AI → **Show the setup guide again**.
-
-The panel opens from the robot icon in the ribbon, or from the command palette.
+Download `main.js`, `manifest.json` and `styles.css` from the
+[latest release](https://github.com/swayinfo/elton-ai/releases/latest) into
+`<vault>/.obsidian/plugins/elton-ai/`, then reload Obsidian.
 
 ---
 
-## Choosing a provider
-
-All four speak the same protocol, so switching between them keeps the rest of your settings.
-
-| Provider | What you need | Who it suits |
-|---|---|---|
-| **Elton AI** | a key | Ready to go, nothing to configure |
-| **OpenRouter** | a key | Hundreds of models, pay as you go |
-| **Local model** | Ollama or LM Studio running | Privacy: not one note leaves the machine |
-| **OpenAI** | a key | Straight to the source |
-
-> **The model has to support tool calling.** Without it the assistant can only talk — it cannot search your notes or edit them.
-
-Keys are stored in `data.json` inside the plugin folder as plain text, the way every Obsidian plugin stores them. Do not keep keys in a vault you share or sync publicly.
-
-### Local model
-
-Install [Ollama](https://ollama.com), then in a terminal:
-
-```
-ollama pull qwen2.5:3b
-```
-
-In settings pick "Local model", address `http://localhost:11434/v1`, model `qwen2.5:3b`.
-
-Why that one: it answers and calls tools in under a second even on a laptop GPU. Reasoning models like qwen3 spend 15–20 seconds thinking before the first word, which is unusable for a spoken conversation. With a stronger GPU, try `qwen2.5:7b` — it is noticeably smarter.
-
-**What a local setup can and cannot do.** A local model answers locally, and Piper reads the answers out locally — so asking in writing and being answered aloud costs nothing and sends nothing. The one thing that has no local option here is the other direction: turning your speech into text. For that, switch on "Cloud fallback for voice" and give it a cloud key; the text of your notes still never leaves the machine, only the few seconds of audio you just spoke.
-
----
-
-## Voice
-
-### Cloud voice — the default
-With any cloud provider, voice works immediately with nothing to configure. The main voice is Puck: lively, and good at Russian. If it is unavailable the plugin falls back to an OpenAI voice.
-
-### System voice
-Nothing to install, works offline and free. It sounds robotic — this is the option for when there is no connection.
-
-### Piper — a local, lifelike voice
-
-[Piper](https://github.com/rhasspy/piper) synthesises speech on the CPU faster than you can listen to it, and sounds far better than the system voice.
-
-It is a separate program, not part of the plugin: the plugin only talks to it over HTTP. Installed once, by hand.
-
-1. Download `piper_windows_amd64.zip` from its [releases page](https://github.com/rhasspy/piper/releases) and unpack it
-2. Download a voice from [huggingface](https://huggingface.co/rhasspy/piper-voices) — say `en_US-amy-medium` — and put both files (`.onnx` and `.onnx.json`) in a `voices` subfolder
-3. Download [`piper-server.js`](https://github.com/swayinfo/elton-ai/blob/main/piper-server.js) from this repository, put it next to `piper.exe` and run it: `node piper-server.js 5000`
-4. In settings choose the "Piper" engine, address `http://localhost:5000`
-
-The server picks a voice from the language of each phrase, so answers in either language sound right without switching anything.
-
-To have it start with the system, download [`start-piper.vbs`](https://github.com/swayinfo/elton-ai/blob/main/start-piper.vbs), put it alongside, and drop a shortcut to it in the startup folder (`Win+R` → `shell:startup`).
-
-### Hold a key and talk
-
-A key combination that works anywhere in Obsidian: hold it, say what you want, let go. The panel opens itself if it was closed, so you can talk without leaving the note you are in.
-
-Set it on the Voice tab: press "Set", then press the combination. You cannot type it, and it is not an ordinary Obsidian hotkey — Obsidian tells a command when a key goes down and never when it comes up, and "hold" cannot be built on that. The physical key is what is remembered, so a keyboard layout never breaks it.
-
-Next to it, in the panel's own header, is the microphone mode: hands-free (it listens until you go quiet) or push-to-talk. That one lives in the panel rather than in settings, because which you want depends on the room you are in.
-
-### Answer length
-
-Three options on the "Assistant" tab: short (a few paragraphs), normal (a full explanation, the default) and long (thorough).
-
-It is a budget, not a guillotine. If an answer does hit the ceiling, the plugin asks for the rest and joins it on — a sentence never stops halfway. And you do not wait for it: the finished part goes to the voice immediately while the remainder loads in the background.
-
-### Text and voice, side by side
-
-An answer arrives as text long before the voice catches up with it. So by default the text keeps pace with the speech: only what has been spoken is on screen, and the rest opens with a "Show the answer" button.
-
-If you would rather see the whole answer at once, turn on "Show the answer text" on the "Interface" tab, and the button disappears as it is no longer needed.
-
----
-
-## Interrupting
-
-When enabled, you can start talking over an answer and the assistant falls silent at once and listens. The microphone stays open for the whole conversation.
-
-If background noise keeps cutting it off, raise "Interruption sensitivity". If you find yourself having to raise your voice, lower it.
-
----
-
-## Scenarios
-
-A scenario is a long brief hiding behind a short phrase. You say "thoughts" and the assistant receives not one word but the whole task: go through the daily notes of the last few days, pull out the ideas and abandoned threads, and turn them into something coherent.
-
-The point is that the phrase is recognised locally, in the plugin, not by the model. There is no extra round trip to work out what you meant: the assistant starts answering on the phrase itself.
-
-**How it triggers.** A one-word trigger fires only if you said exactly it: "thoughts" runs the scenario, "write down my thoughts about the project" does not. A trigger of two words or more is caught inside a longer sentence too. Whatever you said around the trigger is passed to the assistant as a separate line of detail — which is why "find connections with this note" works the way it sounds.
-
-**Out of the box:** "What was I thinking about", "What's today" and "Explain this note". Settings adds "Wrap up the day" and "Find connections", and you can write your own: emoji, name, phrases, brief.
-
-**Three ways to start one:** say the phrase, press the button under the reactor (or in an empty chat), or run "Run a scenario" from the command palette.
-
-How scenarios differ from automations: you start a scenario yourself and listen to the answer; an automation fires on a schedule and writes its answer into a note. Both live on the "Tasks" tab: one line each, edited in a window of its own.
-
----
-
-## Telegram
-
-Your vault, reachable without holding it. You write to a bot you own — typed or spoken — and the same assistant on your computer answers, with the same access: it searches your notes, reads them, creates and edits them.
-
-**Connecting one.** Telegram tab → "Set up Telegram". Four steps, saying what you will see at each: what a bot actually is, how to get a token from BotFather, checking the token (the plugin asks Telegram and tells you the bot's name back), and `/start`. No prior experience with bots is assumed.
-
-**It answers exactly one person.** The first to send `/start` becomes the owner; everyone else gets no reply at all.
-
-**Commands.** Every enabled scenario becomes a command in the bot's menu — "Weekly review" → `/weekly_review`. Anything typed after the command rides along as a refinement. Plus `/help` for the list and `/new` to forget the conversation. The menu updates itself when you edit your scenarios.
-
-**Real formatting.** Answers go out as Rich Messages: headings, lists, checkboxes, tables, dividers and collapsible blocks — sources arrive folded away rather than stacked under every reply.
-
-**While you wait**, an animation with a caption that follows the work: "Searching…", "Reading: 06-08-2026", "Writing the answer". You can point it at your own GIF.
-
-Worth knowing up front:
-
-- The bot answers **only while Obsidian is open** on the computer. Messages sent while it is closed arrive the next time you open the vault — Telegram holds them for a day.
-- Set it up on **one computer only**: Telegram gives each message to whoever asks first, so two would answer half each. On a phone the bridge does not start at all.
-- **It cannot delete notes.** Deletion waits for a key press at the keyboard, and over a chat there is nobody to press it, so it declines and says so.
-- The token sits in `data.json` in plain text, like every other key.
-
----
-
-## The connector
-
-Your vault from a phone browser, with nothing installed on the phone. You open the address, type a code once, and write to the same assistant you use in the panel — it runs here, on this computer, and answers from your notes.
-
-**Connecting one.** Connector tab → "Answer from the browser" → "Generate". A code appears; type it on the phone once. The code is a password: anyone holding it can write to your vault, and resetting it disconnects every device at once.
-
-**End to end.** The phone and this computer exchange public keys through the relay and each works out the shared secret on its own side, so what the relay carries is ciphertext it cannot read. A device connected before this existed is listed as "no encryption — reconnect it" until you do.
-
-**Quick capture.** A separate key that can create a note and nothing else — for a Shortcut on an iPhone lock screen, or a widget on Android. No reading, no editing, no deleting: a message from that key is diverted before it ever reaches the assistant. It travels without end-to-end encryption, because a Shortcut cannot derive a shared secret — which is exactly why it is cut down to one action.
-
-Worth knowing up front:
-
-- Same rule as the bot: the computer answers **only while Obsidian is open** on it. Anything sent meanwhile waits in a queue and arrives when you open the vault.
-- The plugin only ever makes outgoing requests. It opens no ports and accepts no incoming connections, which is the only arrangement that works from behind a home router.
-- **It cannot delete notes**, for the same reason the bot cannot: deletion waits for a key press at the keyboard.
-- The connector is off until you switch it on, and switching it off stops every device at once.
-
----
-
-## Automations
-
-An automation is an ordinary turn with a saved prompt, fired on a schedule — a morning digest into today's daily note, a weekly summary of your thoughts into a new one.
-
-The timing is forgiving on purpose. Obsidian is not a server and your vault is closed at night, so a task fires once on the first launch **after** its appointed time on a matching day, rather than being skipped. The date of the last run is what stops it running twice.
-
----
-
-## What the assistant may do with your notes
-
-Every permission is separate. A permission that is off is not an instruction not to do something — the tool is simply absent, and the model never learns that it exists.
-
-- **Read** — search by word and by meaning, read a note in full, grep for an exact phrase, look at what you wrote in the last few days, open your daily note for a date.
-- **Create** — notes, folders, and real Kanban boards. A note is built on your own template, with the properties its neighbours carry; a board comes out as a board, not as a note with headings in it.
-- **Edit** — change a line, rewrite a whole note, add under a heading, move or rename (every link to it is updated), undo the last change.
-- **Your screen** — open a note, open several at once, put two side by side, open a web page inside the vault, close what you are done with. And run any command from the palette, which is how it reaches everything your other plugins can do: start a review, open the graph, insert a template.
-- **Delete** — off by default. Even when it is on, **every deletion stops and waits for a keypress**. The assistant never deletes anything on its own.
-
-You can restrict it to particular folders — "only these" or "all but these". The restriction applies to search as well: notes outside the scope do not even appear in results.
-
----
-
-## How it learns your vault
-
-A note created blind comes out orphaned: without the properties its neighbours carry, without a link back to its parent MOC, filed wherever. The assistant has no way of knowing how your vault is arranged unless it is told.
-
-**The map.** The plugin builds one from what Obsidian already knows: top-level and second-level folders with how much is in each, the list of templates, where the daily notes live. It costs nothing, takes no indexing pass, and goes into every request. On the Vault tab you can unfold and read it — exactly what the assistant sees.
-
-**Templates.** It finds the folder on its own — from the Templates core plugin or Templater — and you can point at one by hand. Before creating a note of a kind that has a template, it reads that template and builds the note on it: same properties, same headings, same links. Kanban boards too: the columns and properties come from your template rather than being invented.
-
-**In your own words.** Under the map there is a box for whatever folder names cannot say: "projects live in 1. Projects, one note each, always linked from the MOC". One line like that saves a dozen wrong guesses.
-
-The setup guide offers all of this as a step — "Let it learn your vault" — showing what it managed to find.
-
----
-
-## The context note
-
-You can name a note the assistant reads before every answer — your projects, your goals, the way you phrase things.
-
-> ⚠️ **This note is sent to your AI provider with every single request.** Never put passwords, keys, financial or medical records, or anything about other people in it. Keep it to what you would say out loud in a meeting.
-
----
-
-## Search
-
-**By word** always works: the index builds itself from your vault in a second, costs nothing and needs no key.
-
-**By meaning** is switched on separately. It finds notes where the same thought is put in different words.
-
-If an index already exists — built by another script — point the "Index file" field at it (with autocomplete) and it is picked up as it is: no re-indexing, nothing spent. Someone else's index is only ever read, never rewritten, so the script that maintains it keeps working.
-
-If there is no index yet, the build button shows progress and stops whenever you ask it to.
-
-**Exact search.** Besides searching by topic, the assistant can search literally: by filename pattern (`*budget*`, `Projects/**/*.md`) and by text inside notes, with line numbers. Useful when you need a specific tag, property or link rather than "something about this".
-
-**Folders in plain language.** You can say "in the inbox", "to my inbox" or "in 5. Inbox" and get the same real folder. If it finds nothing it shows the folders that do exist rather than going quiet.
-
----
-
-## Web access
-
-Off by default. When enabled, the assistant can search the web through OpenRouter's web plugin and cites its sources. It only works with providers that route through OpenRouter (Elton AI and OpenRouter itself); with a direct OpenAI key or a local model the switch is hidden, because the transport cannot carry it.
-
-Searches cost a little on top of the tokens, so leave it off unless you want it.
-
----
-
-## Languages
-
-English and Russian. The Obsidian interface language is used by default, and can be overridden. The assistant answers in whichever language you spoke to it.
+## Open source
+
+**The plugin is here, in the open** — every line that runs inside your Obsidian
+is in `src/`, and `main.js` in each release is built from it by the workflow in
+this repository, with build provenance attested. Read it, fork it, build it
+yourself, check what it sends.
+
+What is *not* published is the relay the app talks to, and that is deliberate
+rather than coy. The relay exists because almost nobody has a server: without it
+you would need a public address for your own computer, a certificate and an open
+port, which is not a thing to ask of someone who just wants to write a line from
+the bus. Running it is a service — a postman, nothing more — and it is free to
+use. It carries ciphertext it cannot read, keeps a message for at most three days
+and stores no notes at all: the [privacy section](#privacy-and-external-services)
+lists everything that crosses it.
+
+If you would rather depend on nobody, the plugin is fully usable without the
+relay: the panel, the voice, the tasks and a local model in Ollama need no
+network at all.
 
 ---
 
@@ -313,31 +166,279 @@ Requests to a provider are seen by that provider, as with any API — that is tr
 
 Your notes stay in your vault. Only the text needed to answer the question at hand is sent: the fragments found, the note on screen, and the context note.
 
+Keys are stored in `data.json` inside the plugin's folder as plain text — that is how every Obsidian plugin works. Do not keep keys in a vault you share publicly.
+
 With a local model, nothing goes out at all.
 
 ---
 
-## Building
+## What's new in 3.0
 
-Sources live in `src/` and are concatenated into a single `main.js`:
+**The app on your phone.** The whole point of this version — see above.
 
+**A button for one thought.** A separate write-only key, for a shortcut on the
+lock screen. It can create a note and nothing else: no reading, no editing, no
+deleting.
+
+**End-to-end encryption.** The phone and this computer work out a shared secret
+between themselves; the relay carries text it cannot read.
+
+**It can read a photograph.** Photograph a page of notes, say where it belongs,
+and the note is written from your template. Latin abbreviations stay in Latin,
+and anything genuinely unreadable is marked rather than guessed.
+
+**Voice on the OpenAI provider works again.** Its transcription lives on a
+different endpoint than the chat models, and the request is built for that
+endpoint now. Other providers are unchanged.
+
+**The search index says when it has fallen behind.** Once a week, and only when
+enough notes have piled up outside it.
+
+**A question about the world gets an answer.** Asked what a thing is, it
+explains it instead of searching your vault for the word and reporting nothing
+found — and then points at where your own notes touch the subject.
+
+---
+
+## Building from source
+
+`main.js` is assembled from the files in `src/` by concatenation, in the order
+`build.sh` lists — no bundler, no build step to trust.
+
+```sh
+sh build.sh      # writes main.js
+npm run lint     # the checks the community scanner runs
+npm test         # 446 assertions
 ```
-npm install
-npm run build
-```
 
-File order matters: `10-core.js` declares what the rest closes over.
-
-Before opening a pull request, run the same checks the community scanner runs:
-
-```
-npm run check      # build + eslint-plugin-obsidianmd + tests
-```
-
-`main.js` is a build artifact and is not kept in the repository — the release workflow builds it from `src/`.
+`deploy.sh` copies the three files Obsidian reads into a vault of your choice;
+point it there with `VAULT_PLUGIN_DIR` or a `.vault-path` file.
 
 ---
 
 ## Licence
 
-[MIT](LICENSE).
+MIT — see [LICENSE](LICENSE).
+
+---
+---
+
+# 🧠 Elton AI (по-русски)
+
+Говорите со своим хранилищем Obsidian — голосом или текстом. Он ищет по вашим
+заметкам, отвечает из них, создаёт новые по вашим же шаблонам и достаёт вас на
+телефоне — из браузера или из телеграм-бота.
+
+**Русский · [English](#-elton-ai)**
+
+Работает на компьютере и на телефоне (Android / iOS).
+
+> **Ключ и бесплатная проба — в телеграм-боте
+> [@elton_ai_obsidian_bot](https://t.me/elton_ai_obsidian_bot).**
+> Откройте, нажмите «Start» — и ключ у вас. Промокод **«Подарок»** даёт кредиты,
+> чтобы попробовать всё целиком, ничего не вкладывая. Свой ключ от OpenAI,
+> OpenRouter или локальная Ollama подойдут не хуже — плагин работает с любым.
+
+![Elton AI](docs/promo-hero.jpg)
+
+|  |  |
+| --- | --- |
+| ![Проект одной фразой](docs/promo-kanban.jpg) | ![Спросить свои заметки](docs/promo-ask.jpg) |
+| **Проект одной фразой** — говорите, что нужно, и получаете настоящую канбан-доску, собранную по вашему шаблону и открытую перед вами. | **Спросить свои заметки** — по-человечески, а не «найди файл». Ответ собран из того, что вы написали, а не из интернета. |
+| ![Моя неделя в мыслях](docs/promo-recall.jpg) | ![Записать мысль](docs/promo-write.jpg) |
+| **Моя неделя в мыслях** — он перечитывает ежедневные заметки и говорит, к чему вы возвращались чаще всего. | **Записать мысль** — строчка с телефона ложится в сегодняшнюю заметку. Куда именно — решают ваши настройки. |
+| ![Разобрать входящие](docs/promo-inbox.jpg) | ![Готовые запросы](docs/promo-slash.jpg) |
+| **Разобрать входящие** — предлагает папку каждой бесхозной заметке и не двигает ничего, пока вы не скажете. | **Готовые запросы** — набираете `/` и выбираете. Ваши сохранённые задания идут первыми, двадцать полезных — за ними. |
+| ![Голосом на ходу](docs/promo-voice.jpg) | ![Объясни эту заметку](docs/promo-explain.jpg) |
+| **Голосом на ходу** — зажали, сказали, и расшифровка попадает в поле ввода до отправки: ослышался — правите вы. | **Объясни эту заметку** — отвечает про ту заметку, что перед вами, простыми словами, и приведёт пример, если попросить. |
+| ![Фотография конспекта](docs/promo-photo.jpg) | ![Одно нажатие с локскрина](docs/promo-quick.jpg) |
+| **Фотография конспекта** — сфотографировали страницу, сказали куда, и заметка создана по вашему шаблону. | **Одно нажатие с локскрина** — ключ только на запись, для кнопки, которая умеет создать заметку и больше ничего. |
+
+---
+
+## Что умеет
+
+**Отвечает из вашего хранилища.** Поиск по словам и, если включить, поиск по
+смыслу через индекс эмбеддингов. Читает открытую заметку, ежедневные, папку,
+отрезок дней. Если не нашёл — говорит, что не нашёл, а не придумывает. А на
+вопрос про мир, а не про ваши записи, просто отвечает — и показывает, где это
+смыкается с тем, что у вас записано.
+
+**Пишет и раскладывает.** Новые заметки по вашим шаблонам, в ту папку, которой
+хранилище для них и пользуется. Дописывает строку под заголовок. Правит заметку
+на месте. Собирает канбан-доски и Bases, которые действительно рисуются. Ничего
+не удаляет, не спросив.
+
+**Голос в обе стороны.** Зажали клавишу и говорите — или разговор без рук.
+Распознавание через вашего провайдера, озвучка через облачный голос или
+локальный Piper: тогда хранилище говорит, ничего не отправляя наружу.
+
+**Задания и автоматизации.** Сохранённый запрос за фразой («о чём я думал») или
+за временем суток. Результат ложится в заметку, в уведомление, в Telegram или в
+приложение.
+
+**Мозги на ваш выбор.** Elton AI, OpenRouter, OpenAI напрямую или локальная
+модель в Ollama / LM Studio. Ключ ваш — плагин держит его в этом хранилище и
+больше нигде.
+
+---
+
+## Приложение на телефоне
+
+Главное в версии 3.0. На вкладке «Коннектор» появляется код; вводите его один
+раз в приложении — и всё хранилище с вами: спросить, надиктовать заметку,
+дописать строку в сегодняшнюю. Приложение ставится на домашний экран прямо из
+браузера по адресу [app.eltonlabs.org](https://app.eltonlabs.org): ни магазина
+приложений, ни учётной записи.
+
+**Отвечает не сервер, а ваш компьютер** — потому заметки и не уезжают никуда.
+Отсюда единственное условие: компьютер включён, Obsidian открыт, коннектор
+включён. Пока компьютер спит, приложение покажет, что связи нет; всё
+отправленное дождётся в очереди и уедет, как только он вернётся.
+
+Телефон и компьютер договариваются об общем секрете между собой
+(ECDH P-256 → HKDF → AES-GCM), поэтому посредник несёт текст, который не может
+прочитать.
+
+Как подключить, по шагам и с коротким видео на каждый шаг:
+**[eltonlabs.org/elton-ai-app](https://eltonlabs.org/elton-ai-app)**
+
+---
+
+## Установка
+
+Настройки → Сторонние плагины → Обзор → в поиске **Elton AI** → Установить →
+Включить. Если сверху висит «Ограниченный режим» — сначала выключите его: пока
+он включён, Obsidian не даёт работать ни одному стороннему плагину.
+
+При первом запуске откроется пошаговая настройка. Её всегда можно вызвать
+заново: Настройки → Elton AI → **Открыть пошаговую настройку**.
+
+### Бета-версии, через BRAT
+
+1. Поставьте **BRAT** из списка сторонних плагинов.
+2. BRAT → *Add Beta Plugin* → `swayinfo/elton-ai`
+3. Включите **Elton AI** в списке сторонних плагинов.
+
+### Вручную
+
+Скачайте `main.js`, `manifest.json` и `styles.css` со
+[страницы релизов](https://github.com/swayinfo/elton-ai/releases/latest) в
+`<ваше хранилище>/.obsidian/plugins/elton-ai/` и перезапустите Obsidian.
+
+---
+
+## Про открытый код
+
+**Плагин лежит здесь, открытым** — каждая строка, которая работает внутри вашего
+Obsidian, находится в `src/`, а `main.js` в каждом релизе собирается из него
+воркфлоу этого репозитория, с подтверждённым происхождением сборки. Читайте,
+форкайте, собирайте сами, проверяйте, что уходит наружу.
+
+Чего в открытом виде нет — так это релея, с которым говорит приложение, и это
+осознанно, а не из скрытности. Релей существует потому, что сервера почти ни у
+кого нет: без него понадобился бы публичный адрес для вашего компьютера,
+сертификат и открытый порт — этого нельзя требовать от человека, который просто
+хочет записать строчку из автобуса. Держать релей — это услуга, работа почтальона
+и не больше, и она бесплатная. Он несёт шифр, который не может прочитать, держит
+сообщение не дольше трёх суток и заметок не хранит вовсе: всё, что через него
+проходит, перечислено в [разделе о приватности](#приватность-и-внешние-сервисы).
+
+Если не хочется зависеть ни от кого — плагин полностью работает и без релея:
+панель, голос, задания и локальная модель в Ollama не требуют сети совсем.
+
+---
+
+## Приватность и внешние сервисы
+
+### Личные папки
+
+Чтобы ответить, ассистент отправляет провайдеру куски ваших заметок. Поэтому есть список папок, которые он не трогает никогда: **Настройки → Хранилище → Что ему можно → Личные папки**.
+
+Что значит «никогда»: такие заметки не читаются, не находятся поиском, не попадают в индекс, не уходят провайдеру — и не подставляются как «заметка на экране», даже если она открыта прямо сейчас. Проверка стоит перед всеми остальными и не зависит от области работы: в режиме «всё хранилище» личные папки всё равно закрыты. Вложенные папки закрыты вместе с родительской.
+
+Сюда стоит положить медицину, финансы, пароли, сведения о других людях и всё, что вы обязались не разглашать.
+
+Это не то же самое, что «где ему работать». Область работы отвечает на вопрос «в какой части хранилища он живёт изо дня в день» и имеет три взаимоисключающих режима — сказать ими «работай везде, кроме медкарты» нельзя. Личные папки отвечают на другой вопрос и действуют поверх области.
+
+Отдельно есть список **«Не индексировать»** — обещание послабее: такие заметки ассистент откроет, если попросить по имени, но они не уезжают пачкой при построении индекса. Годится для большого архива, который не хочется оплачивать, не меньше, чем для деликатного.
+
+### Куда уходят запросы
+
+Плагин ходит к провайдеру, которого вы выбрали в настройках, и — только если вы сами их включили — к боту и к коннектору. Своего ключа в нём нет, скрытых адресов тоже: список исчерпывающий.
+
+| Адрес | Когда используется | Что уходит |
+|---|---|---|
+| `api.eltonlabs.org` | провайдер **Elton AI** | текст запроса, найденные фрагменты заметок, аудио вашей реплики для распознавания |
+| `openrouter.ai` | провайдер **OpenRouter** и веб-поиск | то же самое |
+| `api.openai.com` | провайдер **OpenAI** | то же самое |
+| `localhost:11434` | локальная модель (Ollama / LM Studio) | ничего не покидает компьютер |
+| `localhost:5000` | локальный голос Piper | только текст ответа, для озвучки |
+| `api.telegram.org` | только если вы подключили бота | ваши сообщения боту и ответы ассистента |
+| `media.giphy.com` | только гифка ожидания в Telegram, один раз | ничего — просто скачивается картинка |
+| `app.eltonlabs.org` | только если вы включили **коннектор** | ваши сообщения из приложения и ответы ассистента — под сквозным шифром, посредник несёт текст, который не может прочитать. Кроме этого — ваш ключ Elton AI, раз в несколько часов: код подключения закрепляется только по действующему ключу, иначе чужое хранилище открывалось бы по придуманным двенадцати знакам. Сам ключ на сервере не хранится |
+| `relay.eltonlabs.org` | то же самое, запасной адрес | то же самое |
+| `base.eltonlabs.org` | только при пополнении баланса из приложения | сумма и ваш ключ, в ответ приходит ссылка на оплату |
+| `api.eltonlabs.org/skills` | только с провайдером Elton AI | ничего не отправляется; скачиваются короткие справки по форматам самого Obsidian, чтобы ассистент писал канбан-доску или Base, которые действительно рисуются |
+
+Elton AI — собственный сервис автора для тех, кому не хочется сначала заводить где-то аккаунт и ключ: один баланс, пополняется из телеграм-бота, без карты у зарубежного провайдера и без отдельной регистрации. Есть бесплатный пробный доступ, чтобы посмотреть, подходит ли вам всё это, — промокод `Подарок`. Сколько стоит, какие модели доступны и как пополнять — на **[eltonlabs.org/elton-ai](https://eltonlabs.org/elton-ai)**. Этим же оплачивается работа над плагином. Любой другой провайдер работает без него, и плагин от этого ничего не теряет.
+
+**Две вещи, которые проверка каталога отмечает у любого такого плагина — говорю прямо.** Плагин запрашивает у Obsidian список файлов хранилища: без этого поиск невозможен в принципе. Но попасть в список — не то же самое, что быть прочитанным: содержимое открывается, только когда оно нужно для ответа, а личные папки не попадают даже в сам список. И он пишет в системный буфер обмена — для кнопок «копировать» под ответом и под результатом автоматизации. Читать буфер он не умеет.
+
+**Ни телеметрии, ни самообновления.** Плагин ничего не собирает о вас, не считает статистику и не отправляет аналитику никуда. Он не докачивает ни код, ни зависимости, ни собственные обновления — новые версии приходят из каталога или из BRAT, как у любого плагина. Справки, упомянутые выше, — это текст для модели, а не код, и свои копии плагин несёт в себе; сервис их только дополняет.
+
+Заметки остаются в вашем хранилище. Провайдеру уходит только текст, нужный для ответа на конкретный вопрос: найденные фрагменты, открытая заметка и заметка с контекстом.
+
+Ключи хранятся в `data.json` внутри папки плагина открытым текстом — так устроены все плагины Obsidian. Не держите ключи в хранилище, которым делитесь публично.
+
+С локальной моделью в сеть не уходит ничего.
+
+---
+
+## Что нового в 3.0
+
+**Приложение на телефоне.** То, ради чего версия и вышла — см. выше.
+
+**Кнопка для одной мысли.** Отдельный ключ только на запись, для кнопки на
+локскрине. Он умеет создать заметку и больше ничего: не читает, не правит, не
+удаляет.
+
+**Сквозное шифрование.** Телефон и этот компьютер договариваются об общем
+секрете между собой; посредник несёт текст, который не может прочитать.
+
+**Умеет прочитать фотографию.** Сфотографировали страницу конспекта, сказали
+куда — и заметка написана по вашему шаблону. Латинские сокращения остаются
+латиницей, а неразобранное помечается, а не угадывается.
+
+**Голос на провайдере OpenAI снова работает.** Распознавание у него живёт не там,
+где чат-модели, и запрос теперь собирается под тот адрес. Остальных провайдеров
+это не касалось.
+
+**Поисковый индекс сам говорит, что отстал.** Раз в неделю и только когда
+заметок вне него накопилось достаточно.
+
+**На вопрос про мир приходит ответ.** Спросили, что такое прибор — он объяснит,
+а не пойдёт искать это слово по вашим заметкам и сообщать, что не нашёл. И
+покажет, где это смыкается с вашими записями.
+
+---
+
+## Сборка из исходников
+
+`main.js` собирается из файлов в `src/` простой склейкой, в том порядке, который
+перечислен в `build.sh` — ни сборщика, ни шага, которому надо доверять.
+
+```sh
+sh build.sh      # соберёт main.js
+npm run lint     # те же проверки, что гоняет сканер каталога
+npm test         # 446 проверок
+```
+
+`deploy.sh` копирует три файла, которые читает Obsidian, в хранилище на ваш
+выбор; путь задаётся через `VAULT_PLUGIN_DIR` или файл `.vault-path`.
+
+---
+
+## Лицензия
+
+MIT — см. [LICENSE](LICENSE).
