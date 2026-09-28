@@ -2116,6 +2116,131 @@ function eq(actual, expected, name) {
     }
   }
 
+  /* ── 27. Индекс смыслов: большое хранилище ─────────────── */
+  describe("Индекс смыслов: большое хранилище");
+  {
+    // Файловая система в памяти с тем же набором действий, что у Obsidian.
+    const fakeAdapter = () => ({
+      files: new Map(),
+      calls: [],
+      async exists(p) { return this.files.has(p); },
+      async read(p) { if (!this.files.has(p)) throw new Error("нет файла " + p); return this.files.get(p); },
+      async write(p, d) { this.calls.push("write"); this.files.set(p, d); },
+      async append(p, d) { this.calls.push("append"); this.files.set(p, (this.files.get(p) || "") + d); },
+      async remove(p) { this.files.delete(p); },
+      async rename(from, to) { this.files.set(to, this.files.get(from)); this.files.delete(from); },
+    });
+    const bridge = (adapter, settings) => {
+      const app = H.fakeApp();
+      app.vault.adapter = adapter;
+      return H.fakePlugin(app, settings).vault;
+    };
+
+    // 1. упаковка и распаковка
+    const src = Array.from({ length: 1024 }, (_, i) => Math.sin(i) / 3);
+    const packed = T.packVector(src);
+    const back = T.unpackVector(packed);
+    ok(back.length === 1024, "вектор распаковался целиком");
+    ok(src.every((x, i) => Math.abs(x - back[i]) < 1e-6), "числа те же с точностью float32");
+    ok(packed.length < JSON.stringify(src).length / 2.5,
+      "упакованный вектор втрое легче текстового",
+      `${packed.length} против ${JSON.stringify(src).length}`);
+
+    // 2. старый индекс читается как прежде
+    const legacy = { mtime: 1, title: "a", embedding: src };
+    ok(T.VaultBridge.hasVector(legacy), "старая запись считается заполненной");
+    eq(T.VaultBridge.vectorOf(legacy).length, 1024, "старый вектор читается");
+
+    // 3. новая запись: распакованное не попадает в файл
+    const fresh = { mtime: 1, title: "b", b: packed };
+    ok(T.VaultBridge.hasVector(fresh), "упакованная запись считается заполненной");
+    ok(!("__v" in fresh), "проверка наличия ничего не распаковывает");
+    ok(T.VaultBridge.vectorOf(fresh).length === 1024, "упакованный вектор читается");
+    ok(!JSON.stringify(fresh).includes("__v"), "распакованная копия не уходит в файл");
+
+    // 4. запись идёт кусками и даёт валидный JSON
+    const ad = fakeAdapter();
+    const v = bridge(ad);
+    const big = {};
+    for (let i = 0; i < 1200; i++) big["папка/заметка-" + i + ".md"] = { mtime: i, title: "з" + i, b: packed };
+    v._emb = big;
+    v._embFrom = v.cachePath();
+    await v.saveEmbeddings();
+
+    const written = ad.files.get(v.cachePath());
+    ok(!!written, "файл индекса создан");
+    ok(ad.calls.filter((c) => c === "append").length >= 1,
+      "большой индекс писался кусками, а не одной строкой", "вызовы: " + ad.calls.join(","));
+    ok(!ad.files.has(v.cachePath() + ".part"), "временный файл убран");
+    const parsed = JSON.parse(written);
+    eq(Object.keys(parsed).length, 1200, "в файле все записи");
+    ok(parsed["папка/заметка-7.md"].b === packed, "вектор в файле не испортился");
+
+    // 5. недописанный файл подхватывается вместо потери индекса
+    const ad2 = fakeAdapter();
+    const v2 = bridge(ad2);
+    ad2.files.set(v2.cachePath() + ".part", JSON.stringify({ "c.md": { mtime: 1, title: "c", b: packed } }));
+    eq(Object.keys(await v2.loadEmbeddings()), ["c.md"], "оборванная запись подхватывается");
+
+    // 6. чужой индекс сохраняет чужой формат, свой — упакованный
+    const mk = (borrowed) => {
+      const adapter = fakeAdapter();
+      const app = H.fakeApp();
+      app.vault.adapter = adapter;
+      const file = new H.TFile("n.md");
+      file.stat = { mtime: 5 };
+      app.vault.getMarkdownFiles = () => [file];
+      app.vault.cachedRead = async () => "текст ".repeat(60);
+      const plugin = H.fakePlugin(app, borrowed ? { embedIndexPath: "shared/idx.json" } : {});
+      plugin.ai = { embed: async () => src };
+      return { plugin, adapter };
+    };
+
+    const own = mk(false);
+    await own.plugin.vault.buildEmbeddings();
+    const ownEntry = JSON.parse(own.adapter.files.get(own.plugin.vault.cachePath()))["n.md"];
+    ok(typeof ownEntry.b === "string" && !ownEntry.v && !ownEntry.embedding,
+      "в своём индексе вектор упакован", JSON.stringify(Object.keys(ownEntry)));
+
+    const lent = mk(true);
+    await lent.plugin.vault.buildEmbeddings();
+    const lentEntry = JSON.parse(lent.adapter.files.get(lent.plugin.vault.cachePath()))["n.md"];
+    ok(Array.isArray(lentEntry.v) && Array.isArray(lentEntry.embedding) && !lentEntry.b,
+      "в чужом индексе формат прежний", JSON.stringify(Object.keys(lentEntry)));
+
+    // 8. старый тяжёлый индекс ужимается при первом же чтении
+    const adM = fakeAdapter();
+    const vm = bridge(adM);
+    const heavy = { "old.md": { mtime: 1, title: "old", v: src, embedding: src } };
+    adM.files.set(vm.cachePath(), JSON.stringify(heavy));
+    const mig = await vm.loadEmbeddings();
+    ok(typeof mig["old.md"].b === "string", "текстовый вектор ужат в упакованный");
+    ok(!mig["old.md"].v && !mig["old.md"].embedding, "текстовая копия убрана");
+    eq(T.VaultBridge.vectorOf(mig["old.md"]).length, 1024, "и он по-прежнему читается");
+    await vm.saveEmbeddings();
+    const after = adM.files.get(vm.cachePath());
+    ok(after.length < JSON.stringify(heavy).length / 5, "файл стал сильно легче",
+      `${after.length} против ${JSON.stringify(heavy).length}`);
+
+    // 9. чужой индекс не трогаем
+    const adB = fakeAdapter();
+    const vb = bridge(adB, { embedIndexPath: "shared/idx.json" });
+    adB.files.set(vb.cachePath(), JSON.stringify(heavy));
+    const kept = await vb.loadEmbeddings();
+    ok(Array.isArray(kept["old.md"].embedding), "чужой индекс остался текстовым");
+
+    // 7. поиск по смыслу одинаково работает на обоих форматах
+    const adS = fakeAdapter();
+    const vs = bridge(adS);
+    vs._emb = { "old.md": { title: "old", embedding: src }, "new.md": { title: "new", b: packed } };
+    vs._embFrom = vs.cachePath();
+    vs.plugin.ai = { embed: async () => src };
+    const found = await vs.semanticSearch("что угодно", 5);
+    eq(found.length, 2, "в выдаче обе записи");
+    ok(found.every((r) => r.score > 0.99), "оценки совпадают у старого и нового формата",
+      JSON.stringify(found.map((r) => r.score)));
+  }
+
   /* ── report ────────────────────────────────────────────── */
   console.log();
   for (const r of results) {

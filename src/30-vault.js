@@ -27,6 +27,37 @@ function cosine(a, b) {
   return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
 }
 
+/**
+ * A vector as bytes instead of as text.
+ *
+ * A thousand numbers written out as "-0.01282," weigh about sixteen kilobytes;
+ * the same thousand numbers as raw four-byte floats weigh four, five once
+ * base64 has padded them. On a vault of twenty-five thousand notes that is the
+ * difference between a four-hundred-megabyte index and a hundred-and-thirty
+ * megabyte one — and four hundred is past the length JavaScript allows a single
+ * string to be, which is exactly where indexing used to die.
+ *
+ * Precision is not lost: the provider returns single-precision floats anyway,
+ * and the text form was already rounded to five decimals.
+ */
+function packVector(arr) {
+  const f = arr instanceof Float32Array ? arr : new Float32Array(arr);
+  const bytes = new Uint8Array(f.buffer, f.byteOffset, f.byteLength);
+  let s = "";
+  // String.fromCharCode blows the argument stack on long arrays, hence chunks.
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+function unpackVector(b64) {
+  const s = atob(b64);
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+  return new Float32Array(bytes.buffer);
+}
+
 class VaultBridge {
   constructor(plugin) {
     this.plugin = plugin;
@@ -159,8 +190,27 @@ class VaultBridge {
    */
   static vectorOf(entry) {
     if (!entry) return null;
+    if (typeof entry.b === "string" && entry.b) {
+      // Unpacked once and kept on the entry, because search walks every entry
+      // on every query. Hidden from JSON.stringify on purpose: the packed form
+      // is what belongs in the file.
+      if (!entry.__v) {
+        try {
+          Object.defineProperty(entry, "__v", { value: unpackVector(entry.b), configurable: true });
+        } catch { return null; }
+      }
+      return entry.__v;
+    }
     const v = entry.v || entry.embedding || null;
     return Array.isArray(v) && v.length ? v : null;
+  }
+
+  /** Does this entry hold a vector? Asked often; must not unpack anything. */
+  static hasVector(entry) {
+    if (!entry) return false;
+    if (typeof entry.b === "string" && entry.b) return true;
+    const v = entry.v || entry.embedding;
+    return Array.isArray(v) && v.length > 0;
   }
 
   async loadEmbeddings() {
@@ -170,12 +220,35 @@ class VaultBridge {
       this._embFrom = p;
       if (await this.app.vault.adapter.exists(p)) {
         this._emb = JSON.parse((await this.app.vault.adapter.read(p)) || "{}");
+      } else if (await this.app.vault.adapter.exists(p + ".part")) {
+        // A save cut off before the rename leaves the new copy under this
+        // name. Every vector in it has been paid for; try it before giving up.
+        this._emb = JSON.parse((await this.app.vault.adapter.read(p + ".part")) || "{}");
       } else this._emb = {};
+      // Someone who indexed a large vault before vectors were packed has a
+      // file of plain numbers, and at twenty-five thousand notes it is within
+      // a couple of thousand of the size the engine refuses to hold. Repack it
+      // on the way in; the file itself changes at the next save.
+      if (!this.indexIsBorrowed) this.compactEmbeddings();
     } catch (e) {
       console.warn("[Elton AI] could not read the index:", e.message);
       this._emb = {};
     }
     return this._emb;
+  }
+
+  /** Text vectors become packed ones. Our own index only — a borrowed file
+      belongs to whoever wrote it and keeps the shape that tool expects. */
+  compactEmbeddings() {
+    const emb = this._emb || {};
+    for (const key of Object.keys(emb)) {
+      const e = emb[key];
+      const v = e && (e.v || e.embedding);
+      if (!Array.isArray(v) || !v.length) continue;
+      e.b = packVector(v);
+      delete e.v;
+      delete e.embedding;
+    }
   }
 
   /** How many usable vectors an index holds — for the settings readout. */
@@ -184,15 +257,48 @@ class VaultBridge {
       const p = normalizePath(path || this.cachePath());
       if (!(await this.app.vault.adapter.exists(p))) return 0;
       const j = JSON.parse((await this.app.vault.adapter.read(p)) || "{}");
-      return Object.values(j).filter((e) => VaultBridge.vectorOf(e)).length;
+      return Object.values(j).filter((e) => VaultBridge.hasVector(e)).length;
     } catch { return 0; }
   }
 
   /* Throws on purpose. A swallowed write is the worst failure this file has:
      the run looks like it worked, the count never moves, and the only way to
      find out is to read the console. Let the caller say so out loud. */
+  /*
+     Built in pieces rather than with one JSON.stringify. A vault of twenty-five
+     thousand notes makes a string of several hundred megabytes, and JavaScript
+     refuses to hold one past about five hundred — that refusal arrives as
+     "Invalid string length" and used to stop indexing partway through, with no
+     hint that the ceiling was in the engine and not in the provider.
+
+     Written beside the real file and renamed at the end, so a crash halfway
+     through cannot leave a truncated index where a working one used to be.
+  */
   async saveEmbeddings() {
-    await this.app.vault.adapter.write(this.cachePath(), JSON.stringify(this._emb || {}));
+    const a = this.app.vault.adapter;
+    const p = this.cachePath();
+    const tmp = p + ".part";
+    const emb = this._emb || {};
+    const keys = Object.keys(emb);
+
+    let buf = "{";
+    let started = false;
+    const flush = async (force) => {
+      if (!force && buf.length < 4 * 1024 * 1024) return;
+      if (started) await a.append(tmp, buf);
+      else { await a.write(tmp, buf); started = true; }
+      buf = "";
+    };
+
+    for (let i = 0; i < keys.length; i++) {
+      buf += (i ? "," : "") + JSON.stringify(keys[i]) + ":" + JSON.stringify(emb[keys[i]]);
+      await flush(false);
+    }
+    buf += "}";
+    await flush(true);
+
+    if (await a.exists(p)) await a.remove(p);
+    await a.rename(tmp, p);
   }
 
   /** An index this plugin did not create is never written to. */
@@ -225,7 +331,7 @@ class VaultBridge {
       if (!e) return true;
       if (e.mtime !== f.stat.mtime) return true;
       // An entry that is neither a vector nor a deliberate skip is unusable.
-      return !VaultBridge.vectorOf(e) && !e.skip;
+      return !VaultBridge.hasVector(e) && !e.skip;
     });
   }
 
@@ -269,6 +375,7 @@ class VaultBridge {
     const todo = this.pendingEmbeddings(cache);
     const tally = { done: 0, total: todo.length, embedded: 0, skipped: 0, failed: 0, error: "", stopped: false };
     let streak = 0;
+    let lastSave = Date.now();
 
     for (const f of todo) {
       if (shouldStop && shouldStop()) { tally.stopped = true; break; }
@@ -282,10 +389,17 @@ class VaultBridge {
           tally.skipped++;
         } else {
           const v = await this.plugin.ai.embed(f.basename + "\n" + body.slice(0, 8000));
-          const entry = { mtime: f.stat.mtime, title: f.basename, v };
-          // Written twice on purpose — see above. The duplicate costs disk,
-          // not correctness, and only for notes this plugin added.
-          if (borrowed) entry.embedding = v;
+          const entry = { mtime: f.stat.mtime, title: f.basename };
+          if (borrowed) {
+            // Someone else's file keeps someone else's shape: plain numbers,
+            // and written twice — see above. The duplicate costs disk, not
+            // correctness, and only for notes this plugin added.
+            entry.v = v;
+            entry.embedding = v;
+          } else {
+            // Our own file packs the vector; see packVector for why.
+            entry.b = packVector(v);
+          }
           cache[f.path] = entry;
           tally.embedded++;
         }
@@ -302,9 +416,14 @@ class VaultBridge {
       }
       tally.done++;
       if (onProgress) onProgress(tally.done, todo.length);
-      // The index can be tens of megabytes, and it is rewritten whole. Every
-      // ten notes turned that into gigabytes of writing for one pass.
-      if (tally.done % 50 === 0) await this.saveEmbeddings();
+      // The index is rewritten whole, and for a large vault that is hundreds
+      // of megabytes. By the clock rather than by the note: every fifty notes
+      // meant rewriting the same file six hundred times in one pass, which is
+      // most of why a long run felt stuck.
+      if (Date.now() - lastSave > 120000) {
+        await this.saveEmbeddings();
+        lastSave = Date.now();
+      }
     }
 
     await this.saveEmbeddings();
