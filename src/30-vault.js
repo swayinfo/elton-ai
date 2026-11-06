@@ -1532,13 +1532,13 @@ class IndexRunner {
   touch(path) {
     if (!this.auto || !/\.md$/i.test(String(path || ""))) return;
     this.queue.add(path);
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush().catch(() => {}), 60000);
+    window.clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => this.flush().catch(() => {}), 60000);
   }
 
   async flush() {
     if (!this.queue.size || !this.auto) { this.queue.clear(); return; }
-    if (this.running) { this.timer = setTimeout(() => this.flush().catch(() => {}), 60000); return; }
+    if (this.running) { this.timer = window.setTimeout(() => this.flush().catch(() => {}), 60000); return; }
     const cache = await this.plugin.vault.loadEmbeddings();
     if (!Object.keys(cache).length) { this.queue.clear(); return; }
     // A sync dropping thousands of notes at once is not "the note I just
@@ -1559,5 +1559,5 @@ class IndexRunner {
     if (pending && pending <= 300) await this.run({ quiet: true, compact: false });
   }
 
-  dispose() { clearTimeout(this.timer); this.stop(); }
+  dispose() { window.clearTimeout(this.timer); this.stop(); }
 }

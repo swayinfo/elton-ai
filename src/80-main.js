@@ -119,8 +119,8 @@ class EltonAI extends ObsidianPlugin {
       this.registerEvent(this.app.vault.on("delete", (f) => {
         if (this.index.auto) this.vault.dropEmbedding(f.path).catch(() => {});
       }));
-      const later = setTimeout(() => this.index.catchUp().catch(() => {}), 90000);
-      this.register(() => clearTimeout(later));
+      const later = window.setTimeout(() => this.index.catchUp().catch(() => {}), 90000);
+      this.register(() => window.clearTimeout(later));
 
       if (!this.settings.onboarded) {
         // Persist the flag before opening: a sync writing data.json can

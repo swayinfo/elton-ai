@@ -327,7 +327,7 @@ class OnboardingModal extends Modal {
       if (!run.isConnected) return false;
       if (R.running) {
         line.setText(R.total ? t("Indexing… {0}/{1}", R.done, R.total) : t("Indexing…"));
-        fill.style.width = (R.total ? Math.max(3, Math.round(100 * R.done / R.total)) : 3) + "%";
+        fill.setCssProps({ width: (R.total ? Math.max(3, Math.round(100 * R.done / R.total)) : 3) + "%" });
         btn.setText(t("Stop"));
         btn.disabled = false;
         note.setText(t("Carry on with the next step — it works in the background. Stopped or interrupted, it picks up where it left off."));
@@ -338,13 +338,13 @@ class OnboardingModal extends Modal {
       if (!run.isConnected) return false;
       if (!est.notes) {
         line.setText(n ? t("{0} notes in the index", n) : t("Nothing to index yet"));
-        fill.style.width = "100%";
+        fill.setCssProps({ width: "100%" });
         btn.setText(t("Everything is indexed"));
         btn.disabled = true;
         note.setText(t("New and changed notes are added by themselves."));
       } else {
         line.setText(n ? t("{0} indexed, {1} to go", n, est.notes) : t("{0} notes · about {1} min", est.notes, est.minutes));
-        fill.style.width = (n ? Math.round(100 * n / (n + est.notes)) : 0) + "%";
+        fill.setCssProps({ width: (n ? Math.round(100 * n / (n + est.notes)) : 0) + "%" });
         btn.setText(n ? t("Continue") : t("Index now"));
         btn.disabled = false;
         note.setText(t("Private folders are never indexed and never sent."));
