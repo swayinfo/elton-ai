@@ -12,6 +12,20 @@
  *  для человека за домашним роутером это единственный способ,
  *  который вообще работает.
  * ========================================================== */
+/* Почтовый ящик между экземплярами коннектора в одном окне: живёт на window,
+   потому что старый и новый экземпляр плагина — разные модули. */
+function cnInbox() {
+  const w = window;
+  if (!w.__eltonAiInbox) w.__eltonAiInbox = { list: [], wake: null };
+  return w.__eltonAiInbox;
+}
+function cnHandOver(msgs) {
+  if (!msgs || !msgs.length) return;
+  const box = cnInbox();
+  box.list.push(...msgs);
+  if (box.wake) { try { box.wake(); } catch { /* новый ещё не готов — заберёт при старте */ } }
+}
+
 class ConnectorBridge {
   constructor(plugin) {
     this.plugin = plugin;
@@ -19,7 +33,9 @@ class ConnectorBridge {
     this.lastError = "";
     // Своя история на каждый чат: в браузере их может быть несколько,
     // и мешать их в одну кучу — значит путать ассистента.
-    this.chatHistory = new Map();
+    this.chatHistory = new Map();   // осталось ради старых путей; память — в plugin.memory
+    this.browser = new VaultBrowser(plugin);
+    this.chain = Promise.resolve();
     this.toldAbout = false;
     // Общий секрет на каждое устройство свой: телефон не может прочитать
     // переписку планшета, даже если оба привязаны к одному хранилищу.
@@ -57,6 +73,15 @@ class ConnectorBridge {
     }
   }
 
+  /** Сообщения, которые забрал, но не успел разобрать прошлый экземпляр. */
+  adoptOrphans() {
+    const box = cnInbox();
+    box.wake = () => this.adoptOrphans();
+    box.owner = this;
+    const list = box.list.splice(0);
+    for (const m of list) this.dispatch(m);
+  }
+
   start() {
     // На телефоне не запускаем по той же причине, что и телеграм: настройки
     // синхронизируются, и второй разборщик очереди отобрал бы половину
@@ -66,10 +91,15 @@ class ConnectorBridge {
     this.running = true;
     this.lastError = "";
     this.claimedAt = 0;
+    this.adoptOrphans();
     this.loop();
   }
 
-  stop() { this.running = false; }
+  stop() {
+    this.running = false;
+    const box = cnInbox();
+    if (box.wake && box.owner === this) box.wake = null;
+  }
 
   restart() { this.stop(); window.setTimeout(() => this.start(), 300); }
 
@@ -113,7 +143,7 @@ class ConnectorBridge {
         last = e;
       }
     }
-    throw last || new Error("нет связи");
+    throw last || new Error(t("No connection"));
   }
 
   async loop() {
@@ -135,10 +165,13 @@ class ConnectorBridge {
         this.lastError = "";
         if (!this.toldAbout) { this.toldAbout = true; this.tellAbout().catch(() => {}); }
         this.syncKeys(false).catch(() => {});
-        for (const m of (r && r.msgs) || []) {
-          if (!this.running) return;
-          await this.handle(m);
-        }
+        const msgs = (r && r.msgs) || [];
+        /* Выключили, пока запрос висел у сервера, — обычно это перезагрузка
+           плагина или его обновление. Сервер уже отметил эти сообщения
+           забранными, и выброшенное здесь не доходило никуда: человек на
+           телефоне так и смотрел на «думаю…». Отдаём их новому экземпляру. */
+        if (!this.running) { cnHandOver(msgs); return; }
+        for (const m of msgs) this.dispatch(m);
       } catch (e) {
         this.lastError = e.message || String(e);
         // 403 значит, что сервер забыл код: перезапустился, почистил базу
@@ -182,6 +215,14 @@ class ConnectorBridge {
       code: this.cfg.code,
       vault: this.plugin.app.vault.getName(),
       prompts: list,
+      /* Что этот плагин умеет. Приложение одно на всех, а плагины обновляются
+         кто когда: по этому списку оно решает, показывать ли ленту и папки
+         и слать ли вопрос вместе с перепиской. Старый плагин списка не шлёт —
+         и приложение ведёт себя с ним по-старому. */
+      version: this.plugin.manifest.version,
+      caps: ["ask", "browse", "photo-modes", "undo"],
+      user: String(this.plugin.settings.userName || "").slice(0, 40),
+      assistant: String(this.plugin.settings.assistantName || "").slice(0, 40),
     });
   }
 
@@ -195,7 +236,7 @@ class ConnectorBridge {
     try {
       const r = await this.req("/api/push/send", {
         code: this.cfg.code,
-        title: String(title || "Хранилище").slice(0, 90),
+        title: String(title || t("Vault")).slice(0, 90),
         body: String(body || "").replace(/[#*`>_]/g, "").replace(/\s+/g, " ").trim().slice(0, 400),
         chat: chat || "main",
       });
@@ -219,7 +260,9 @@ class ConnectorBridge {
    * устройства добавляются редко.
    */
   async syncKeys(force) {
-    if (!force && Date.now() - this.keysChecked < 60e3) return;
+    // Every 10 s, not every minute: a phone that has just been connected waits
+    // for this key before it may ask for a single note.
+    if (!force && Date.now() - this.keysChecked < 10e3) return;
     this.keysChecked = Date.now();
     const mine = await this.ownKeys();
     for (const d of await this.listDevices()) {
@@ -391,33 +434,36 @@ class ConnectorBridge {
 
     const material = [
       used.length
-        ? "Уже прочитано по этому вопросу: " + used.slice(0, 6).join("; ")
+        ? "Already read for this question: " + used.slice(0, 6).join("; ")
         : "",
       near.length
-        ? "Рядом по смыслу, с началом текста:\n"
+        ? "Close in meaning, with the start of each:\n"
           + near.map((n) => "— " + n.name + ": " + n.body).join("\n")
         : "",
     ].filter(Boolean).join("\n\n");
 
-    const ask = "Человек спросил своё хранилище заметок и получил ответ. "
-      + "Предложи три следующих вопроса — такие, чтобы он нажал на них "
-      + "пальцем и разговор пошёл дальше по ЕГО заметкам.\n\n"
-      + "Ассистент умеет искать и читать заметки, сравнивать их, подводить "
-      + "итоги, дописывать в заметку и создавать новые. Предлагай только "
-      + "то, что он правда может сделать.\n\n"
-      + "Правила:\n"
-      + "— Опирайся на конкретное из материала ниже: имя, число, срок, "
-      + "название заметки. Общие вопросы вроде «расскажи подробнее» или "
-      + "«что там ещё есть» не годятся.\n"
-      + "— Живой разговорной речью, как спросил бы сам человек.\n"
-      + "— Коротко, до 45 знаков: подсказка — это кнопка в одну строку "
-      + "на телефоне. Коротко и конкретно одновременно — в этом вся задача.\n"
-      + "— На языке вопроса.\n"
-      + "— Не повторять заданный вопрос и не пересказывать ответ.\n"
-      + "— Три разных хода, а не один вопрос в трёх видах.\n\n"
-      + "В ответе только массив JSON из трёх строк, ничего больше.\n\n"
-      + "Вопрос: " + String(question).slice(0, 300) + "\n"
-      + "Ответ: " + String(answer).replace(/\s+/g, " ").slice(0, 700)
+    /* In English like every other instruction; the questions themselves
+       come out in the language of the question (rule below). */
+    const ask = "A person asked their own notes vault something and got an answer. "
+      + "Suggest three follow-up questions — ones they would tap with a finger "
+      + "so the conversation carries on through THEIR notes.\n\n"
+      + "The assistant can search and read notes, compare them, sum them up, "
+      + "add to a note and create new ones. Suggest only what it really can do.\n\n"
+      + "Rules:\n"
+      + "— Build on something concrete from the material below: a name, a number, "
+      + "a date, a note title. Generic ones like \"tell me more\" or "
+      + "\"what else is there\" will not do.\n"
+      + "— Plain spoken words, the way the person would ask it.\n"
+      + "— In the person's own voice, because they tap it to send it: \"what did I write about…\", "
+      + "\"add this to my…\" — never the assistant asking them (\"what did you…\").\n"
+      + "— Short, up to 45 characters: a suggestion is a one-line button on a phone. "
+      + "Short and concrete at once — that is the whole job.\n"
+      + "— In the language of the question.\n"
+      + "— Do not repeat the question or retell the answer.\n"
+      + "— Three different moves, not one question three ways.\n\n"
+      + "Reply with a JSON array of three strings and nothing else.\n\n"
+      + "Question: " + String(question).slice(0, 300) + "\n"
+      + "Answer: " + String(answer).replace(/\s+/g, " ").slice(0, 700)
       + (material ? "\n\n" + material : "");
 
     try {
@@ -449,7 +495,7 @@ class ConnectorBridge {
     } catch { return []; }
   }
 
-  async reply(ref, text, forDevice, sealedIn) {
+  async reply(ref, text, forDevice, sealedIn, opts = {}) {
     const body = String(text || "");
     // Шифруем только если собеседник сам говорил шифром. Иначе ключа
     // у него ещё нет, и зашифрованный ответ он просто не прочтёт.
@@ -458,6 +504,12 @@ class ConnectorBridge {
       await this.req("/api/reply", {
         code: this.cfg.code, ref, chunk: await cnSeal(key, body), done: true,
       });
+      return;
+    }
+    /* Ответ листания — данные, а не текст: печатать его по буквам незачем,
+       а куски по 64 знака превратили бы одну заметку в тысячу запросов. */
+    if (opts.whole) {
+      await this.req("/api/reply", { code: this.cfg.code, ref, chunk: body, done: true });
       return;
     }
     const step = 64;
@@ -477,49 +529,193 @@ class ConnectorBridge {
    * Возвращает пустое, если работать не с чем: тогда человеку уже отправлено
    * объяснение, и продолжать нечего.
    */
-  async fromPhoto(m, kind, payload, from, sealedIn) {
+  /**
+   * Фотография с телефона. Что с ней делать, выбирает человек:
+   *
+   *   text   — прочитать текст с бумаги и сохранить заметкой (как раньше);
+   *   attach — положить сам снимок в хранилище и вставить в заметку;
+   *   ask    — показать ассистенту и спросить, что на нём.
+   *
+   * Старое приложение режима не присылает — для него всё как было: текст.
+   *
+   * Возвращает { text, line } для обычного хода ассистента или null, если
+   * всё уже сделано здесь или человеку уже объяснено, почему нет.
+   */
+  async fromPhoto(m, kind, payload, from, sealedIn, chatId) {
     let caption = "";
     let image = "";
+    let mode = "text";
+    let ctx = null;
+    let rich = false;
     try {
       const j = JSON.parse(payload);
       caption = String(j.caption || "").trim();
       image = String(j.image || "");
+      if (j.mode) { mode = String(j.mode); rich = true; }
+      if (Array.isArray(j.ctx)) ctx = j.ctx;
     } catch { image = payload; }
 
     if (!image) {
-      await this.reply(m.id, "Фотография не дошла целиком. Пришлите ещё раз.", from, sealedIn)
+      await this.reply(m.id, t("The photo did not arrive in full. Please send it again."), from, sealedIn)
         .catch(() => {});
-      return "";
+      return null;
+    }
+    const mime = kind.includes("png") ? "image/png" : "image/jpeg";
+
+    if (mode === "attach") return await this.attachPhoto(m, image, mime, caption, from, sealedIn, chatId, ctx);
+
+    if (mode === "ask") {
+      let seen = "";
+      try {
+        seen = await this.plugin.ai.describePhoto(image, mime, caption);
+      } catch (e) {
+        const why = String((e && e.message) || e);
+        await this.reply(m.id, why === "no-cloud"
+          ? t("A local model cannot see photos — a cloud key is needed.")
+          : t("Could not look at the photo: {0}", why), from, sealedIn).catch(() => {});
+        return null;
+      }
+      return {
+        rich, ctx,
+        line: "📷 " + (caption || t("What is in the photo?")),
+        text: "[The user sent a photo from the phone. A vision model looked at it; here is what it shows:\n"
+          + seen + "\n— Answer the user's request about the photo from this. "
+          + "If they ask to save or file something, do it in their notes as usual. "
+          + "The photo itself is not saved in the vault unless they ask for that.]\n\n"
+          + (caption || "What is in this photo?"),
+      };
     }
 
-    const mime = kind.includes("png") ? "image/png" : "image/jpeg";
     let seen = "";
     try {
       seen = await this.plugin.ai.readPhoto(image, mime);
     } catch (e) {
       const why = String((e && e.message) || e);
       await this.reply(m.id, why === "no-cloud"
-        ? "Локальная модель не читает фотографии — нужен облачный ключ."
-        : "Не получилось прочитать фотографию: " + why, from, sealedIn).catch(() => {});
-      return "";
+        ? t("A local model cannot read photos — a cloud key is needed.")
+        : t("Could not read the photo: {0}", why), from, sealedIn).catch(() => {});
+      return null;
     }
 
     if (!seen || seen === "NOTEXT") {
-      await this.reply(m.id, "На фотографии не видно текста. "
-        + "Снимите ближе и при ровном свете.", from, sealedIn).catch(() => {});
-      return "";
+      await this.reply(m.id, t("There is no text to be seen in the photo. Take it closer and in even light — or choose «Into a note» to keep the picture itself."), from, sealedIn).catch(() => {});
+      return null;
     }
 
     /* Пометка человека идёт первой строкой, потому что именно она говорит,
-       что с этим делать: «по экономике», «в дневник», «это рецепт». Без неё
-       ассистент решит сам — и обычно правильно, но пусть решает по просьбе,
-       а не по догадке. */
-    return "[Ниже — текст, прочитанный с фотографии: человек снял бумажную "
-      + "запись и хочет сохранить её в заметках. Сохрани как заметку: приведи "
-      + "в порядок разметку, но ничего не дописывай от себя — на фото этого "
-      + "нет. Пометки [неразборчиво] оставь как есть.]\n\n"
-      + (caption ? "Просьба человека: " + caption + "\n\n" : "")
-      + "Текст с фотографии:\n" + seen;
+       что с этим делать: «по экономике», «в дневник», «это рецепт». */
+    return {
+      rich, ctx,
+      line: "📷 " + (caption || t("Text from a photo")),
+      text: "[Below is text read from a photo: the person photographed something written "
+        + "on paper and wants it kept in their notes. Save it as a note: tidy the markup, but "
+        + "add nothing of your own — it is not on the photo. Leave unreadable-word marks as "
+        + "they are. Reply in one line: where the note went and what it is called; do not "
+        + "retell the note itself. "
+        + (caption ? "Reply in the language of the person's request." : "Reply in " + (LANG === "ru" ? "Russian" : "English") + ".")
+        + "]\n\n"
+        + (caption ? "The person's request: " + caption + "\n\n" : "")
+        + "Text from the photo:\n" + seen,
+    };
+  }
+
+  /** Сохранить снимок как вложение — туда, куда Obsidian кладёт вложения. */
+  async savePhoto(base64, mime, near) {
+    const app = this.plugin.app;
+    const now = new Date();
+    const two = (n) => String(n).padStart(2, "0");
+    const ext = mime.includes("png") ? "png" : "jpg";
+    const name = `Photo ${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())} `
+      + `${two(now.getHours())}-${two(now.getMinutes())}-${two(now.getSeconds())}.${ext}`;
+    let path = name;
+    try { path = await app.fileManager.getAvailablePathForAttachment(name, near ? near.path : ""); }
+    catch { /* старый Obsidian — в корень, как он сам сделал бы */ }
+    if (!this.plugin.vault.inScope(path)) throw new Error(t("The attachments folder is private or outside the allowed folders."));
+    const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+    if (dir) await this.plugin.vault.ensureFolder(dir);
+    const raw = atob(base64);
+    const bin = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bin[i] = raw.charCodeAt(i);
+    const f = await app.vault.createBinary(path, bin.buffer);
+    this.lastPhotoEntry = null;
+    if (this.plugin.journal) {
+      try { this.lastPhotoEntry = await this.plugin.journal.record("create", { path: f.path }); } catch { /* convenience */ }
+    }
+    return f;
+  }
+
+  /**
+   * «В заметку»: сам снимок, без распознавания.
+   *
+   * Без подписи — в сегодняшний день, пунктом со временем: это самый частый
+   * случай («сфоткал чек, доску, ребёнка») и он не стоит ни запроса к модели,
+   * ни копейки. С подписью — ассистент решает, в какую заметку: «в ремонт
+   * кухни», «новой заметкой про стол».
+   */
+  async attachPhoto(m, image, mime, caption, from, sealedIn, chatId, ctx) {
+    const s = this.plugin.settings;
+    if (!s.canCreate) {
+      await this.reply(m.id, t("Creating notes is switched off in settings."), from, sealedIn).catch(() => {});
+      return null;
+    }
+    const V = this.plugin.vault;
+    /* "In the diary: breakfast" — the address goes, the words stay. Whole
+       words only: "today's breakfast" lost its "today" and arrived as
+       "'s breakfast", and "день рождения" went into the diary as "рождения". */
+    const DAY_RE = /^(?:в\s+)?(?:сегодня\S*|дневник\S*|ежедневн\S*|today|daily|день(?=\s*[:—-]|\s*$))(?=$|[\s:,.!—-])\s*[:,.!—-]?\s*/i;
+    // "завтрак сегодня", "lunch today": a short caption ending in the day is about the day too.
+    const wantsDay = !caption || DAY_RE.test(caption) || /^today['’]s\s/i.test(caption)
+      || (caption.split(/\s+/).length <= 4 && /(^|\s)(сегодня|today)[.!]?$/i.test(caption));
+    try {
+      if (wantsDay) {
+        if (!s.canEdit) throw new Error(t("Editing notes is switched off in settings."));
+        const day = await V.ensureDailyNote("today");
+        if (!day) throw new Error(t("There is no daily note and Obsidian could not make one."));
+        const f = await this.savePhoto(image, mime, day);
+        const shot = this.lastPhotoEntry;
+        const now = new Date();
+        const two = (n) => String(n).padStart(2, "0");
+        const rest = caption ? caption.replace(DAY_RE, "").trim() : "";
+        const note = rest ? " " + rest : "";
+        // The edit as the journal saw it — its id is what "Undo" on the phone needs.
+        const J = this.plugin.journal;
+        let edit = null;
+        const sink = (e) => { if (e.kind === "edit" && e.path === day.path) edit = e; };
+        if (J) J.sinks.add(sink);
+        try {
+          await V.appendToNote(day, `- ${two(now.getHours())}:${two(now.getMinutes())}${note}\n\n![[${f.name}]]`);
+        } finally { if (J) J.sinks.delete(sink); }
+        // Undo on that line takes the picture with it.
+        if (edit && shot) { edit.with = [shot.id]; J.saveSoon(); }
+        const marks = "\n\n<!--changes:" + JSON.stringify([
+          { id: edit ? edit.id : "", kind: "edit", path: day.path, title: day.basename, label: t("Note changed: {0}", day.basename) },
+        ]) + "-->";
+        const said = t("Photo added to {0}.", day.basename);
+        if (!/^sys/.test(chatId)) {
+          await this.plugin.memory.add("connector", chatId, {
+            user: "📷 " + (caption || t("Photo into today")), reply: said,
+            did: [`saved the photo «${f.name}» (${f.path}) and embedded it in «${day.basename}» (${day.path})`],
+            status: "ok", ref: m.id,
+          });
+        }
+        await this.reply(m.id, said + marks, from, sealedIn);
+        return null;
+      }
+      const f = await this.savePhoto(image, mime, null);
+      return {
+        rich: true, ctx, photoEntry: this.lastPhotoEntry,
+        line: "📷 " + caption,
+        text: `[The user sent a photo from the phone. It is ALREADY saved in the vault as "${f.path}". `
+          + `Put it where the request below says by embedding it with exactly ![[${f.name}]] — `
+          + "into an existing note (append_note) or a new one (create_note), whichever the request means. "
+          + "Do not describe the photo unless asked; you have not seen it. Say in one line which note it went into, "
+          + "by the note's name — no file name, no path, no ![[…]] code: the person reads this on a phone.]\n\n"
+          + caption,
+      };
+    } catch (e) {
+      await this.reply(m.id, t("Could not save the photo: {0}", (e && e.message) || String(e)), from, sealedIn).catch(() => {});
+      return null;
+    }
   }
 
   /**
@@ -533,14 +729,14 @@ class ConnectorBridge {
     const fmt = kind.split(".")[1] || "webm";
     try {
       const said = String((await this.plugin.ai.transcribe(base64, fmt)) || "").trim();
-      await this.reply(m.id, said || "!Ничего не расслышал.", from, sealedIn);
+      await this.reply(m.id, said || "!" + t("Could not make out any words."), from, sealedIn);
     } catch (e) {
       const why = String((e && e.message) || e);
       // Восклицательный знак в начале — знак приложению, что это не текст
       // сказанного, а причина неудачи: его покажут, а не вставят в поле.
       await this.reply(m.id, why === "no-cloud"
-        ? "!Локальная модель не распознаёт речь — нужен облачный ключ."
-        : "!Не получилось расшифровать: " + why, from, sealedIn).catch(() => {});
+        ? "!" + t("A local model cannot recognise speech — a cloud key is needed.")
+        : "!" + t("Could not transcribe it: {0}", why), from, sealedIn).catch(() => {});
     }
   }
 
@@ -737,6 +933,28 @@ class ConnectorBridge {
     return () => { stopped = true; };
   }
 
+  /* Виды сообщений, на которые отвечает не ассистент, а сам плагин. Их не
+     ставим в очередь за думающим ассистентом: листать хранилище, пока он
+     пишет длинный ответ, — обычное дело, и ждать тут нечего. */
+  isService(kind) {
+    const k = String(kind || "text");
+    return BROWSE_KINDS.has(k) || k.startsWith("voice") || k === "balance" || k.startsWith("topup");
+  }
+
+  /** Разобрать одно сообщение: служебное — сразу, ход ассистента — в очередь. */
+  dispatch(m) {
+    const kind = String((m && m.kind) || "text");
+    if (this.isService(kind)) {
+      this.handle(m).catch((e) => console.error("[Elton AI] connector", e));
+      return;
+    }
+    // Ходы по-прежнему по одному: два ответа сразу перепутали бы и деньги,
+    // и заметки, которые оба правят.
+    this.chain = (this.chain || Promise.resolve())
+      .then(() => (this.running ? this.handle(m) : cnHandOver([m])))
+      .catch((e) => console.error("[Elton AI] connector", e));
+  }
+
   async handle(m) {
     const from = (m && m.device) || null;
     const raw = String((m && m.body) || "");
@@ -751,7 +969,7 @@ class ConnectorBridge {
       if (cnSealed(raw)) {
         // Ключа для этого устройства нет — сказать об этом надо, иначе
         // человек будет смотреть на молчание.
-        await this.reply(m.id, "Не удалось расшифровать сообщение. Переподключите телефон.", from)
+        await this.reply(m.id, t("Could not decrypt the message. Connect the phone again."), from)
           .catch(() => {});
       }
       return;
@@ -761,69 +979,115 @@ class ConnectorBridge {
     // открытое. Телефон, у которого ещё нет нашего ключа, шифра не прочтёт.
     const sealedIn = cnSealed(raw);
 
-    // Не всё, что приходит с телефона, — вопрос ассистенту.
     const kind = String((m && m.kind) || "text");
-    if (kind.startsWith("photo")) {
-      text = await this.fromPhoto(m, kind, text, from, sealedIn);
-      if (!text) return;
-    }
+    if (BROWSE_KINDS.has(kind)) return await this.doBrowse(m, kind, text, from, sealedIn);
     if (kind.startsWith("voice")) return await this.doVoice(m, kind, text, from, sealedIn);
     if (kind === "balance") return await this.doBalance(m, from, sealedIn);
     if (kind.startsWith("topup")) return await this.doTopup(m, kind, from, sealedIn);
+    return await this.doTurn(m, kind, text, from, sealedIn);
+  }
 
+  /** Лента, папки, заметка, картинка, журнал правок — без модели. */
+  async doBrowse(m, kind, text, from, sealedIn) {
+    /* Содержимое хранилища — только под сквозным шифром. Приложение 4.0
+       иначе и не спрашивает; открытый запрос значит, что что-то не так. */
+    if (!sealedIn || !this.secrets.get(from)) {
+      await this.reply(m.id, JSON.stringify({ error: "sealed-only" }), from, false, { whole: true }).catch(() => {});
+      return;
+    }
+    let out;
+    try { out = await this.browser.handle(kind, text); }
+    catch (e) { out = { error: String((e && e.message) || e) }; }
+    await this.reply(m.id, JSON.stringify(out), from, sealedIn, { whole: true }).catch(() => {});
+  }
+
+  /**
+   * Что было в этом чате, словами для модели.
+   *
+   * Своя память — первой: в ней есть строки «что сделано», без которых
+   * «добавь ещё» некуда добавлять. Переписка с телефона — для двух случаев,
+   * где своей памяти нет или она неполная: чат начат до обновления, и
+   * сообщения, до компьютера так и не дошедшие. Последние человек видит у
+   * себя на экране и вправе считать сказанными.
+   */
+  async contextFor(chatId, ctx, ref) {
+    const mem = this.plugin.memory;
+    const turns = await mem.turns("connector", chatId);
+    let history = await mem.messages("connector", chatId);
+    const phone = (Array.isArray(ctx) ? ctx : [])
+      .filter((x) => x && typeof x.text === "string" && x.text.trim() && x.id !== ref)
+      .slice(-16);
+    let missed = [];
+    if (!turns.length && phone.length) {
+      history = [];
+      for (const x of phone) {
+        const said = String(x.text).slice(0, 3000);
+        if (x.who === "me") {
+          if (["error", "offline", "stuck"].includes(x.state)) missed.push(said);
+          else history.push({ role: "user", content: said });
+        } else if (history.length && history[history.length - 1].role === "user") {
+          history.push({ role: "assistant", content: said });
+        }
+      }
+      // Вопрос без ответа в конце истории модели ни к чему — он ушёл в «не дошли».
+      if (history.length && history[history.length - 1].role === "user") {
+        missed.unshift(history.pop().content);
+      }
+    } else if (phone.length) {
+      const known = new Set(turns.map((x) => x.ref).filter(Boolean));
+      const since = turns.length ? turns[turns.length - 1].at : 0;
+      missed = phone
+        .filter((x) => x.who === "me" && !(x.id && known.has(x.id)) && (!x.at || x.at > since - 5000))
+        .filter((x) => ["error", "offline", "stuck", "queued", "sending"].includes(x.state) || !x.id)
+        .map((x) => String(x.text).slice(0, 3000));
+    }
+    return { history, missed: missed.slice(-5) };
+  }
+
+  /** Ход ассистента: текст, фотография, вопрос с перепиской. */
+  async doTurn(m, kind, text, from, sealedIn) {
+    const chatId = String(m.chat || "main");
+    // Служебные чаты — название диалога и подобное — в память не идут.
+    const keep = !/^sys/.test(chatId);
+    let ctx = [];
+    let rich = false;              // новое приложение: понимает метки под ответом
+    if (kind === "ask") {
+      rich = true;
+      try {
+        const j = JSON.parse(text);
+        text = String(j.text || "").trim();
+        ctx = Array.isArray(j.ctx) ? j.ctx : [];
+      } catch { /* не конверт — значит просто текст */ }
+      if (!text) return;
+    }
+    let userLine = text;
+    let photoEntry = null;
+    if (kind.startsWith("photo")) {
+      const p = await this.fromPhoto(m, kind, text, from, sealedIn, chatId);
+      if (!p) return;
+      photoEntry = p.photoEntry || null;
+      if (p.ctx) ctx = p.ctx;
+      if (p.rich) rich = true;
+      text = p.text;
+      userLine = p.line || "📷";
+    }
+
+    const mem = this.plugin.memory;
+    const agent = new Agent(this.plugin);
     try {
-      const agent = new Agent(this.plugin);
       // Фраза-сценарий работает здесь ровно так же, как сказанная вслух.
       const hit = matchScenario(text, this.plugin.settings.scenarios);
       let sent = hit ? scenarioPrompt(hit.scenario, hit.rest) : text;
 
-      // Из браузера ассистент не видит ни открытой заметки, ни календаря,
-      // поэтому «что у меня на сегодня» он понимал как «что вообще есть».
-      // Дату сообщаем явно и в том же формате, в каком названы ежедневные.
-      const now = new Date();
-      const two = (n) => String(n).padStart(2, "0");
-      const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
-      const stamp = `${two(now.getDate())}-${two(now.getMonth() + 1)}-${now.getFullYear()}`;
-      const months = ["января", "февраля", "марта", "апреля", "мая", "июня",
-        "июля", "августа", "сентября", "октября", "ноября", "декабря"];
-      const words = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
-      // Про дневник говорим только когда спрашивают про время. Иначе
-      // ассистент открывал сегодняшнюю заметку на любой вопрос — даже про
-      // консультации, — и тратил на это ход.
-      const aboutTime = /сегодн|вчера|завтра|на день|за день|дневник|ежеднев|привычк|задач|план|недел|утро|вечер|дата|числ/i
-        .test(text);
-      const dayHint = aboutTime
-        ? `Ежедневная заметка за сегодня — «${stamp}», формат ДЕНЬ-МЕСЯЦ-ГОД. `
-          + `Открывай её по имени, а не ту, что открыта в редакторе. `
-        : '';
-      // Коротко, но без двусмысленности: «03-09» модель читает как 9 марта,
-      // если не сказать, что формат день-месяц-год.
-      /* Куда класть новую заметку — из настроек хранилища, а не из кода.
-         Здесь была зашита папка автора, и всем остальным ассистент предлагал
-         класть заметки туда, чего у них нет. Без настройки просим
-         хотя бы не сорить в корне. */
-      const inbox = String(this.plugin.settings.newNoteFolder || "").trim();
-      const inboxHint = inbox
-        ? `Новые заметки без указания папки клади в «${inbox}», не в корень. `
-        : "Новые заметки клади в подходящую по смыслу папку, а не в корень хранилища. ";
-      sent = `[Сегодня ${words} (${days[now.getDay()]}), ${two(now.getHours())}:${two(now.getMinutes())}. `
-        + dayHint
-        + inboxHint
-        + `Человек пишет с телефона и не видит экран компьютера: не отвечай `
-        + `«открыл, смотри» — читай и пересказывай, коротко. `
-        /* Живой случай: на «убери повторы» после списка задач ассистент
-           переписал четыре ежедневные заметки. Человек имел в виду список
-           на экране. С телефона такое не отменить — там не видно, что
-           изменилось, и нет отмены под рукой. */
-        + `Короткое уточнение — «убери повторы», «покороче», «по-другому», `
-        + `«без воды», «переделай» — относится к твоему ответу, а не к `
-        + `заметкам: перепиши ответ, файлы не трогай. Заметки меняй только `
-        + `когда сказано прямо: «исправь в заметке», «удали из файла», `
-        + `«допиши в дневник». Можно понять и так и так — спроси одной `
-        + `строкой, а не выбирай сам.]\n\n` + sent;
+      const { history, missed } = keep ? await this.contextFor(chatId, ctx, m.id) : { history: [], missed: [] };
 
-      const chatId = String(m.chat || "main");
-      const history = this.chatHistory.get(chatId) || [];
+      const recall = keep ? await mem.recallNote("connector", chatId) : "";
+      sent = this.framing(text) + recall + (missed.length
+        ? "[Earlier in this chat the user sent these messages, and they never reached you — "
+          + "the computer was off or the connection dropped. They are part of the conversation; "
+          + "if the new message refers to them (\"so?\", \"do it\", \"write it\"), carry them out now:\n"
+          + missed.map((x) => "«" + x + "»").join("\n") + "]\n\n"
+        : "") + sent;
 
       // Пока агент работает, цикл стоит здесь и очередь не разбирает —
       // значит про «останови» надо спрашивать отдельно.
@@ -844,23 +1108,31 @@ class ConnectorBridge {
       } finally { stopWatch(); }
 
       /* Остановлено с телефона. Ответ всё равно нужен: приложение ждёт метки
-         «готово» и без неё крутило бы «думаю» до самого таймаута. В историю
-         оборванный ход не кладём — продолжать с него нечего. */
+         «готово» и без неё крутило бы «думаю» до самого таймаута. В память
+         ход идёт с пометкой: то, что успело сделаться, сделано. */
       if (agent.cancelled) {
+        if (keep) await mem.add("connector", chatId, { user: userLine, reply: "", did: agent.didList(), status: "cancelled", ref: m.id });
         await this.reply(m.id, t("Stopped."), from, sealedIn).catch(() => {});
         return;
       }
-      history.push({ role: "user", content: sent });
-      history.push({ role: "assistant", content: reply || "" });
-      this.chatHistory.set(chatId, history.slice(-12));
-      // Чатов может накопиться много, а память нужна только живым.
-      if (this.chatHistory.size > 20) {
-        this.chatHistory.delete(this.chatHistory.keys().next().value);
+      if (keep) await mem.add("connector", chatId, { user: userLine, reply: reply || "", did: agent.didList(), status: "ok", ref: m.id });
+      /* The photo was saved before the assistant chose where it goes. Undoing
+         the note it went into takes the picture with it, as it does for the
+         diary — otherwise the picture stays behind with nothing showing it. */
+      if (photoEntry && this.plugin.journal) {
+        for (const e of agent.changes || []) {
+          if ((e.kind === "edit" || e.kind === "create") && e.id !== photoEntry.id) e.with = [photoEntry.id];
+        }
+        this.plugin.journal.saveSoon();
       }
 
-      const list = (agent.sources || []).slice(0, 8);
+      const list = agent.shownSources().slice(0, 8);
+      /* Новому приложению — ссылками: по ним открывается сама заметка. Старое
+         показало бы скобки, ему по-прежнему просто названия. */
       const tail = list.length
-        ? "\n\n" + t("From your notes:") + "\n" + list.map((x) => "- " + (x.title || x.path)).join("\n")
+        ? "\n\n" + t("From your notes:") + "\n" + list.map((x) => (rich
+          ? "- [[" + String(x.path || x.title).replace(/\.md$/i, "") + "|" + (x.title || x.path) + "]]"
+          : "- " + (x.title || x.path))).join("\n")
         : "";
       // Одним куском: телефон перестаёт слушать на метке «готово», и всё,
       // что послано после неё, до него уже может не дойти.
@@ -870,11 +1142,84 @@ class ConnectorBridge {
          потому что приклеивается уже после них. */
       const next = await this.nextSteps(text, body, agent.sources);
       const chips = next.length ? "\n\n<!--next:" + JSON.stringify(next) + "-->" : "";
-      await this.reply(m.id, body + tail + chips, from, sealedIn);
+      /* Что поменялось — кнопками «открыть» и «отменить» под ответом. Только
+         новому приложению: старое показало бы эту строку как текст. */
+      const changed = rich ? this.changeMarks(agent) : "";
+      await this.reply(m.id, body + tail + chips + changed, from, sealedIn);
     } catch (e) {
-      await this.reply(m.id, "Не получилось ответить: " + (e.message || String(e)), from, sealedIn)
+      const why = (e && e.message) || String(e);
+      if (keep) await mem.add("connector", chatId, { user: userLine, reply: why, did: agent.didList(), status: "error", ref: m.id }).catch(() => {});
+      await this.reply(m.id, t("Could not answer: {0}", why), from, sealedIn)
         .catch(() => {});
     }
   }
-}
 
+  /** Метка с правками этого хода для приложения. */
+  changeMarks(agent) {
+    const seen = new Set();
+    const items = [];
+    // A note made this turn is shown once, as made — not again as edited.
+    const made = new Set((agent.changes || []).filter((e) => e.kind === "create").map((e) => e.path));
+    for (const e of (agent.changes || []).slice().reverse()) {
+      const k = e.kind + "|" + e.path;
+      if (e.kind === "edit" && made.has(e.path)) continue;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      items.push({ id: e.id, kind: e.kind, path: e.path, title: e.title, label: changeLabel(e) });
+    }
+    return items.length ? "\n\n<!--changes:" + JSON.stringify(items.slice(0, 6)) + "-->" : "";
+  }
+
+  /**
+   * Что ассистенту надо знать о положении человека: дата, куда класть, что
+   * экрана компьютера он не видит. В историю это не попадает — каждый ход
+   * получает свежее.
+   */
+  framing(text) {
+    /* From the phone the assistant sees neither the open note nor a calendar,
+       so "what's on today" used to be read as "what is there at all". The
+       date goes in explicitly.
+       Written in English like the rest of the instructions: a Russian frame
+       around an English message made it answer an English speaker in
+       Russian. The language rule in the system prompt does the rest. */
+    const now = new Date();
+    const two = (n) => String(n).padStart(2, "0");
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const months = ["January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"];
+    const words = `${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+    // The daily note is mentioned only when the question is about time.
+    // Otherwise it opened today's note for any question at all and spent a
+    // turn on it.
+    const aboutTime = /сегодн|вчера|завтра|на день|за день|дневник|ежеднев|привычк|задач|план|недел|утро|вечер|дата|числ|today|yesterday|tomorrow|daily|diary|journal|habit|task|todo|plan|week|morning|evening|date/i
+      .test(text);
+    let dayHint = "";
+    if (aboutTime) {
+      // By its real name when it exists: naming differs from vault to vault
+      // (DD-MM-YYYY, YYYY-MM-DD, …), and a guessed name sent it searching.
+      const V = this.plugin.vault;
+      const today = V && V.dailyNote ? V.dailyNote("today") : null;
+      dayHint = today
+        ? `Today's daily note is "${today.path}" — open it by that path, not the note that happens to be open in the editor. `
+        : "For today's daily note use the daily_note tool with when: today, not the note that happens to be open in the editor. ";
+    }
+    // Where a new note goes comes from the vault's settings, not from code.
+    // With nothing set, at least not into the root.
+    const inbox = String(this.plugin.settings.newNoteFolder || "").trim();
+    const inboxHint = inbox
+      ? `New notes with no folder named go into "${inbox}", not the vault root. `
+      : "New notes go into the folder that fits them, not the vault root. ";
+    return `[Now: ${words}, ${two(now.getHours())}:${two(now.getMinutes())}. `
+      + dayHint
+      + inboxHint
+      + "The person is writing from a phone and cannot see the computer screen: never answer "
+      + "\"I opened it, have a look\" — read it and retell it, briefly. "
+      /* A real case: after a list of tasks, "remove the duplicates" made it
+         rewrite four daily notes. The person meant the list on screen. */
+      + "A short follow-up like \"remove the duplicates\", \"shorter\", \"say it differently\", "
+      + "\"redo it\" is about your previous reply, not about the notes: rewrite the reply and leave "
+      + "the files alone. Change notes only when told to directly, or when this continues a note "
+      + "being written (see the conversation above). If it could mean either, do the useful one "
+      + "and name the other in one line. Reply in the language of the message below.]\n\n";
+  }
+}

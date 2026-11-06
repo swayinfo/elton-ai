@@ -348,6 +348,39 @@ class AIClient {
     return list.map((m) => m.id).filter(Boolean).sort();
   }
 
+  /**
+   * Many texts in one request — what makes a vault of twenty thousand notes
+   * a matter of minutes instead of an evening. OpenAI-compatible servers take
+   * an array as `input`; a local one that only takes a single string is found
+   * out once and then fed one text at a time.
+   * Vectors come back in input order, by their `index` and not by position.
+   */
+  async embedMany(texts) {
+    const list = texts.map((x) => String(x || "").slice(0, 12000));
+    const one = async () => { const out = []; for (const x of list) out.push(await this.embed(x)); return out; };
+    if (list.length < 2 || this._noBatch) return one();
+    let res;
+    try {
+      res = await this.post("/v1/embeddings", { model: this.s.embedModel, input: list }, { profile: this.profile() });
+      if (res.status && (res.status < 200 || res.status >= 300)) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      // If even one text fails, the provider is down or the key is wrong, and
+      // that error is the one worth reporting. If one text works, it simply
+      // does not take arrays.
+      const first = await this.embed(list[0]);
+      this._noBatch = true;
+      const out = [first];
+      for (const x of list.slice(1)) out.push(await this.embed(x));
+      return out;
+    }
+    const data = (res.json && res.json.data) || [];
+    if (data.length !== list.length) throw new Error(`The provider returned ${data.length} vectors for ${list.length} notes`);
+    const out = new Array(list.length);
+    data.forEach((d, k) => { out[typeof d.index === "number" ? d.index : k] = d && d.embedding; });
+    if (out.some((v) => !Array.isArray(v) || !v.length)) throw new Error("Empty embedding response");
+    return out;
+  }
+
   async embed(text) {
     const p = this.profile();
     const res = await this.post("/v1/embeddings", {
@@ -401,7 +434,7 @@ class AIClient {
               // потом по заметкам будут латиницей.
               + "Latin abbreviations and terms (LTV, CAC, ARPU, SQL, KPI and the like) "
               + "must stay in Latin letters, never transliterated into Cyrillic. "
-              + "If a word is genuinely unreadable, write [неразборчиво] in its place "
+              + "If a word is genuinely unreadable, write " + (LANG === "ru" ? "[неразборчиво]" : "[illegible]") + " in its place "
               + "instead of guessing. If the photo has no text at all, reply with "
               + "the single word: NOTEXT. Reply with the text only — no commentary.",
           },
@@ -418,6 +451,42 @@ class AIClient {
     const out = res.json && res.json.choices && res.json.choices[0]
       && res.json.choices[0].message;
     return String((out && out.content) || "").trim();
+  }
+
+  /**
+   * Посмотреть на фотографию и сказать, что на ней — для вопроса «что это?».
+   *
+   * Не переписывание текста, как readPhoto, а взгляд: что изображено, что
+   * можно прочитать, что важно для просьбы человека. Ответ уходит дальше
+   * обычному ассистенту, поэтому описание подробное, а не изящное.
+   */
+  async describePhoto(base64Image, mime = "image/jpeg", question = "") {
+    const p = this.profile(true);
+    if (p.id === "local") throw new Error("no-cloud");
+    const res = await this.post("/v1/chat/completions", {
+      model: p.id === "openai" ? "gpt-4o-mini" : "google/gemini-2.5-flash",
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Look at this photo carefully. First describe what it shows: objects, people (without guessing who they are), "
+              + "the setting, any text you can read (copy it exactly), numbers, prices, labels. "
+              + "Then answer this request about the photo"
+              + (question ? `: «${question}»` : ": what is this, and what is worth knowing about it?")
+              + " Be concrete and factual. If something cannot be made out, say so instead of guessing.",
+          },
+          { type: "image_url", image_url: { url: `data:${mime};base64,${base64Image}` } },
+        ],
+      }],
+      max_tokens: 1500,
+      temperature: 0.2,
+    }, { profile: p });
+    const out = res.json && res.json.choices && res.json.choices[0]
+      && res.json.choices[0].message;
+    const said = String((out && out.content) || "").trim();
+    if (!said) throw new Error("empty");
+    return said;
   }
 
   async transcribe(base64Audio, format = "webm") {

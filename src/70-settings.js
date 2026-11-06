@@ -1,295 +1,4 @@
 /* ============================================================
- *  Onboarding
- *
- *  A first run that ends with a working assistant, not a wall of
- *  switches. Each slide asks for one thing and writes it straight
- *  to settings, so quitting halfway still leaves progress behind.
- * ========================================================== */
-class OnboardingModal extends Modal {
-  constructor(app, plugin) {
-    super(app);
-    this.plugin = plugin;
-    this.step = 0;
-  }
-
-  onOpen() {
-    this.modalEl.addClass("oa-onb");
-    this.draw();
-  }
-
-  onClose() { this.contentEl.empty(); }
-
-  get steps() {
-    return [
-      {
-        title: t("Meet your assistant"),
-        body: t("It reads and writes the notes you already have. Talk to it or type — it searches your vault, answers from it, and edits notes when you ask."),
-        icon: "sparkles",
-        // The first slide is where someone decides whether to hand this thing
-        // a key and their notes. A name and an address belong here.
-        render: (c) => {
-          const box = c.createDiv({ cls: "oa-note" });
-          box.createDiv({ cls: "oa-note-title", text: t("Who made this") });
-          const line = box.createDiv();
-          line.appendText(t("Elton — I build tools for Obsidian and use this one every day. What the plugin sends, where it sends it and what it never touches is written out in full on the Vault tab and in the readme: ") );
-          const a = line.createEl("a", { text: siteLabel(), href: siteUrl() });
-          a.setAttr("target", "_blank");
-          a.setAttr("rel", "noopener");
-        },
-      },
-      { title: t("Pick where the brains come from"), body: t("Four options: Elton AI, OpenRouter, a local model on your own machine, or OpenAI directly. You bring the key — the plugin stores it only in this vault."), icon: "plug", render: (c) => this.stepProvider(c) },
-      { title: t("Give it a name"), body: t("Call it whatever you like. The name is what it answers to and how it introduces itself."), icon: "user", render: (c) => this.stepName(c) },
-      { title: t("Decide what it may touch"), body: t("By default it can read the whole vault, and create or edit notes. Deleting always asks you first. You can narrow it to specific folders."), icon: "shield", render: (c) => this.stepPerms(c) },
-      { title: t("Let it learn your vault"), body: t("Before it writes anything it needs to know how your vault is arranged — which folders hold what, and which templates a new note should be built from. Here is what it found. Correct it if it got something wrong."), icon: "folder-tree", render: (c) => this.stepVault(c) },
-      { title: t("You're set"), body: t("Open the panel from the ribbon or the command palette. Everything here can be changed later in settings."), icon: "check-circle", render: null },
-    ];
-  }
-
-  draw() {
-    const c = this.contentEl;
-    // Choosing a provider redraws this slide to show the fields that provider
-    // needs — the same slide, so the reader's place is kept. Moving to the
-    // next slide is a new page and starts at the top.
-    const back = keepScroll(c);
-    const same = this.step === this._drawnStep;
-    this._drawnStep = this.step;
-
-    c.empty();
-    const s = this.steps[this.step];
-
-    const dots = c.createDiv({ cls: "oa-onb-dots" });
-    this.steps.forEach((_, i) => dots.createDiv({ cls: "oa-onb-dot" + (i === this.step ? " is-on" : "") }));
-
-    const ic = c.createDiv({ cls: "oa-onb-icon" });
-    setIcon(ic, s.icon);
-    c.createEl("h2", { text: s.title, cls: "oa-onb-title" });
-    c.createDiv({ cls: "oa-onb-body", text: s.body });
-
-    if (s.render) s.render(c.createDiv({ cls: "oa-onb-form" }));
-
-    const nav = c.createDiv({ cls: "oa-onb-nav" });
-    if (this.step > 0) {
-      const b = nav.createEl("button", { text: t("Back") });
-      b.onclick = () => { this.step--; this.draw(); };
-    } else {
-      const b = nav.createEl("button", { text: t("Skip") });
-      b.onclick = () => this.finish();
-    }
-    const next = nav.createEl("button", { cls: "mod-cta", text: this.step === this.steps.length - 1 ? t("Done") : t("Next") });
-    next.onclick = async () => {
-      if (this.step === this.steps.length - 1) return this.finish();
-      this.step++;
-      await this.plugin.saveSettings();
-      this.draw();
-    };
-
-    if (same) back();
-  }
-
-  stepProvider(c) {
-    const s = this.plugin.settings;
-    new Setting(c)
-      .setName(t("AI provider"))
-      .addDropdown((d) => {
-        Object.entries(PROVIDERS).forEach(([id, p]) => d.addOption(id, t(p.label)));
-        d.setValue(s.provider).onChange(async (v) => { s.provider = v; await this.plugin.saveSettings(); this.draw(); });
-      });
-
-    /* What the author's own service is, at the moment the choice is made.
-       Shown only when it is the one selected: an advert for it under someone
-       else's key would be an advert, and this is the one place it is an
-       answer to the question already on screen. */
-    if (s.provider === "obsimind") {
-      const box = c.createDiv({ cls: "oa-note" });
-      box.createDiv({ cls: "oa-note-title", text: t("A balance instead of a key") });
-      box.createDiv({ text: t("One balance for every model, topped up from a Telegram bot — no card left with a foreign provider and no separate signup. There is a free trial with the promo code «{0}».", t("Gift")) });
-      const line = box.createDiv();
-      line.appendText(t("Prices, models and how to top up: "));
-      const a = line.createEl("a", { text: siteLabel(), href: siteUrl() });
-      a.setAttr("target", "_blank");
-      a.setAttr("rel", "noopener");
-    }
-    const p = PROVIDERS[s.provider];
-    if (p.needsKey) {
-      new Setting(c).setName(t("API key")).addText((tx) => {
-        tx.inputEl.type = "password";
-        tx.setValue(s.keys[s.provider] || "").onChange(async (v) => { s.keys[s.provider] = v.trim(); await this.plugin.saveSettings(); });
-      });
-    } else if (!p.fixedBase) {
-      new Setting(c).setName(t("Server address")).addText((tx) =>
-        tx.setValue(s.bases[s.provider] || "").onChange(async (v) => { s.bases[s.provider] = v.trim(); await this.plugin.saveSettings(); }));
-    }
-    new Setting(c).setName(t("Model")).addText((tx) =>
-      tx.setValue(s.models[s.provider] || "").onChange(async (v) => { s.models[s.provider] = v.trim(); await this.plugin.saveSettings(); }));
-  }
-
-  stepName(c) {
-    const s = this.plugin.settings;
-    new Setting(c).setName(t("What should it be called?")).addText((tx) =>
-      tx.setValue(s.assistantName).onChange(async (v) => { s.assistantName = v; await this.plugin.saveSettings(); }));
-    new Setting(c).setName(t("How should it address you?")).addText((tx) =>
-      tx.setValue(s.userName).onChange(async (v) => { s.userName = v; await this.plugin.saveSettings(); }));
-  }
-
-  stepPerms(c) {
-    const s = this.plugin.settings;
-    const tog = (name, key, desc) => new Setting(c).setName(name).setDesc(desc || "")
-      .addToggle((x) => x.setValue(s[key]).onChange(async (v) => { s[key] = v; await this.plugin.saveSettings(); }));
-    tog(t("Read notes"), "canRead");
-    tog(t("Create notes"), "canCreate");
-    tog(t("Edit notes"), "canEdit");
-    tog(t("Delete notes"), "canDelete", t("Even with this on, every deletion stops and waits for you to confirm from the keyboard. It can never delete anything on its own."));
-
-    /* Asked here rather than left to be found.
-       Answering sends parts of notes to a provider, and the moment to decide
-       which parts may never go is before the first question, not after. */
-    c.createDiv({ cls: "oa-warn", text: t("⚠ Answering a question sends parts of your notes to your AI provider. Anything in the folders below is never read, never searched, never indexed and never sent — even when it is the note open on your screen. This is the place for medical records, finances, passwords, other people's information, anything under an agreement.") });
-    new Setting(c)
-      .setName(t("Private folders"))
-      .setDesc(t("One folder per line, relative to the vault root. Subfolders are covered too."))
-      .addTextArea((tx) => {
-        tx.inputEl.rows = 3;
-        tx.setPlaceholder(t("2. Areas/Health"))
-          .setValue(s.privateFolders || "")
-          .onChange(async (v) => {
-            s.privateFolders = v;
-            await this.plugin.saveSettings();
-            this.plugin.vault.index = null;
-            this.plugin.vault._map = null;
-          });
-      });
-  }
-
-  /**
-   * The map, shown rather than described.
-   *
-   * A note created without this comes out orphaned — no properties, no link
-   * back, filed in the root — and the user's only clue is that the assistant
-   * seems careless. Showing what it worked out turns that into something that
-   * can be checked and corrected in ten seconds.
-   */
-  stepVault(c) {
-    const s = this.plugin.settings;
-    const V = this.plugin.vault;
-
-    const found = V.templateFolder();
-    const setting = new Setting(c)
-      .setName(t("Templates folder"))
-      .setDesc(found ? t("Found on its own: {0}", found) : t("None found — point at it if you have one."));
-    setting.addText((tx) => {
-      tx.setPlaceholder(found || "Templates").setValue(s.templateFolder || "");
-      const commit = async (v) => {
-        s.templateFolder = String(v || "").trim().replace(/^\/+|\/+$/g, "");
-        V._map = null;
-        await this.plugin.saveSettings();
-      };
-      tx.onChange(commit);
-      new PathSuggest(tx.inputEl, () => allFolders(this.app), async (v) => { await commit(v); this.draw(); });
-    });
-
-    let map = "";
-    try { map = V.describeVault(); } catch (e) { map = String(e.message); }
-    c.createDiv({ cls: "oa-map-body", text: map });
-
-    new Setting(c)
-      .setName(t("Anything it should know about your system"))
-      .setDesc(t("Whatever the folder names don't say. Optional — you can fill this in later."))
-      .addTextArea((tx) => {
-        tx.inputEl.rows = 3;
-        tx.setValue(s.vaultNotes || "").onChange(async (v) => { s.vaultNotes = v; await this.plugin.saveSettings(); });
-      });
-  }
-
-  async finish() {
-    this.plugin.settings.onboarded = true;
-    await this.plugin.saveSettings();
-    this.close();
-    this.plugin.activateView();
-  }
-}
-
-/* ============================================================
- *  What changed since last time
- *
- *  Shown once per version, and never on a fresh install — someone
- *  who has just been walked through onboarding does not need to be
- *  told what is new in a plugin they have never seen.
- *
- *  It names three or four things and stops. A changelog belongs on
- *  the site, where there is room for it; here the only job is to
- *  make sure a feature that took a month is not missed because it
- *  lives behind a tab nobody opened.
- * ========================================================== */
-class WhatsNewModal extends Modal {
-  constructor(app, plugin, version) {
-    super(app);
-    this.plugin = plugin;
-    this.version = version;
-  }
-
-  onClose() { this.contentEl.empty(); }
-
-  onOpen() {
-    const c = this.contentEl;
-    this.modalEl.addClass("oa-onb");
-
-    const ic = c.createDiv({ cls: "oa-onb-icon" });
-    setIcon(ic, "sparkles");
-    c.createEl("h2", { text: t("What’s new in {0}", this.version), cls: "oa-onb-title" });
-    c.createDiv({ cls: "oa-onb-body", text: t("The short version. Everything here is optional — the plugin works exactly as before if you change nothing.") });
-
-    const form = c.createDiv({ cls: "oa-onb-form" });
-
-    /* Порядок не случайный: коннектор — то, ради чего версия и вышла,
-       остальное человек прочтёт по инерции, уже открыв окно. */
-    const item = (icon, title, text) => {
-      const box = form.createDiv({ cls: "oa-note" });
-      const head = box.createDiv({ cls: "oa-note-title" });
-      const i = head.createSpan({ cls: "oa-note-icon" });
-      setIcon(i, icon);
-      head.appendText(title);
-      box.createDiv({ text });
-    };
-
-    item("smartphone", t("An app on your phone"),
-      t("The headline of this version. The Connector tab gives you a code; type it once in the app and the whole vault is with you — ask it something, dictate a note, add a line to today’s. The same assistant, in the same words. The app puts itself on the home screen straight from the browser: no app store, no account."));
-    /* Условие — отдельным пунктом, а не сноской к первому: человек, узнавший
-       про приложение и не узнавший про включённый компьютер, решит, что плагин
-       сломан, при первом же «не на связи». */
-    item("monitor", t("What it needs: this computer, awake"),
-      t("Nothing answers on a server — your own computer does, which is why the notes never leave it. So there is one condition: the computer on, Obsidian open, the connector switched on. While it sleeps the app says it is not connected; whatever you send waits in the queue and arrives the moment the computer is back."));
-    item("zap", t("A button for one thought"),
-      t("A separate key that can only create a note — for a shortcut on the lock screen. No reading, no editing, no deleting."));
-    item("lock", t("End-to-end encryption"),
-      t("The phone and this computer work out a shared secret between themselves. The relay in the middle carries text it cannot read."));
-    item("mic", t("Voice on OpenAI works again"),
-      t("Speech is transcribed through OpenAI’s own endpoint. The other providers are unchanged."));
-
-    const where = form.createDiv({ cls: "oa-note" });
-    where.createDiv({ cls: "oa-note-title", text: t("Where to read about it properly") });
-    const line = where.createDiv();
-    line.appendText(t("Setting the connector up, what it costs, what it sends and what it deliberately cannot do — written out step by step here: "));
-    const a = line.createEl("a", { text: appUrl().replace(/^https?:\/\//, ""), href: appUrl() });
-    a.setAttr("target", "_blank");
-    a.setAttr("rel", "noopener");
-
-    const nav = c.createDiv({ cls: "oa-onb-nav" });
-    const open = nav.createEl("button", { text: t("Open the Connector tab") });
-    open.onclick = () => {
-      this.close();
-      /* Открыть настройки сразу на нужной вкладке: своего API у Obsidian
-         для этого нет, зато вкладка — состояние самой страницы настроек,
-         и её достаточно выставить до открытия. */
-      if (this.plugin.settingTab) this.plugin.settingTab._tab = "connector";
-      this.app.setting.open();
-      this.app.setting.openTabById(this.plugin.manifest.id);
-    };
-    const done = nav.createEl("button", { cls: "mod-cta", text: t("Got it") });
-    done.onclick = () => this.close();
-  }
-}
-
-/* ============================================================
  *  A group of settings, in a window
  *
  *  The tab lists what there is and what state it is in; the window
@@ -349,61 +58,40 @@ class SettingsGroupModal extends Modal {
  *  what you came to do.
  * ========================================================== */
 class AssistantSettingTab extends PluginSettingTab {
-  constructor(app, plugin) { super(app, plugin); this.plugin = plugin; this._tab = "connection"; }
+  constructor(app, plugin) { super(app, plugin); this.plugin = plugin; this._tab = "home"; }
 
   get s() { return this.plugin.settings; }
 
   display() {
     const c = this.containerEl;
 
-    /* Hold the reader's place across a redraw.
-       `display()` is called by a couple of dozen controls — every toggle that
-       changes what else belongs on the page — and each one used to throw the
-       scroll position away. The scrolling element is Obsidian's own tab
-       container, not ours, so it is found rather than assumed. */
+    /* Hold the reader's place across a redraw. `display()` is called by a
+       couple of dozen controls, and each one used to throw the scroll position
+       away. The scrolling element is Obsidian's own tab container. */
     const scroller = c.closest(".vertical-tab-content") || c.parentElement;
     const back = keepScroll(scroller);
 
     c.empty();
     c.addClass("oa-settings");
 
-    // The way in for anyone who doesn't want to read a settings page.
-    const onb = c.createDiv({ cls: "oa-onb-card" });
-    const left = onb.createDiv();
-    left.createDiv({ cls: "oa-onb-card-title", text: t("Getting started") });
-    left.createDiv({ cls: "oa-onb-card-sub", text: t("Walks you through the provider, the assistant's name and what it may touch. Two minutes.") });
-    // Who made this, on the first thing anyone reads.
-    // A plugin that asks for a key and reads your notes is asking for trust,
-    // and trust wants a name and an address behind it rather than a username.
-    const by = left.createDiv({ cls: "oa-onb-card-by" });
-    by.appendText(t("Made by Elton") + " · ");
-    // The plugin's own page, not the site's front door: someone clicking from
-    // inside the plugin wants this plugin, not a homepage to navigate from.
-    const site = by.createEl("a", { text: siteLabel(), href: siteUrl() });
-    site.setAttr("target", "_blank");
-    site.setAttr("rel", "noopener");
-    const go = onb.createEl("button", { cls: "mod-cta", text: t("Open the setup guide") });
-    go.onclick = () => new OnboardingModal(this.app, this.plugin).open();
-
-    /* Six, down from eight, and none of them a page you scroll past.
-       The two that went were not deletions: Search belongs with the vault it
-       searches, and Automations is the same card list as Scenarios — a saved
-       prompt behind a phrase, or behind a time. Splitting them meant two tabs
-       that each held one list. What is left is one tab per question you might
-       arrive with, and the dials nobody turns are folded under Advanced. */
+    /* Seven tabs, each a job you arrive with. The first is the one people
+       land on: the state of everything, and the way in for anyone who does
+       not want to read a settings page at all. Interface is gone as a tab —
+       what it held went where it belongs. */
     const TABS = [
-      { id: "connection", label: t("Connection") },
-      // Short labels on purpose: at full length they overflow the strip in
-      // either language. The full wording lives on the headings inside.
-      { id: "persona", label: t("Assistant") },
+      { id: "home", label: t("Home") },
+      { id: "ai", label: t("AI") },
       { id: "voice", label: t("Voice") },
-      { id: "access", label: t("Vault") },
-      { id: "scenarios", label: t("Tasks") },
+      { id: "access", label: t("Access") },
+      { id: "scenarios", label: t("Scenarios") },
+      { id: "connector", label: t("Phone") },
       { id: "telegram", label: t("Telegram") },
-      { id: "connector", label: t("Connector") },
-      { id: "ui", label: t("Interface") },
     ];
-    if (!TABS.some((x) => x.id === this._tab)) this._tab = "connection";
+    // Old names still open the right tab — the What's-new window and older
+    // links ask for "connection" or "persona".
+    const alias = { connection: "ai", persona: "ai", ui: "home", tasks: "scenarios" };
+    if (alias[this._tab]) this._tab = alias[this._tab];
+    if (!TABS.some((x) => x.id === this._tab)) this._tab = "home";
     const bar = c.createDiv({ cls: "oa-set-tabs" });
     let active = null;
     TABS.forEach((tab) => {
@@ -412,26 +100,321 @@ class AssistantSettingTab extends PluginSettingTab {
       if (on) active = el;
       el.onclick = () => { this._tab = tab.id; this.display(); };
     });
-    // The strip scrolls rather than wraps, so the tab you just opened can be
-    // off to one side of it — which looks like nothing happened.
     if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
 
     const body = c.createDiv({ cls: "oa-set-body" });
     ({
-      connection: () => this.tabConnection(body),
-      persona: () => this.tabPersona(body),
+      home: () => this.tabHome(body),
+      ai: () => this.tabAI(body),
       voice: () => this.tabVoice(body),
       access: () => this.tabAccess(body),
       scenarios: () => this.tabTasks(body),
       telegram: () => this.tabTelegram(body),
       connector: () => this.tabConnector(body),
-      ui: () => this.tabUI(body),
     })[this._tab]();
 
-    // Switching tabs is the one case where starting at the top is right —
-    // that is a new page, not the same one redrawn.
     if (this._tab === this._drawnTab) back();
     this._drawnTab = this._tab;
+  }
+
+  go(tab) { this._tab = tab; this.display(); }
+
+  /* ── home ───────────────────────────────────────────────── */
+  tabHome(c) {
+    const s = this.s;
+    const hero = c.createDiv({ cls: "oa-home" });
+    const h = new Date().getHours();
+    const hi = h < 5 ? t("Good night") : h < 12 ? t("Good morning") : h < 18 ? t("Good afternoon") : t("Good evening");
+    hero.createDiv({ cls: "oa-home-hi", text: s.userName ? `${hi}, ${s.userName}` : hi });
+    hero.createDiv({ cls: "oa-home-sub", text: t("{0} lives in this vault. Here is how it is set up.", s.assistantName || "Elton AI") });
+    const acts = hero.createDiv({ cls: "oa-home-acts" });
+    const open = acts.createEl("button", { cls: "mod-cta", text: t("Open the assistant") });
+    open.onclick = () => { try { this.app.setting.close(); } catch { /* already closed */ } this.plugin.activateView(); };
+    const tour = acts.createEl("button", { text: t("Welcome tour") });
+    tour.onclick = () => new OnboardingModal(this.app, this.plugin).open();
+
+    /* The state of everything, one line each, with the button that fixes it.
+       Someone opening settings usually came to check one of these four. */
+    const list = c.createDiv({ cls: "oa-status" });
+    const row = (icon, name, state, ok, btn, goTo) => {
+      const r = list.createDiv({ cls: "oa-st" + (ok === false ? " is-warn" : ok ? " is-ok" : "") });
+      setIcon(r.createDiv({ cls: "oa-st-icon" }), icon);
+      const b = r.createDiv({ cls: "oa-st-body" });
+      b.createDiv({ cls: "oa-st-name", text: name });
+      const st = b.createDiv({ cls: "oa-st-state", text: state });
+      const go = r.createEl("button", { text: btn });
+      go.onclick = () => this.go(goTo);
+      return st;
+    };
+
+    const p = PROVIDERS[s.provider];
+    const hasKey = !p.needsKey || !!(s.keys[s.provider] || "").trim();
+    const aiState = row("sparkles", t("AI"),
+      hasKey ? `${t(p.label)} · ${s.models[s.provider] || p.model}` : t("No key yet — answers cannot start"),
+      hasKey, hasKey ? t("Change") : t("Connect"), "ai");
+    if (hasKey && s.provider === "obsimind" && this.plugin.spend) {
+      this.plugin.spend.readBalance().then((b) => {
+        if (b != null) aiState.setText(`${t(p.label)} · ${s.models[s.provider] || p.model} · ${Math.round(b)} ₽`);
+      }).catch(() => {});
+    }
+
+    const preset = accessPreset(s);
+    const accessName = { read: t("Read only"), write: t("Read and write"), full: t("Full access"), custom: t("Your own combination") }[preset];
+    const priv = this.plugin.vault.privateList().length;
+    row("shield-check", t("Access"), accessName + (priv ? " · " + t("{0} private folders", priv) : ""), true, t("Change"), "access");
+
+    const cfg = this.plugin.connector.cfg;
+    const phone = isMobile()
+      ? row("smartphone", t("Phone app"), t("Set up on the computer — it is the one that answers"), null, t("Open"), "connector")
+      : row("smartphone", t("Phone app"), cfg.enabled ? t("On · checking devices…") : t("Off"), cfg.enabled ? true : null,
+        cfg.enabled ? t("Open") : t("Turn on"), "connector");
+    if (cfg.enabled && !isMobile()) {
+      this.plugin.connector.listDevices().then((d) => {
+        const n = d.filter((x) => x && x.name !== QUICK_NAME).length;
+        phone.setText(n ? t("On · {0} devices connected", n) : t("On · no phone connected yet"));
+      }).catch(() => phone.setText(t("On")));
+    }
+    const tg = s.telegram || {};
+    row("send", "Telegram", tg.enabled ? t("The bot answers") : t("Off"), tg.enabled ? true : null, tg.enabled ? t("Open") : t("Set up"), "telegram");
+    const sc = (s.scenarios || []).filter((x) => x.enabled).length;
+    const au = (s.automations || []).filter((x) => x.enabled).length;
+    row("wand-2", t("Scenarios"), t("{0} phrases, {1} on a schedule", sc, au), null, t("Open"), "scenarios");
+
+    /* The panel: three choices about where and how it opens — all that was
+       left of the Interface tab once the obvious switches went. */
+    new Setting(c).setName(t("The panel")).setHeading();
+    new Setting(c)
+      .setName(t("How the panel opens"))
+      .addDropdown((d) => {
+        d.addOption("reactor", t("Voice first — one big dial"));
+        d.addOption("chat", t("Text — a conversation to read"));
+        d.setValue(s.viewMode).onChange(async (v) => { s.viewMode = v; await this.plugin.saveSettings(); this.plugin.refreshViews(); });
+      });
+    new Setting(c)
+      .setName(t("Where the panel opens"))
+      .addDropdown((d) => {
+        d.addOption("right", t("Right sidebar"));
+        d.addOption("left", t("Left sidebar"));
+        d.addOption("main", t("Main area (as a tab)"));
+        d.setValue(s.viewLocation).onChange(async (v) => { s.viewLocation = v; await this.plugin.saveSettings(); });
+      });
+    new Setting(c).setName(t("Open on startup"))
+      .addToggle((x) => x.setValue(s.openOnStartup).onChange(async (v) => { s.openOnStartup = v; await this.plugin.saveSettings(); }));
+    new Setting(c)
+      .setName(t("Language"))
+      .addDropdown((d) => {
+        d.addOption("auto", t("Follow Obsidian"));
+        d.addOption("ru", "Русский");
+        d.addOption("en", "English");
+        d.setValue(s.lang).onChange(async (v) => {
+          s.lang = v; setLang(v === "auto" ? null : v);
+          await this.plugin.saveSettings();
+          this.plugin.applyLanguage();
+          this.display();
+        });
+      });
+
+    // The way back to whoever makes this, where people look for it: the
+    // first tab. Book Reader does the same with its own bot.
+    const fb = c.createDiv({ cls: "oa-fb" });
+    setIcon(fb.createDiv({ cls: "oa-fb-icon" }), "message-circle");
+    const fbt = fb.createDiv({ cls: "oa-fb-text" });
+    fbt.createDiv({ cls: "oa-fb-title", text: t("Something not working? An idea?") });
+    fbt.createDiv({ cls: "oa-fb-desc", text: t("Write to the Telegram bot @elton_feedback_bot — a plain message is enough, a screenshot helps. Complaints, ideas and «this does not work» all go there, and every one is read.") });
+    const fbb = fb.createEl("button", { cls: "mod-cta", text: t("Write to the bot") });
+    fbb.onclick = () => openFeedback();
+
+    const foot = c.createDiv({ cls: "oa-set-foot" });
+    foot.createDiv({ cls: "oa-set-foot-title", text: `Elton AI ${this.plugin.manifest.version}` });
+    foot.createDiv({ text: t("Your notes stay in your vault. Only the text needed to answer a question is sent to the provider you chose — and with a local model, nothing leaves your machine at all.") });
+    const by = foot.createDiv({ cls: "oa-onb-card-by" });
+    by.appendText(t("Made by Elton") + " · ");
+    const a = by.createEl("a", { text: siteLabel(), href: siteUrl() });
+    a.setAttr("target", "_blank");
+    a.setAttr("rel", "noopener");
+    by.appendText(" · ");
+    const wn = by.createEl("a", { text: t("What’s new in {0}", this.plugin.manifest.version), href: "#" });
+    wn.onclick = (e) => { e.preventDefault(); new WhatsNewModal(this.app, this.plugin, this.plugin.manifest.version).open(); };
+  }
+
+  /* ── AI: where answers come from, and who is answering ──── */
+  tabAI(c) {
+    const s = this.s;
+    this.tabConnection(c);
+    new Setting(c).setName(t("The assistant")).setHeading();
+    this.tabPersona(c);
+    this.advanced(c, "ai", (a) => {
+      new Setting(a)
+        .setName(t("Show what it cost"))
+        .setDesc(t("A quiet line under each answer: what left your balance and how many tokens it took."))
+        .addToggle((x) => x.setValue(s.showCost).onChange(async (v) => { s.showCost = v; await this.plugin.saveSettings(); this.display(); }));
+      if (s.showCost && this.plugin.spend) {
+        a.createDiv({ cls: "oa-index-status", text: t("Spent this session") + ": " + this.plugin.spend.sessionLine() });
+      }
+      new Setting(a)
+        .setName(t("Save conversations"))
+        .setDesc(t("Off, nothing is written down and a conversation is gone when you close the panel. On, each one becomes a note you can search and link to."))
+        .addToggle((x) => x.setValue(s.saveConversations).onChange(async (v) => { s.saveConversations = v; await this.plugin.saveSettings(); this.display(); }));
+      if (s.saveConversations) {
+        this.folderField(
+          new Setting(a).setName(t("Conversations folder"))
+            .setDesc(t("One note per conversation, named after the assistant and the time. Empty means a folder called «{0}», created the first time something is saved.", t("Assistant conversations"))),
+          () => s.conversationFolder,
+          async (v) => { s.conversationFolder = v.trim().replace(/^\/+|\/+$/g, ""); await this.plugin.saveSettings(); },
+          "Conversations");
+      }
+    });
+  }
+
+  /* ── access ─────────────────────────────────────────────── */
+  tabAccess(c) {
+    const s = this.s;
+    const V = this.plugin.vault;
+
+    c.createDiv({ cls: "oa-lead", text: t("What the assistant may do with your notes. A switched-off permission is not a request it is asked to respect — the tool simply does not exist for it.") });
+    accessCards(c, s, async (id) => { applyAccessPreset(s, id); await this.plugin.saveSettings(); this.display(); });
+
+    new Setting(c).setName(t("Private folders")).setHeading();
+    c.createDiv({ cls: "oa-hint", text: t("Never read, never searched, never indexed, never sent — even when the note is open on your screen. Health, money, other people's details, anything under an agreement.") });
+    folderChips(c, this.app,
+      () => V.privateList(),
+      async (list) => {
+        s.privateFolders = list.join("\n");
+        await this.plugin.saveSettings();
+        V.index = null;
+        V._map = null;
+      },
+      t("None yet."));
+    const hidden = V.privateList();
+    if (hidden.length) {
+      let n = 0;
+      try { n = this.app.vault.getMarkdownFiles().filter((f) => V.isPrivate(f.path)).length; } catch { n = 0; }
+      c.createDiv({ cls: "oa-hint", text: (n === 1 ? t("1 note is hidden from the assistant right now.") : t("{0} notes are hidden from the assistant right now.", n)) });
+    }
+
+    /* The answer to "can I trust it with my notes": everything it changed,
+       with the way back, one tap each. */
+    /* Folded: someone whose assistant works every day had twelve rows here
+       on every visit. The summary line says whether there is anything to
+       look at; the list is one click away. */
+    new Setting(c).setName(t("Changes by the assistant")).setHeading();
+    c.createDiv({ cls: "oa-hint", text: t("Each change is saved before it is made. Undo puts the note back exactly as it was before that change — from here, from the answer, or from the phone.") });
+    const fold = c.createEl("details", { cls: "oa-journal-fold" });
+    const sum = fold.createEl("summary", { text: t("Edit history") });
+    const count = sum.createSpan({ cls: "oa-journal-count" });
+    const jl = fold.createDiv({ cls: "oa-journal" });
+    (async () => {
+      try {
+        const items = await this.plugin.journal.listShown(30);
+        const week = items.filter((e) => !e.undone && Date.now() - e.at < 7 * 864e5).length;
+        count.setText(items.length ? (week ? " · " + t("{0} this week", week) : " · " + t("nothing this week")) : " · " + t("nothing yet"));
+      } catch { /* the list still opens */ }
+    })();
+    let drawn = false;
+    fold.addEventListener("toggle", () => { if (fold.open && !drawn) { drawn = true; this.drawJournal(jl); } });
+
+    new Setting(c).setName(t("Your vault")).setHeading();
+    const grid = c.createDiv({ cls: "oa-tiles" });
+    const tplFolder = V.templateFolder();
+    let tplCount = 0;
+    try { tplCount = V.templates().length; } catch { tplCount = 0; }
+    this.tile(grid, {
+      icon: "folder-tree",
+      name: t("Where things live"),
+      facts: [
+        [s.newNoteFolder ? tail(s.newNoteFolder) : t("new notes: by meaning"), !!s.newNoteFolder],
+        [(s.dailyFolder || V.dailyFolder()) ? tail(s.dailyFolder || V.dailyFolder()) : t("no daily notes"), !!(s.dailyFolder || V.dailyFolder())],
+        [tplFolder ? tail(tplFolder) : t("no templates"), !!tplFolder],
+      ],
+      build: (m) => this.groupFolders(m),
+    });
+    this.tile(grid, {
+      icon: "map",
+      name: t("What it knows about your vault"),
+      facts: s.vaultMap === false
+        ? [[t("off — it files notes blind"), false]]
+        : [[t("map on"), true], [tplCount ? t("{0} templates", tplCount) : t("no templates found"), !!tplCount], [s.vaultNotes ? t("your notes added") : t("nothing from you"), !!s.vaultNotes]],
+      build: (m) => this.groupMap(m),
+    });
+    const web = s.webSearch && (s.provider === "obsimind" || s.provider === "openrouter");
+    this.tile(grid, {
+      icon: "search",
+      name: t("Search and the web"),
+      facts: [[t("by words"), true], [t("by meaning"), !!s.semanticSearch], [t("the web"), !!web]],
+      build: (m) => this.groupSearch(m),
+    });
+
+    this.advanced(c, "access", (a) => {
+      a.createDiv({ cls: "oa-hint", text: t("Each permission on its own, for when none of the three levels fits.") });
+      const tog = (name, key, desc) => new Setting(a).setName(name).setDesc(desc || "")
+        .addToggle((x) => x.setValue(!!s[key]).onChange(async (v) => { s[key] = v; await this.plugin.saveSettings(); this.display(); }));
+      tog(t("Read notes"), "canRead", t("Search and read. Without this it can only chat — it won't see your vault at all."));
+      tog(t("Create notes"), "canCreate");
+      tog(t("Edit notes"), "canEdit", t("Change existing notes. Every edit is backed up first, so \"undo that\" always works."));
+      tog(t("Delete notes"), "canDelete", t("Even with this on, every deletion stops and waits for you to confirm from the keyboard. It can never delete anything on its own."));
+      tog(t("Manage tabs and windows"), "canControlUI", t("Let it open notes beside each other, open web pages inside the vault and close tabs you're done with."));
+      tog(t("Confirm every edit"), "confirmEveryEdit", t("Ask before writing anything, not just before deleting. Safer, slower."));
+      new Setting(a)
+        .setName(t("Where it may work"))
+        .setDesc(t("A narrower question than privacy: which part of the vault it works in day to day. Private folders stay hidden whatever you choose here."))
+        .addDropdown((d) => {
+          d.addOption("all", t("Whole vault"));
+          d.addOption("include", t("Only these folders"));
+          d.addOption("exclude", t("Everything except these folders"));
+          d.setValue(s.scopeMode).onChange(async (v) => {
+            s.scopeMode = v; await this.plugin.saveSettings();
+            V.index = null; V._map = null;
+            this.display();
+          });
+        });
+      if (s.scopeMode !== "all") {
+        folderChips(a, this.app,
+          () => V.scopeList(),
+          async (list) => { s.scopeFolders = list.join("\n"); await this.plugin.saveSettings(); V.index = null; V._map = null; },
+          t("No folders chosen."));
+      }
+    });
+  }
+
+  /** The last changes the assistant made, newest first, each with Undo. */
+  async drawJournal(box) {
+    box.empty();
+    const J = this.plugin.journal;
+    if (!J) return;
+    const items = (await J.listShown(12)) || [];
+    if (!items.length) { box.createDiv({ cls: "oa-journal-empty", text: t("Nothing changed yet.") }); return; }
+    const where = { connector: t("from the phone"), telegram: t("in Telegram"), panel: t("on this computer") };
+    for (const e of items) {
+      const r = box.createDiv({ cls: "oa-jr" + (e.undone ? " is-undone" : "") });
+      const b = r.createDiv({ cls: "oa-jr-body" });
+      b.createDiv({ cls: "oa-jr-name", text: changeLabel(e) });
+      b.createDiv({ cls: "oa-jr-sub", text: [whenWord(e.at), where[e.channel] || ""].filter(Boolean).join(" · ") });
+      if (!e.undone && e.kind !== "delete") {
+        const op = r.createEl("button", { text: t("Open") });
+        op.onclick = () => {
+          const f = this.app.vault.getAbstractFileByPath(e.path);
+          if (f instanceof TFile) { try { this.app.setting.close(); } catch { /* fine */ } this.app.workspace.getLeaf(false).openFile(f); }
+        };
+      }
+      const un = r.createEl("button", { text: e.undone ? t("Undone") : t("Undo") });
+      un.disabled = !!e.undone;
+      let insist = false;
+      un.onclick = async () => {
+        un.disabled = true;
+        const res = await J.undo(e.id, { force: insist });
+        if (!res.ok && res.changed && !insist) {
+          // The person wrote in it since. Say so, and let a second press insist.
+          insist = true;
+          un.disabled = false;
+          un.setText(t("Delete it anyway"));
+          un.addClass("mod-warning");
+          new Notice(res.text, 6000);
+          return;
+        }
+        new Notice(res.text);
+        this.drawJournal(box);
+      };
+    }
   }
 
   save(rerender) {
@@ -528,17 +511,6 @@ class AssistantSettingTab extends PluginSettingTab {
 
     this.modelSetting(c);
 
-    new Setting(c)
-      .setName(t("Show what it cost"))
-      .setDesc(t("A quiet line under each answer: what left your balance and how many tokens it took."))
-      .addToggle((x) => x.setValue(s.showCost).onChange(async (v) => {
-        s.showCost = v; await this.plugin.saveSettings(); this.display();
-      }));
-
-    if (s.showCost && this.plugin.spend) {
-      c.createDiv({ cls: "oa-index-status", text: t("Spent this session") + ": " + this.plugin.spend.sessionLine() });
-    }
-
     new Setting(c).addButton((b) => b.setButtonText(t("Test connection")).onClick(async () => {
       b.setButtonText(t("Checking…")).setDisabled(true);
       try {
@@ -548,15 +520,6 @@ class AssistantSettingTab extends PluginSettingTab {
         new Notice(t("Connection failed: {0}", e.message), 8000);
       } finally { b.setButtonText(t("Test connection")).setDisabled(false); }
     }));
-
-    this.advanced(c, "connection", (a) => {
-      new Setting(a)
-        .setName(t("Show the answer as it's written"))
-        .setDesc(t("The reply appears word by word instead of all at once when it's done. Falls back on its own if the provider can't stream."))
-        .addToggle((x) => x.setValue(s.streamReplies).onChange(async (v) => {
-          s.streamReplies = v; await this.plugin.saveSettings();
-        }));
-    });
 
     // Voice needs a cloud provider; a local model can neither hear nor speak.
     if (s.provider === "local") {
@@ -679,7 +642,7 @@ class AssistantSettingTab extends PluginSettingTab {
       .setName(t("What should it be called?"))
       .setDesc(t("The assistant answers to this name and uses it when it introduces itself."))
       .addText((tx) => tx.setValue(s.assistantName).onChange(async (v) => {
-        s.assistantName = v || "Assistant"; await this.plugin.saveSettings(); this.plugin.refreshViews();
+        s.assistantName = v || "Elton AI"; await this.plugin.saveSettings(); this.plugin.refreshViews();
       }));
 
     new Setting(c)
@@ -814,6 +777,12 @@ class AssistantSettingTab extends PluginSettingTab {
     }));
 
     this.advanced(c, "voice", (a) => {
+      new Setting(a)
+        .setName(t("Show the answer as text"))
+        .setDesc(t("The written answer arrives before the voice reaches it, so you read it and then hear it again. Off, the text keeps pace with the speech and the rest is a tap away. On, the whole answer appears at once."))
+        .addToggle((x) => x.setValue(s.showReplyText).onChange(async (v) => {
+          s.showReplyText = v; await this.plugin.saveSettings(); this.plugin.refreshViews();
+        }));
       // Name and description on one row, not a bare heading above a nameless
       // toggle: a `setHeading` at the top of a fold sits flush against the
       // fold's own button with nothing under it, so it read as a label that
@@ -900,84 +869,6 @@ class AssistantSettingTab extends PluginSettingTab {
         s.holdKey = null; await this.plugin.saveSettings(); this.display();
       }));
     }
-  }
-
-  /* ── access ─────────────────────────────────────────────── */
-  /* ── the vault ──────────────────────────────────────────────
-   *
-   * Four groups, each behind its own window.
-   *
-   * Everything here used to sit on one page: eleven toggles, four folder
-   * fields, an index panel and a scrollable map. It was the longest tab by a
-   * distance and read as a pile rather than a set of decisions. Now the tab is
-   * four lines, each summarising what it holds — the state of the whole thing
-   * is visible without opening anything, and you open exactly the one you came
-   * for.
-   * ────────────────────────────────────────────────────────── */
-  tabAccess(c) {
-    const s = this.s;
-    const V = this.plugin.vault;
-
-    const grid = c.createDiv({ cls: "oa-tiles" });
-
-    /* Each tile answers its own question at a glance.
-       The facts are chips rather than one run-on line: "reads · creates ·
-       edits · whole vault" is a sentence you have to read, four chips is a
-       state you can see. On chips carry the accent; off ones stay muted, so
-       what is switched off is legible without being loud. */
-    const may = [
-      [t("reads"), s.canRead],
-      [t("creates"), s.canCreate],
-      [t("edits"), s.canEdit],
-      [t("deletes"), s.canDelete],
-      [s.scopeMode === "all" ? t("whole vault")
-        : s.scopeMode === "include" ? t("chosen folders only") : t("all but some folders"), true],
-    ];
-    this.tile(grid, {
-      icon: "shield-check",
-      name: t("What it may do"),
-      facts: may,
-      build: (m) => this.groupPermissions(m),
-    });
-
-    const tplFolder = V.templateFolder();
-    let tplCount = 0;
-    try { tplCount = V.templates().length; } catch { tplCount = 0; }
-    this.tile(grid, {
-      icon: "folder-tree",
-      name: t("Where things live"),
-      facts: [
-        [s.newNoteFolder ? tail(s.newNoteFolder) : t("new notes: root"), !!s.newNoteFolder],
-        [(s.dailyFolder || V.dailyFolder()) ? tail(s.dailyFolder || V.dailyFolder()) : t("no daily notes"), !!(s.dailyFolder || V.dailyFolder())],
-        [tplFolder ? tail(tplFolder) : t("no templates"), !!tplFolder],
-      ],
-      build: (m) => this.groupFolders(m),
-    });
-
-    this.tile(grid, {
-      icon: "map",
-      name: t("What it knows about your vault"),
-      facts: s.vaultMap === false
-        ? [[t("off — it files notes blind"), false]]
-        : [
-          [t("map on"), true],
-          [tplCount ? t("{0} templates", tplCount) : t("no templates found"), !!tplCount],
-          [s.vaultNotes ? t("your notes added") : t("nothing from you"), !!s.vaultNotes],
-        ],
-      build: (m) => this.groupMap(m),
-    });
-
-    const web = s.webSearch && (s.provider === "obsimind" || s.provider === "openrouter");
-    this.tile(grid, {
-      icon: "search",
-      name: t("Search and the web"),
-      facts: [
-        [t("by words"), true],
-        [t("by meaning"), !!s.semanticSearch],
-        [t("the web"), !!web],
-      ],
-      build: (m) => this.groupSearch(m),
-    });
   }
 
   /**
@@ -1113,7 +1004,7 @@ class AssistantSettingTab extends PluginSettingTab {
     if (hidden.length) {
       let n = 0;
       try { n = this.app.vault.getMarkdownFiles().filter((f) => this.plugin.vault.isPrivate(f.path)).length; } catch { n = 0; }
-      c.createDiv({ cls: "oa-note", text: t("{0} notes are hidden from the assistant right now.", n) });
+      c.createDiv({ cls: "oa-note", text: (n === 1 ? t("1 note is hidden from the assistant right now.") : t("{0} notes are hidden from the assistant right now.", n)) });
     }
 
     this.section(c, t("Where it may work"));
@@ -1385,72 +1276,63 @@ class AssistantSettingTab extends PluginSettingTab {
   }
 
   indexPanel(c) {
+    const R = this.plugin.index;
+    const V = this.plugin.vault;
+    const s = this.s;
     const panel = c.createDiv({ cls: "oa-index" });
     const left = panel.createDiv({ cls: "oa-index-text" });
     const status = left.createDiv({ cls: "oa-index-status" });
     const detail = left.createDiv({ cls: "oa-index-detail" });
     const action = panel.createDiv({ cls: "oa-index-action" });
     const problem = c.createDiv({ cls: "oa-index-problem is-hidden" });
-
     const btn = action.createEl("button", { cls: "mod-cta" });
-    let stop = false;
 
     const showProblem = (text) => {
       problem.setText(text || "");
       problem.toggleClass("is-hidden", !text);
     };
 
+    new Setting(c)
+      .setName(t("Keep it up to date by itself"))
+      .setDesc(t("A note you write or change is added a minute after you stop typing; renamed and deleted notes are followed too. Starts once the first pass is done."))
+      .addToggle((x) => x.setValue(s.autoIndex !== false).onChange(async (v) => { s.autoIndex = v; await this.plugin.saveSettings(); }));
     this.indexRemindToggle(c);
 
     const refresh = async () => {
-      const n = await this.plugin.vault.indexSize();
-      const pending = await this.plugin.vault.pendingCount();
+      if (R.running) {
+        status.setText(R.total ? t("Indexing… {0}/{1}", R.done, R.total) : t("Indexing…"));
+        detail.setText(t("It carries on in the background — this window can be closed. Stopped or interrupted, it picks up where it left off."));
+        btn.setText(t("Stop"));
+        btn.removeAttribute("disabled");
+        return;
+      }
+      const n = await V.indexSize();
+      const est = await V.indexEstimate();
+      const pending = est.notes;
       status.setText(n ? t("{0} notes in the index", n) : t("Nothing indexed yet"));
       // Says what the number means. "48 waiting" without this reads as a
       // failure rather than as notes written since the last pass.
-      detail.setText(pending
-        ? t("{0} waiting: notes written or changed since the last pass.", pending)
-        : t("Everything in your vault is in it."));
+      detail.setText(!pending ? t("Everything in your vault is in it.")
+        : n ? t("{0} waiting: notes written or changed since the last pass.", pending)
+          : t("{0} notes · about {1} min. Done once; after that only the notes you change.", pending, est.minutes));
       // The label answers the question the button raises — how much is left.
       btn.setText(pending ? t("Index {0} new notes", pending) : t("Everything is indexed"));
       btn.toggleAttribute("disabled", !pending);
+      const r = R.last;
+      if (r && r.saveError) showProblem(t("The index could not be saved: {0}", r.error));
+      else if (r && r.failed) {
+        showProblem(r.embedded
+          ? t("{0} notes could not be indexed. The provider said: {1}", r.failed, r.error)
+          : t("Nothing could be indexed — every request was refused. The provider said: {0}. Check the embedding model and your key on the Connection tab.", r.error));
+      } else showProblem("");
     };
     refresh();
+    const off = R.on(() => { if (!panel.isConnected) { off(); return; } refresh(); });
 
-    btn.onclick = async () => {
-      if (this._indexing) { stop = true; return; }
-      this._indexing = true; stop = false;
-      btn.setText(t("Stop"));
-      btn.removeAttribute("disabled");
+    btn.onclick = () => {
+      if (R.running) { R.stop(); return; }
       showProblem("");
-      try {
-        const r = await this.plugin.vault.buildEmbeddings(
-          (done, total) => status.setText(t("Indexing… {0}/{1}", done, total)),
-          () => stop);
-
-        // Say what the pass actually did. A run that embedded nothing at all
-        // is the interesting case, and it used to look exactly like a run
-        // that embedded everything.
-        const parts = [];
-        if (r.embedded) parts.push(t("{0} added", r.embedded));
-        if (r.skipped) parts.push(t("{0} too short to be worth a vector", r.skipped));
-        if (r.failed) parts.push(t("{0} failed", r.failed));
-        new Notice(parts.length ? parts.join(" · ") : t("Nothing left to index"), 8000);
-
-        if (r.failed) {
-          showProblem(r.embedded
-            ? t("{0} notes could not be indexed. The provider said: {1}", r.failed, r.error)
-            : t("Nothing could be indexed — every request was refused. The provider said: {0}. Check the embedding model and your key on the Connection tab.", r.error));
-        }
-      } catch (e) {
-        // Reaching here means the index file itself could not be written,
-        // which used to be swallowed and looked like a successful pass.
-        showProblem(t("The index could not be saved: {0}", e.message));
-        new Notice(t("Something went wrong: {0}", e.message));
-      } finally {
-        this._indexing = false;
-        await refresh();
-      }
+      R.run();
     };
   }
 
@@ -1496,74 +1378,65 @@ class AssistantSettingTab extends PluginSettingTab {
     const s = this.s;
     if (!Array.isArray(s.scenarios)) s.scenarios = [];
 
-    c.createDiv({ cls: "oa-note", text: t("A scenario is a long brief hiding behind a short phrase. Say the phrase and the assistant gets the whole brief instead of the two words you said — so it starts answering straight away rather than working out what you meant.") });
-
-    const how = c.createDiv({ cls: "oa-note" });
-    how.createDiv({ cls: "oa-note-title", text: t("How a phrase is matched") });
-    how.createDiv({ text: t("A one-word trigger fires only when it is the whole thing you said. Two words or more also fire inside a longer sentence, so \"what was I thinking\" catches \"listen, what was I thinking about yesterday\". Anything you say around the trigger is passed along as context.") });
+    c.createDiv({ cls: "oa-lead", text: t("A short phrase for a long request. Say «wrap up the day» — and the assistant gets the whole brief behind it, the same way from the panel, the phone and Telegram.") });
 
     if (!s.scenarios.length) {
-      c.createDiv({ cls: "oa-auto-empty", text: t("No scenarios yet. Add one and it appears as a button under the reactor.") });
+      c.createDiv({ cls: "oa-auto-empty", text: t("No scenarios yet — pick one below to start.") });
     }
     const list = c.createDiv({ cls: "oa-list" });
     s.scenarios.forEach((sc) => this.scenarioRow(list, sc));
 
-    // Blank first, and selected. The list used to open on "What I was
-    // thinking" — which every vault already has, because it is one of the
-    // three it starts with. Pressing add then produced a second copy of a
-    // card already on screen, which reads as the button not working rather
-    // than as a scenario being created.
-    let pick = "custom";
+    // How a phrase is matched — for whoever wonders, folded away for the rest.
+    const how = c.createEl("details", { cls: "oa-how" });
+    how.createEl("summary", { text: t("How a phrase is matched") });
+    how.createDiv({ text: t("A one-word trigger fires only when it is the whole thing you said. Two words or more also fire inside a longer sentence, so \"what was I thinking\" catches \"listen, what was I thinking about yesterday\". Anything you say around the trigger is passed along as context.") });
+
+    /* Adding is a gallery, not a dropdown: a name in a list says nothing,
+       a card with what it does is a reason to add it. */
+    new Setting(c).setName(t("Add a scenario")).setHeading();
     const have = new Set(s.scenarios.map((x) => (x.name || "").trim()));
-    const add = new Setting(c).setName(t("Add scenario"))
-      .setDesc(t("Blank, or start from one of the ready-made briefs."));
-    add.addDropdown((d) => {
-      const p = scenarioPresets();
-      // The ones that do something come first: they are the reason to have
-      // scenarios at all, and they were buried under the ones that summarise.
-      for (const key of ["custom", "project", "tidy", "next", "brief", "thoughts", "today", "wrapup", "week", "inbox", "loose", "explain", "links", "quiz", "forgotten", "draft"]) {
-        // Say so rather than hide it: a second copy is a fair thing to want,
-        // and a preset vanishing from the list looks like a bug of its own.
-        const seen = key !== "custom" && have.has((p[key].name || "").trim());
-        d.addOption(key, `${p[key].emoji} ${p[key].name}` + (seen ? ` · ${t("already added")}` : ""));
-      }
-      d.setValue(pick).onChange((v) => { pick = v; });
-    });
-    add.addButton((b) => b.setCta().setButtonText(t("Add")).onClick(async () => {
-      const fresh = newScenario(pick);
-      s.scenarios.push(fresh);
-      await this.plugin.saveSettings();
-      this.plugin.refreshViews();
-      this.display();
-      // Straight into the editor. A blank scenario appearing in a list is a
-      // row you then have to work out what to do with; a preset one you
-      // usually want to read before it runs.
-      new ScenarioEditModal(this.app, this.plugin, fresh, () => this.display()).open();
-    }));
+    const p = scenarioPresets();
+    const gal = c.createDiv({ cls: "oa-gallery" });
+    const card = (key) => {
+      const pr = p[key];
+      const added = key !== "custom" && have.has((pr.name || "").trim());
+      const el = clickable(gal.createDiv({ cls: "oa-gcard" + (added ? " is-added" : "") }));
+      el.createDiv({ cls: "oa-gcard-emoji", text: pr.emoji || "✨" });
+      el.createDiv({ cls: "oa-gcard-name", text: key === "custom" ? t("Your own") : pr.name });
+      el.createDiv({ cls: "oa-gcard-text", text: key === "custom" ? t("A blank scenario: your phrase, your brief.") : firstSentence(pr.prompt) });
+      if (added) el.createDiv({ cls: "oa-gcard-tag", text: t("already added") });
+      el.onclick = async () => {
+        const fresh = newScenario(key);
+        s.scenarios.push(fresh);
+        await this.plugin.saveSettings();
+        this.plugin.refreshViews();
+        this.display();
+        new ScenarioEditModal(this.app, this.plugin, fresh, () => this.display()).open();
+      };
+    };
+    for (const key of ["custom", "project", "tidy", "next", "brief", "thoughts", "today", "wrapup", "week", "inbox", "loose", "explain", "links", "quiz", "forgotten", "draft"]) {
+      if (p[key]) card(key);
+    }
   }
 
-  /**
-   * One line per scenario.
-   *
-   * Everything a list is for — what it is called, what fires it, whether it is
-   * on — and nothing else. Editing happens in its own window, because a row
-   * that unfolds into seven form fields stops the list being a list.
-   */
+  /** One line per scenario: name, its phrases as chips, run and switch. */
   scenarioRow(c, sc) {
     const s = this.s;
     const row = c.createDiv({ cls: "oa-row" + (sc.enabled ? "" : " is-off") });
-
     const open = () => new ScenarioEditModal(this.app, this.plugin, sc, () => this.display()).open();
 
     const main = clickable(row.createDiv({ cls: "oa-row-main" }));
     main.createSpan({ cls: "oa-row-emoji", text: sc.emoji || "✨" });
     const body = main.createDiv({ cls: "oa-row-body" });
     body.createDiv({ cls: "oa-row-name", text: sc.name || t("Custom scenario") });
-    body.createDiv({
-      cls: "oa-row-sub",
-      text: !sc.prompt ? t("Empty — write what it should ask for")
-        : (sc.triggers || t("No trigger phrase — button only")),
-    });
+    const phrases = String(sc.triggers || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const sub = body.createDiv({ cls: "oa-row-chips" });
+    if (!sc.prompt) sub.createSpan({ cls: "oa-row-sub", text: t("Empty — write what it should ask for") });
+    else if (!phrases.length) sub.createSpan({ cls: "oa-row-sub", text: t("No trigger phrase — button only") });
+    else {
+      phrases.slice(0, 3).forEach((ph) => sub.createSpan({ cls: "oa-phrase", text: "«" + ph + "»" }));
+      if (phrases.length > 3) sub.createSpan({ cls: "oa-row-sub", text: "+" + (phrases.length - 3) });
+    }
     main.onclick = open;
 
     const tools = row.createDiv({ cls: "oa-row-tools" });
@@ -1577,7 +1450,10 @@ class AssistantSettingTab extends PluginSettingTab {
     const del = tools.createEl("button", { cls: "oa-row-btn is-danger" });
     setIcon(del, "trash-2");
     del.setAttr("aria-label", t("Delete this scenario"));
+    // Twice to delete: the second press is the confirmation.
+    let armed = false;
     del.onclick = async () => {
+      if (!armed) { armed = true; del.addClass("is-armed"); del.setAttr("aria-label", t("Press again to delete")); window.setTimeout(() => { armed = false; del.removeClass("is-armed"); }, 2500); return; }
       s.scenarios = s.scenarios.filter((x) => x.id !== sc.id);
       await this.plugin.saveSettings();
       this.plugin.refreshViews();
@@ -1592,37 +1468,37 @@ class AssistantSettingTab extends PluginSettingTab {
     }));
   }
 
-
   /* ── automations ────────────────────────────────────────── */
   tabAutomations(c) {
     const s = this.s;
     if (!Array.isArray(s.automations)) s.automations = [];
 
-    c.createDiv({ cls: "oa-note", text: t("Scheduled runs that write into your vault on their own — a morning digest, a catch-up on recent thoughts. Each one is the assistant answering a saved prompt at a time you choose.") });
+    c.createDiv({ cls: "oa-lead", text: t("The assistant works on its own at the time you choose — a morning digest in today's note, a weekly catch-up, anything you write down as a request. The result lands in a note, in Telegram or in the phone app.") });
 
     if (!s.automations.length) {
-      c.createDiv({ cls: "oa-auto-empty", text: t("No automations yet. Add one to have the assistant work while you sleep.") });
+      c.createDiv({ cls: "oa-auto-empty", text: t("Nothing on a schedule yet — pick one below.") });
     }
     const list = c.createDiv({ cls: "oa-list" });
     s.automations.forEach((a) => this.automationRow(list, a));
 
-    // Add row: pick a preset, drop a fresh copy into the list.
-    let pick = "digest";
-    const add = new Setting(c).setName(t("Add automation"));
-    add.addDropdown((d) => {
-      const p = automationPresets();
-      d.addOption("digest", p.digest.name);
-      d.addOption("catchup", p.catchup.name);
-      d.addOption("custom", p.custom.name);
-      d.setValue(pick).onChange((v) => { pick = v; });
-    });
-    add.addButton((b) => b.setCta().setButtonText(t("Add")).onClick(async () => {
-      const fresh = newAutomation(pick);
-      s.automations.push(fresh);
-      await this.plugin.saveSettings();
-      this.display();
-      new AutomationEditModal(this.app, this.plugin, fresh, () => this.display()).open();
-    }));
+    new Setting(c).setName(t("Add on a schedule")).setHeading();
+    const p = automationPresets();
+    const gal = c.createDiv({ cls: "oa-gallery" });
+    const icon = { digest: "☀️", catchup: "🗞️", custom: "⏰" };
+    for (const key of ["digest", "catchup", "custom"]) {
+      const pr = p[key];
+      const el = clickable(gal.createDiv({ cls: "oa-gcard" }));
+      el.createDiv({ cls: "oa-gcard-emoji", text: icon[key] });
+      el.createDiv({ cls: "oa-gcard-name", text: key === "custom" ? t("Your own") : pr.name });
+      el.createDiv({ cls: "oa-gcard-text", text: key === "custom" ? t("Any request, at any time and on any days.") : `${pr.time} · ${firstSentence(pr.prompt)}` });
+      el.onclick = async () => {
+        const fresh = newAutomation(key);
+        s.automations.push(fresh);
+        await this.plugin.saveSettings();
+        this.display();
+        new AutomationEditModal(this.app, this.plugin, fresh, () => this.display()).open();
+      };
+    }
   }
 
   /** One line per automation: what it is, when it fires, whether it is on. */
@@ -1683,7 +1559,12 @@ class AssistantSettingTab extends PluginSettingTab {
     return `${a.time || "--:--"} · ${when}${a.telegram ? " · ✈️" : ""} · ${state}`;
   }
 
-  /* ── connector ──────────────────────────────────────────── */
+  /* ── the phone ──────────────────────────────────────────────
+   *
+   * One question per block, top to bottom: is it on, how do I connect,
+   * which phones are connected. Everything visited once a year — the
+   * quick-capture key, the relay address, test buttons — is folded.
+   * ────────────────────────────────────────────────────────── */
   tabConnector(c) {
     const s = this.s;
     if (!s.connector) s.connector = { enabled: false, code: "", server: "https://app.eltonlabs.org" };
@@ -1692,10 +1573,8 @@ class AssistantSettingTab extends PluginSettingTab {
     if (typeof cn.quickFolder !== "string") cn.quickFolder = "";
     if (cn.quickTo !== "daily") cn.quickTo = "note";
 
-    c.createDiv({ cls: "oa-note", text: t("Your vault from any browser. Open the address on your phone, type the code once, and write to your notes the same way you do in the panel — the answers come from this computer.") });
-
-    // Разбирает очередь тот компьютер, на котором лежит хранилище. Показывать
-    // телефону включатель, который ничего не включает, — обманывать.
+    // The queue is answered by the computer that holds the vault; a switch
+    // here on a phone would switch nothing on.
     if (isMobile()) {
       const box = c.createDiv({ cls: "oa-note" });
       box.createDiv({ cls: "oa-note-title", text: t("Set this up on your computer") });
@@ -1704,112 +1583,97 @@ class AssistantSettingTab extends PluginSettingTab {
       return;
     }
 
-    new Setting(c)
-      .setName(t("Answer from the browser"))
-      .setDesc(t("Only while Obsidian is open here. Anything sent while it is closed waits in a queue and arrives when you open the vault."))
-      .addToggle((x) => x.setValue(!!cn.enabled).onChange(async (v) => {
-        cn.enabled = v;
-        await this.plugin.saveSettings();
-        if (v) this.plugin.connector.restart(); else this.plugin.connector.stop();
-        this.display();
-      }));
+    /* ── 1. the state, big ─────────────────────────────────── */
+    const b = this.plugin.connector;
+    const on = !!(cn.enabled && cn.code);
+    const hero = c.createDiv({ cls: "oa-phone-hero" + (on ? (b.lastError ? " is-warn" : " is-on") : "") });
+    setIcon(hero.createDiv({ cls: "oa-phone-icon" }), "smartphone");
+    const txt = hero.createDiv({ cls: "oa-phone-txt" });
+    txt.createDiv({ cls: "oa-phone-title", text: on ? t("The phone app is on") : t("The phone app is off") });
+    txt.createDiv({ cls: "oa-phone-sub", text: !on
+      ? t("Your vault in your pocket: a feed of your notes, your folders and the assistant. The answers come from this computer.")
+      : b.lastError ? t("No connection to the server: {0}", b.lastError)
+      : t("This computer is listening. Notes stay here; the phone only asks.") });
+    const sw = hero.createDiv({ cls: "oa-phone-sw" });
+    new Setting(sw).addToggle((x) => x.setValue(!!cn.enabled).onChange(async (v) => {
+      cn.enabled = v;
+      if (v && !cn.code) cn.code = newConnectorCode();
+      await this.plugin.saveSettings();
+      if (v) this.plugin.connector.restart(); else this.plugin.connector.stop();
+      this.display();
+    }));
 
-    new Setting(c).setName(t("Connection")).setHeading();
-
-    new Setting(c)
-      .setName(t("Connection code"))
-      .setDesc(t("It is a password: anyone who has it can write to your vault. Resetting it disconnects every phone at once."))
-      .addText((tx) => {
-        tx.inputEl.type = "password";
-        tx.setValue(cn.code || "").onChange(async (v) => {
-          cn.code = v.trim(); await this.plugin.saveSettings();
-        });
-      })
-      .addButton((b) => b.setButtonText(t("Generate")).onClick(async () => {
-        cn.code = newConnectorCode();
-        await this.plugin.saveSettings();
-        if (cn.enabled) this.plugin.connector.restart();
-        this.display();
-      }))
-      .addButton((b) => b.setButtonText(t("Reset")).setWarning().onClick(async () => {
-        cn.code = "";
-        await this.plugin.saveSettings();
-        this.plugin.connector.stop();
-        this.display();
-      }));
-
-    if (cn.code) {
-      const box = c.createDiv({ cls: "oa-note oa-cn-card" });
-      box.createDiv({ cls: "oa-note-title", text: t("Open on your phone and type the code:") });
-      box.createDiv({ cls: "oa-cn-addr", text: cn.server.replace(/^https?:\/\//, "") });
-      box.createDiv({ cls: "oa-cn-code", text: cn.code });
+    if (!on) {
+      c.createDiv({ cls: "oa-hint", text: t("Works while Obsidian is open here. Anything sent while it is closed waits in a queue and arrives when you open the vault.") });
+      return;
     }
 
-    const status = c.createDiv({ cls: "oa-index-status" });
-    const paint = () => {
-      const b = this.plugin.connector;
-      status.setText(!cn.code ? t("No code yet — press Generate.")
-        : !cn.enabled ? t("The connector is switched off.")
-        : b.lastError ? t("No connection to the server: {0}", b.lastError)
-        : b.running ? t("Listening. The browser can reach this vault.")
-        : t("The connector is not running — reopen the vault or switch it off and on."));
+    /* ── 2. how to connect: three steps and the code ───────── */
+    new Setting(c).setName(t("Connect a phone")).setHeading();
+    const steps = c.createDiv({ cls: "oa-steps" });
+    const addr = cn.server.replace(/^https?:\/\//, "");
+    const step = (n, title, render) => {
+      const r = steps.createDiv({ cls: "oa-step" });
+      r.createDiv({ cls: "oa-step-n", text: String(n) });
+      const body = r.createDiv({ cls: "oa-step-body" });
+      body.createDiv({ cls: "oa-step-title", text: title });
+      if (render) render(body);
     };
-    paint();
+    const copyBtn = (parent, value, label) => {
+      const btn = parent.createEl("button", { cls: "oa-copy" });
+      setIcon(btn.createSpan(), "copy");
+      btn.createSpan({ text: label || t("Copy") });
+      btn.onclick = async () => {
+        try { await navigator.clipboard.writeText(value); btn.lastChild.setText(t("Copied")); }
+        catch { btn.lastChild.setText(t("Could not copy")); }
+        window.setTimeout(() => { btn.lastChild.setText(label || t("Copy")); }, 1600);
+      };
+    };
+    step(1, t("Open this address on the phone"), (el) => {
+      const line = el.createDiv({ cls: "oa-step-line" });
+      line.createSpan({ cls: "oa-addr", text: addr });
+      copyBtn(line, cn.server);
+    });
+    step(2, t("Add it to the home screen"), (el) => {
+      el.createDiv({ cls: "oa-step-text", text: t("iPhone: Share → Add to Home Screen. Android: the browser menu → Install app. No app store and no account.") });
+    });
+    step(3, t("Open it from the home screen and type the code"), (el) => {
+      const line = el.createDiv({ cls: "oa-step-line" });
+      const code = line.createSpan({ cls: "oa-code is-hidden", text: cn.code });
+      const eye = line.createEl("button", { cls: "oa-copy", attr: { "aria-label": t("Show") } });
+      setIcon(eye, "eye");
+      eye.onclick = () => code.toggleClass("is-hidden", !code.hasClass("is-hidden"));
+      copyBtn(line, cn.code);
+      el.createDiv({ cls: "oa-step-text", text: t("The code is a password: anyone who has it can write to your vault. Keep it to yourself.") });
+    });
 
-    new Setting(c)
-      .addButton((b) => b.setButtonText(t("Check the connection")).onClick(async () => {
-        if (!cn.code) { new Notice(t("No code yet — press Generate.")); return; }
-        b.setButtonText(t("Checking…")).setDisabled(true);
-        try {
-          const r = await this.plugin.connector.req("/api/status?code=" + encodeURIComponent(cn.code));
-          new Notice(t("The server answers. Waiting in the queue: {0}", r.queued), 6000);
-        } catch (e) {
-          new Notice(t("The server is unreachable: {0}", e.message), 8000);
-        } finally { b.setButtonText(t("Check the connection")).setDisabled(false); paint(); }
-      }));
-
+    /* ── 3. who is connected ───────────────────────────────── */
     new Setting(c).setName(t("Connected devices")).setHeading();
     const devBox = c.createDiv({ cls: "oa-cn-devs" });
     const drawDevices = async () => {
       devBox.empty();
-      if (!cn.code) {
-        devBox.createDiv({ cls: "oa-cn-dev-none", text: t("No code yet — press Generate.") });
-        return;
-      }
       devBox.createDiv({ cls: "oa-cn-dev-none", text: t("Loading…") });
       const list = await this.plugin.connector.listDevices();
       devBox.empty();
-      if (!list.length) {
-        devBox.createDiv({ cls: "oa-cn-dev-none", text: t("Nothing connected yet. Type the code on your phone.") });
-      }
+      if (!list.length) devBox.createDiv({ cls: "oa-cn-dev-none", text: t("Nothing connected yet. Type the code on your phone.") });
       for (const d of list) {
         const row = devBox.createDiv({ cls: "oa-cn-dev" });
-        const left = row.createDiv();
-        left.createDiv({ cls: "oa-cn-dev-name", text: d.name || t("Device") });
-        left.createDiv({ cls: "oa-cn-dev-when",
-          text: t("last seen {0}", whenWord(d.seen))
-            + " · " + (d.pub && d.paired ? t("encrypted") : t("no encryption — reconnect it")) });
+        setIcon(row.createDiv({ cls: "oa-cn-dev-icon" }), d.name === QUICK_NAME ? "zap" : /iPhone|Android|iPad/.test(d.name || "") ? "smartphone" : "monitor");
+        const left = row.createDiv({ cls: "oa-cn-dev-body" });
+        left.createDiv({ cls: "oa-cn-dev-name", text: d.name === QUICK_NAME ? t("Quick capture button") : (d.name || t("Device")) });
+        left.createDiv({ cls: "oa-cn-dev-when", text: t("last seen {0}", whenWord(d.seen))
+          + " · " + (d.name === QUICK_NAME ? t("can only create a note") : d.pub && d.paired ? t("encrypted") : t("no encryption — reconnect it")) });
         const off = row.createEl("button", { text: t("Disconnect") });
         off.onclick = async () => {
           off.setText(t("Disconnecting…"));
           off.disabled = true;
           await this.plugin.connector.dropDevice(d.id);
+          if (d.id === cn.quick) { cn.quick = ""; await this.plugin.saveSettings(); }
           drawDevices();
         };
       }
-      // Обновление живёт внутри карточки: в отдельной настроечной строке
-      // оно рисовалось пустой рамкой во всю ширину.
       const foot = devBox.createDiv({ cls: "oa-cn-dev-foot" });
-      const again = foot.createEl("button", { text: t("Refresh the list") });
-      again.onclick = () => drawDevices();
-
-      /* Отключить все разом — когда телефонов накопилось больше, чем
-         помнишь, а отключать их по одному незачем. Это не то же самое,
-         что сброс кода: код остаётся, и любой из них можно подключить
-         обратно, введя его заново.
-
-         Спрашиваем не окном, а самой кнопкой: одно лишнее нажатие
-         защищает не хуже, а окно посреди списка выглядит паникой. */
+      foot.createEl("button", { text: t("Refresh the list") }).onclick = () => drawDevices();
       if (list.length) {
         const all = foot.createEl("button", { cls: "mod-warning", text: t("Disconnect all") });
         let armed = false;
@@ -1818,9 +1682,6 @@ class AssistantSettingTab extends PluginSettingTab {
           all.disabled = true;
           all.setText(t("Disconnecting…"));
           for (const d of list) await this.plugin.connector.dropDevice(d.id).catch(() => {});
-          // Кнопка быстрой записи — такое же устройство: её номер больше
-          // ничего не значит, и оставить его значило бы соврать разделу
-          // ниже, что быстрая запись всё ещё включена.
           cn.quick = "";
           await this.plugin.saveSettings();
           this.display();
@@ -1829,113 +1690,90 @@ class AssistantSettingTab extends PluginSettingTab {
     };
     drawDevices();
 
-    /* ── Быстрая запись ──────────────────────────────────────────────
-     * Отдельный ключ для кнопки на телефоне. Стоит после списка
-     * устройств не случайно: заведённая кнопка появляется в том же
-     * списке и отключается той же кнопкой, что и телефон.
-     */
-    new Setting(c).setName(t("Quick capture")).setHeading();
-    c.createDiv({ cls: "oa-note", text: t("A key for a phone button or widget: it can only create a note, nothing else. No reading, no editing, no deleting — the assistant is not even started.") });
-
-    new Setting(c)
-      .setName(t("Where a quick note lands"))
-      .setDesc(t("A separate note, or one more line at the end of today's daily note."))
-      .addDropdown((d) => d
-        .addOption("note", t("A new note"))
-        .addOption("daily", t("A line in today's note"))
-        .setValue(cn.quickTo)
-        .onChange(async (v) => { cn.quickTo = v; await this.plugin.saveSettings(); this.display(); }));
-
-    // Папка нужна только для отдельной заметки: строке в сегодняшнем дне
-    // выбирать нечего, и пустое поле рядом с ней только сбивает.
-    if (cn.quickTo === "note") {
-      this.folderField(
-        new Setting(c)
-          .setName(t("Folder for quick notes"))
-          .setDesc(t("Start typing and pick from your own folders. Empty means the folder for new notes from the Vault tab.")),
-        () => cn.quickFolder || "",
-        async (v) => { cn.quickFolder = v; await this.plugin.saveSettings(); },
-        "Inbox",
-      );
-    }
-
-    const qbox = c.createDiv({ cls: "oa-note oa-cn-card" });
-    const paintQuick = (token) => {
-      qbox.empty();
-      if (token) {
-        qbox.createDiv({ cls: "oa-note-title", text: t("Paste this into the shortcut on your phone:") });
-        qbox.createDiv({ cls: "oa-cn-code", text: token });
-        const foot = qbox.createDiv({ cls: "oa-cn-dev-foot" });
-        const cp = foot.createEl("button", { text: t("Copy") });
-        cp.onclick = async () => {
-          try { await navigator.clipboard.writeText(token); cp.setText(t("Copied")); } catch { /* буфера может не быть */ }
-        };
-        qbox.createDiv({ text: t("The key is shown once. Lost it — revoke and create a new one.") });
-      } else {
-        qbox.createDiv({ text: cn.quick
-          ? t("Quick capture is on. The key is stored on the phone, not here.")
-          : !cn.code
-            ? t("No code yet — create a connection code first.")
-            : t("The key has not been created yet — press the button below.") });
-      }
-    };
-    paintQuick("");
-
-    new Setting(c)
-      .addButton((b) => b.setButtonText(t("Create the key")).onClick(async () => {
-        if (!cn.code) { new Notice(t("No code yet — create a connection code first.")); return; }
-        b.setDisabled(true);
-        try {
-          const r = await this.plugin.connector.makeQuickKey();
-          cn.quick = r.device || "";
-          await this.plugin.saveSettings();
-          paintQuick(r.token);
-          drawDevices();
-        } catch (e) {
-          new Notice(t("Could not create the key: {0}", (e && e.message) || String(e)), 8000);
-        } finally { b.setDisabled(false); }
-      }))
-      .addButton((b) => b.setButtonText(t("Revoke")).setWarning().onClick(async () => {
-        if (cn.quick) await this.plugin.connector.dropDevice(cn.quick).catch(() => {});
-        cn.quick = "";
-        await this.plugin.saveSettings();
-        this.display();
-      }));
-
-    c.createDiv({ cls: "oa-note", text: t("Everything is encrypted end to end. The phone and this computer exchange public keys through the relay and each works out the shared secret on its own side, so the relay carries ciphertext it cannot read.") });
-
-    /* Всё, к чему возвращаются раз в год, — под складку. Настройки эти
-       нужные, но глаз обязан пройти мимо них к тому, за чем пришёл. */
+    /* ── folded: everything else ───────────────────────────── */
     this.advanced(c, "connector", (a) => {
+      this.section(a, t("Quick capture"));
+      a.createDiv({ cls: "oa-hint", text: t("A key for a phone button or widget: it can only create a note, nothing else. No reading, no editing, no deleting — the assistant is not even started.") });
+      new Setting(a)
+        .setName(t("Where a quick note lands"))
+        .addDropdown((d) => d
+          .addOption("note", t("A new note"))
+          .addOption("daily", t("A line in today's note"))
+          .setValue(cn.quickTo)
+          .onChange(async (v) => { cn.quickTo = v; await this.plugin.saveSettings(); this.display(); }));
+      if (cn.quickTo === "note") {
+        this.folderField(
+          new Setting(a).setName(t("Folder for quick notes"))
+            .setDesc(t("Start typing and pick from your own folders. Empty means the folder for new notes from the Vault tab.")),
+          () => cn.quickFolder || "",
+          async (v) => { cn.quickFolder = v; await this.plugin.saveSettings(); },
+          "Inbox");
+      }
+      const qbox = a.createDiv({ cls: "oa-note oa-cn-card" });
+      const paintQuick = (token) => {
+        qbox.empty();
+        if (token) {
+          qbox.createDiv({ cls: "oa-note-title", text: t("Paste this into the shortcut on your phone:") });
+          qbox.createDiv({ cls: "oa-cn-code", text: token });
+          copyBtn(qbox.createDiv({ cls: "oa-cn-dev-foot" }), token);
+          qbox.createDiv({ text: t("The key is shown once. Lost it — revoke and create a new one.") });
+        } else {
+          qbox.createDiv({ text: cn.quick ? t("Quick capture is on. The key is stored on the phone, not here.") : t("The key has not been created yet — press the button below.") });
+        }
+      };
+      paintQuick("");
+      new Setting(a)
+        .addButton((x) => x.setButtonText(t("Create the key")).onClick(async () => {
+          x.setDisabled(true);
+          try {
+            const r = await this.plugin.connector.makeQuickKey();
+            cn.quick = r.device || "";
+            await this.plugin.saveSettings();
+            paintQuick(r.token);
+            drawDevices();
+          } catch (e) {
+            new Notice(t("Could not create the key: {0}", (e && e.message) || String(e)), 8000);
+          } finally { x.setDisabled(false); }
+        }))
+        .addButton((x) => x.setButtonText(t("Revoke")).setWarning().onClick(async () => {
+          if (cn.quick) await this.plugin.connector.dropDevice(cn.quick).catch(() => {});
+          cn.quick = "";
+          await this.plugin.saveSettings();
+          this.display();
+        }));
+
+      this.section(a, t("Connection"));
       new Setting(a)
         .setName(t("Check the connection"))
         .setDesc(t("Asks the relay whether it hears this computer right now."))
-        .addButton((b) => b.setButtonText(t("Check")).onClick(async () => {
-          if (!cn.code) { new Notice(t("No code yet — press Generate.")); return; }
-          b.setButtonText(t("Checking…")).setDisabled(true);
+        .addButton((x) => x.setButtonText(t("Check")).onClick(async () => {
+          x.setButtonText(t("Checking…")).setDisabled(true);
           try {
             const r = await this.plugin.connector.req("/api/status?code=" + encodeURIComponent(cn.code));
             new Notice(t("The server answers. Waiting in the queue: {0}", r.queued), 6000);
           } catch (e) {
             new Notice(t("The server is unreachable: {0}", e.message), 8000);
-          } finally { b.setButtonText(t("Check")).setDisabled(false); paint(); }
+          } finally { x.setButtonText(t("Check")).setDisabled(false); }
         }));
-
       new Setting(a)
         .setName(t("Check notifications reach the phone"))
-        .setDesc(t("Sends a test notification to every phone where notifications are on. Switch them on in the app itself, and pick which automations may notify on the Tasks tab."))
-        .addButton((b) => b.setButtonText(t("Send a test")).onClick(async () => {
-          if (!cn.code) { new Notice(t("No code yet — press Generate.")); return; }
-          b.setButtonText(t("Sending…")).setDisabled(true);
+        .setDesc(t("Sends a test notification to every phone where notifications are on. Switch them on in the app itself."))
+        .addButton((x) => x.setButtonText(t("Send a test")).onClick(async () => {
+          x.setButtonText(t("Sending…")).setDisabled(true);
           try {
-            const ok = await this.plugin.connector.notify(
-              t("Test"), t("If you can read this, notifications are working."), "auto");
-            new Notice(ok
-              ? t("Sent. Look at your phone.")
-              : t("Nobody has switched notifications on in the app yet."), 6000);
-          } finally { b.setButtonText(t("Send a test")).setDisabled(false); }
+            const ok = await this.plugin.connector.notify(t("Test"), t("If you can read this, notifications are working."), "auto");
+            new Notice(ok ? t("Sent. Look at your phone.") : t("Nobody has switched notifications on in the app yet."), 6000);
+          } finally { x.setButtonText(t("Send a test")).setDisabled(false); }
         }));
-
+      new Setting(a)
+        .setName(t("New connection code"))
+        .setDesc(t("Every connected phone is disconnected at once and has to type the new code. For when the old one has leaked."))
+        .addButton((x) => x.setButtonText(t("Make a new code")).setWarning().onClick(async () => {
+          cn.code = newConnectorCode();
+          await this.plugin.saveSettings();
+          this.plugin.connector.restart();
+          this.display();
+        }));
       new Setting(a)
         .setName(t("Relay address"))
         .setDesc(t("Where the browser and this computer meet. Change it only if you run your own relay."))
@@ -1944,12 +1782,9 @@ class AssistantSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-      const more = a.createDiv({ cls: "oa-note" });
-      more.createDiv({ cls: "oa-note-title", text: t("What the app can do") });
-      more.createDiv({ text: t("Voice. What you say into the phone is transcribed here, by your own provider — the same one that hears the panel. The transcript lands in the input field rather than being sent straight off, because speech is misheard and the notes it edits are real.") });
-      more.createDiv({ text: t("Balance. The app shows what is left on your Elton AI account and can top it up. It asks this computer for both, so the key stays here and never travels to the phone.") });
-      more.createDiv({ text: t("A spare entrance. If the phone or this computer cannot reach the relay — a VPN with a foreign exit is the usual reason — both quietly switch to a mirror and return on their own once the direct way works again.") });
-      more.createDiv({ text: t("The secret is different for every device, so one phone cannot read another's messages. A device connected before encryption existed keeps working without it until reconnected — the list above says which is which.") });
+      this.section(a, t("Privacy"));
+      a.createDiv({ cls: "oa-hint", text: t("Everything is encrypted end to end. The phone and this computer exchange public keys through the relay and each works out the shared secret on its own side, so the relay carries ciphertext it cannot read.") });
+      a.createDiv({ cls: "oa-hint", text: t("The secret is different for every device, so one phone cannot read another's messages. A device connected before encryption existed keeps working without it until reconnected — the list above says which is which.") });
     });
   }
 
@@ -2097,88 +1932,5 @@ class AssistantSettingTab extends PluginSettingTab {
   }
 
   /* ── interface ──────────────────────────────────────────── */
-  tabUI(c) {
-    const s = this.s;
-    new Setting(c)
-      .setName(t("How the panel opens"))
-      .setDesc(t("You can switch any time from the button in the panel header."))
-      .addDropdown((d) => {
-        d.addOption("reactor", t("Reactor — voice first, one big dial that shows what's happening."));
-        d.addOption("chat", t("Text — a conversation you read, with sources and copy buttons."));
-        d.setValue(s.viewMode).onChange(async (v) => {
-          s.viewMode = v; await this.plugin.saveSettings(); this.plugin.refreshViews();
-        });
-      });
 
-    new Setting(c)
-      .setName(t("Where the panel opens"))
-      .addDropdown((d) => {
-        d.addOption("right", t("Right sidebar"));
-        d.addOption("left", t("Left sidebar"));
-        d.addOption("main", t("Main area (as a tab)"));
-        d.setValue(s.viewLocation).onChange(async (v) => { s.viewLocation = v; await this.plugin.saveSettings(); });
-      });
-
-    new Setting(c).setName(t("Open on startup"))
-      .addToggle((x) => x.setValue(s.openOnStartup).onChange(async (v) => { s.openOnStartup = v; await this.plugin.saveSettings(); }));
-
-    new Setting(c)
-      .setName(t("Language"))
-      .setDesc(t("The interface switches immediately. Restart Obsidian afterwards so anything already open picks it up too. What the assistant answers in does not depend on this — it replies in the language you write or speak to it."))
-      .addDropdown((d) => {
-        d.addOption("auto", t("Follow Obsidian"));
-        d.addOption("ru", t("Russian"));
-        d.addOption("en", t("English"));
-        d.setValue(s.lang).onChange(async (v) => {
-          s.lang = v; setLang(v === "auto" ? null : v);
-          await this.plugin.saveSettings();
-          // Everything at once, including the palette entries and the ribbon
-          // tooltip. A restart is not needed — but it is offered, because
-          // "almost everything changed" is the state people distrust most,
-          // and a window that was already open when the switch happened keeps
-          // whatever text it was built with.
-          this.plugin.applyLanguage();
-          this.display();
-          new Notice(t("Language changed. Anything already open keeps its old wording until you restart Obsidian."), 8000);
-        });
-      });
-
-    new Setting(c)
-      .setName(t("Show the answer as text"))
-      .setDesc(t("The written answer arrives before the voice reaches it, so you read it and then hear it again. Off, the text keeps pace with the speech and the rest is a tap away. On, the whole answer appears at once."))
-      .addToggle((x) => x.setValue(s.showReplyText).onChange(async (v) => {
-        s.showReplyText = v; await this.plugin.saveSettings(); this.plugin.refreshViews();
-      }));
-
-    new Setting(c)
-      .setName(t("Show what it's doing"))
-      .setDesc(t("Print each search and edit in the conversation, so you can see how it got there."))
-      .addToggle((x) => x.setValue(s.showActions).onChange(async (v) => { s.showActions = v; await this.plugin.saveSettings(); }));
-
-    new Setting(c)
-      .setName(t("Save conversations"))
-      .setDesc(t("Off, nothing is written down and a conversation is gone when you close the panel. On, each one becomes a note you can search and link to."))
-      .addToggle((x) => x.setValue(s.saveConversations).onChange(async (v) => { s.saveConversations = v; await this.plugin.saveSettings(); this.display(); }));
-
-    if (s.saveConversations) {
-      this.folderField(
-        new Setting(c).setName(t("Conversations folder"))
-          .setDesc(t("One note per conversation, named after the assistant and the time. Empty means a folder called «{0}», created the first time something is saved.", t("Assistant conversations"))),
-        () => s.conversationFolder,
-        async (v) => { s.conversationFolder = v.trim().replace(/^\/+|\/+$/g, ""); await this.plugin.saveSettings(); },
-        "Conversations");
-    }
-
-    // What used to be a ninth tab. Two sentences and a version number did not
-    // earn a tab of their own — one that then sat alone past the right edge of
-    // the strip — and the setup guide is already a button at the top of every
-    // tab. It reads better as the last thing on the page than as a place to go.
-    const foot = c.createDiv({ cls: "oa-set-foot" });
-    foot.createDiv({ cls: "oa-set-foot-title", text: `Elton AI ${this.plugin.manifest.version}` });
-    foot.createDiv({ text: t("Your notes stay in your vault. Only the text needed to answer a question is sent to the provider you chose — and with a local model, nothing leaves your machine at all.") });
-    const link = foot.createDiv({ cls: "oa-onb-card-by" });
-    const a = link.createEl("a", { text: siteLabel(), href: siteUrl() });
-    a.setAttr("target", "_blank");
-    a.setAttr("rel", "noopener");
-  }
 }

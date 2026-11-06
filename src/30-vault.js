@@ -183,6 +183,38 @@ class VaultBridge {
   }
 
   /**
+   * Finished batches, appended beside the index as they come in.
+   *
+   * This is the autosave. Rewriting the whole index is hundreds of megabytes
+   * for a big vault, so it used to happen every two minutes at best — and a
+   * closed laptop, a crash or a quit in between threw that much paid work
+   * away, and the run felt stuck while it wrote. A line per note costs
+   * nothing to append, survives anything, and the next run simply starts
+   * where this one stopped. The log is folded into the index at the end of
+   * a full pass.
+   */
+  logPath() { return this.cachePath() + ".log"; }
+
+  /** The index file and its log are written one thing at a time. */
+  embQueue(fn) {
+    const run = (this._embQ || Promise.resolve()).then(fn, fn);
+    this._embQ = run.catch(() => {});
+    return run;
+  }
+
+  async appendEmbedLog(records) {
+    if (!records.length) return;
+    const text = records.map((r) => JSON.stringify(r)).join("\n") + "\n";
+    await this.embQueue(async () => {
+      const a = this.app.vault.adapter;
+      const p = this.logPath();
+      if (await a.exists(p)) await a.append(p, text);
+      else await a.write(p, text);
+      this._embLogLines = (this._embLogLines || 0) + records.length;
+    });
+  }
+
+  /**
    * Read the vector off an entry, whichever tool wrote it.
    * Indexes built by the older vault scripts store it under `embedding`;
    * this plugin writes `v`. Reading both is what lets an existing index be
@@ -225,6 +257,21 @@ class VaultBridge {
         // name. Every vector in it has been paid for; try it before giving up.
         this._emb = JSON.parse((await this.app.vault.adapter.read(p + ".part")) || "{}");
       } else this._emb = {};
+      // Then what was appended since the index was last written whole.
+      this._embLogLines = 0;
+      const log = this.logPath();
+      if (await this.app.vault.adapter.exists(log)) {
+        const raw = (await this.app.vault.adapter.read(log)) || "";
+        for (const line of raw.split("\n")) {
+          if (!line) continue;
+          try {
+            const r = JSON.parse(line);
+            if (r.d) delete this._emb[r.k];
+            else if (r.k && r.e) this._emb[r.k] = r.e;
+            this._embLogLines++;
+          } catch { /* a line cut off by a crash: that note is simply done again */ }
+        }
+      }
       // Someone who indexed a large vault before vectors were packed has a
       // file of plain numbers, and at twenty-five thousand notes it is within
       // a couple of thousand of the size the engine refuses to hold. Repack it
@@ -253,6 +300,12 @@ class VaultBridge {
 
   /** How many usable vectors an index holds — for the settings readout. */
   async indexSize(path) {
+    // Our own index is already in memory; reading a big file again for a
+    // number on a settings screen took seconds.
+    if (!path || normalizePath(path) === this.cachePath()) {
+      try { return Object.values(await this.loadEmbeddings()).filter((e) => VaultBridge.hasVector(e)).length; }
+      catch { return 0; }
+    }
     try {
       const p = normalizePath(path || this.cachePath());
       if (!(await this.app.vault.adapter.exists(p))) return 0;
@@ -274,7 +327,9 @@ class VaultBridge {
      Written beside the real file and renamed at the end, so a crash halfway
      through cannot leave a truncated index where a working one used to be.
   */
-  async saveEmbeddings() {
+  async saveEmbeddings() { return this.embQueue(() => this.writeEmbeddings()); }
+
+  async writeEmbeddings() {
     const a = this.app.vault.adapter;
     const p = this.cachePath();
     const tmp = p + ".part";
@@ -299,6 +354,9 @@ class VaultBridge {
 
     if (await a.exists(p)) await a.remove(p);
     await a.rename(tmp, p);
+    // Everything the log held is in the file now.
+    if (await a.exists(this.logPath())) await a.remove(this.logPath());
+    this._embLogLines = 0;
   }
 
   /** An index this plugin did not create is never written to. */
@@ -325,8 +383,8 @@ class VaultBridge {
     return !list.some((f) => p === f || p.startsWith(f + "/"));
   }
 
-  pendingEmbeddings(cache) {
-    return this.files().filter((f) => this.indexable(f.path)).filter((f) => {
+  pendingEmbeddings(cache, only = null) {
+    return this.files().filter((f) => (!only || only.has(f.path)) && this.indexable(f.path)).filter((f) => {
       const e = cache[f.path];
       if (!e) return true;
       if (e.mtime !== f.stat.mtime) return true;
@@ -359,75 +417,151 @@ class VaultBridge {
    * to tell: the failures went to the console, the button kept offering the
    * same notes, and nothing on screen ever explained why.
    */
-  async buildEmbeddings(onProgress, shouldStop) {
+  async buildEmbeddings(onProgress, shouldStop, { only = null, compact = !only } = {}) {
     const borrowed = this.indexIsBorrowed;
     const cache = await this.loadEmbeddings();
-    const files = this.files();
+    const log = [];
 
     // Only prune when the file is ours. In a borrowed index a path we cannot
     // see may simply be outside our scope, and dropping it would silently
     // destroy work another tool paid for.
-    if (!borrowed) {
-      const live = new Set(files.map((f) => f.path));
-      for (const p of Object.keys(cache)) if (!live.has(p)) delete cache[p];
+    if (!borrowed && !only) {
+      const live = new Set(this.files().map((f) => f.path));
+      for (const p of Object.keys(cache)) if (!live.has(p)) { delete cache[p]; log.push({ k: p, d: 1 }); }
     }
 
-    const todo = this.pendingEmbeddings(cache);
+    const todo = this.pendingEmbeddings(cache, only);
     const tally = { done: 0, total: todo.length, embedded: 0, skipped: 0, failed: 0, error: "", stopped: false };
-    let streak = 0;
-    let lastSave = Date.now();
 
-    for (const f of todo) {
-      if (shouldStop && shouldStop()) { tally.stopped = true; break; }
-      try {
-        const raw = await this.app.vault.cachedRead(f);
-        const body = stripMarkdown(raw);
+    /* Sixteen notes to a request, three requests at a time. One note per
+       request, one after another, was twenty thousand round trips for a big
+       vault — an evening, with the window looking frozen the whole time. */
+    const MAX_ITEMS = 16;
+    const MAX_CHARS = 48000;
+    const WORKERS = 3;
+    let next = 0;
+    let streak = 0;
+
+    const entryFor = (item, v) => {
+      const entry = { mtime: item.mtime, title: item.f.basename };
+      if (borrowed) {
+        // Someone else's file keeps someone else's shape: plain numbers,
+        // and written twice — see above. The duplicate costs disk, not
+        // correctness, and only for notes this plugin added.
+        entry.v = v;
+        entry.embedding = v;
+      } else {
+        // Our own file packs the vector; see packVector for why.
+        entry.b = packVector(v);
+      }
+      return entry;
+    };
+
+    // Files are read as the batches need them, not all up front: twenty
+    // thousand notes held in memory at once is a few hundred megabytes.
+    const take = async () => {
+      const batch = [];
+      let chars = 0;
+      while (next < todo.length && batch.length < MAX_ITEMS && chars < MAX_CHARS) {
+        const f = todo[next++];
+        let body;
+        try { body = stripMarkdown(await this.app.vault.cachedRead(f)); }
+        catch (e) { tally.failed++; tally.done++; if (!tally.error) tally.error = e.message; continue; }
         // A near-empty note has no meaning to embed; its vector would be
         // noise that matches everything.
         if (body.replace(/\s/g, "").length < 80) {
           cache[f.path] = { mtime: f.stat.mtime, skip: true };
+          log.push({ k: f.path, e: cache[f.path] });
           tally.skipped++;
-        } else {
-          const v = await this.plugin.ai.embed(f.basename + "\n" + body.slice(0, 8000));
-          const entry = { mtime: f.stat.mtime, title: f.basename };
-          if (borrowed) {
-            // Someone else's file keeps someone else's shape: plain numbers,
-            // and written twice — see above. The duplicate costs disk, not
-            // correctness, and only for notes this plugin added.
-            entry.v = v;
-            entry.embedding = v;
-          } else {
-            // Our own file packs the vector; see packVector for why.
-            entry.b = packVector(v);
-          }
-          cache[f.path] = entry;
-          tally.embedded++;
+          tally.done++;
+          continue;
         }
-        streak = 0;
-      } catch (e) {
-        tally.failed++;
-        streak++;
-        if (!tally.error) tally.error = e.message;
-        console.warn("[Elton AI] embed failed", f.path, e.message);
-        // A provider that has said no five times running will say no two
-        // thousand times running. Stop and report instead of spending the
-        // next twenty minutes proving it.
-        if (streak >= 5) { tally.stopped = true; break; }
+        const text = f.basename + "\n" + body.slice(0, 8000);
+        batch.push({ f, text, mtime: f.stat.mtime });
+        chars += text.length;
       }
-      tally.done++;
-      if (onProgress) onProgress(tally.done, todo.length);
-      // The index is rewritten whole, and for a large vault that is hundreds
-      // of megabytes. By the clock rather than by the note: every fifty notes
-      // meant rewriting the same file six hundred times in one pass, which is
-      // most of why a long run felt stuck.
-      if (Date.now() - lastSave > 120000) {
-        await this.saveEmbeddings();
-        lastSave = Date.now();
-      }
-    }
+      return batch;
+    };
 
-    await this.saveEmbeddings();
+    const keep = (item, v) => {
+      cache[item.f.path] = entryFor(item, v);
+      log.push({ k: item.f.path, e: cache[item.f.path] });
+      tally.embedded++;
+    };
+
+    const worker = async () => {
+      while (!tally.stopped) {
+        if (shouldStop && shouldStop()) { tally.stopped = true; break; }
+        const batch = await take();
+        if (!batch.length) { if (next >= todo.length) break; continue; }
+        let vectors = null;
+        try { vectors = await this.plugin.ai.embedMany(batch.map((x) => x.text)); }
+        catch { vectors = null; }
+        if (vectors) {
+          batch.forEach((x, k) => keep(x, vectors[k]));
+          streak = 0;
+        } else {
+          // One by one, so that one bad note does not sink fifteen good ones.
+          for (const x of batch) {
+            try { keep(x, await this.plugin.ai.embed(x.text)); streak = 0; }
+            catch (e) {
+              tally.failed++;
+              streak++;
+              if (!tally.error) tally.error = e.message;
+              console.warn("[Elton AI] embed failed", x.f.path, e.message);
+            }
+            // A provider that has said no five times running will say no two
+            // thousand times running. Stop and report instead of spending the
+            // next twenty minutes proving it.
+            if (streak >= 5) { tally.stopped = true; break; }
+          }
+        }
+        tally.done += batch.length;
+        if (onProgress) onProgress(tally.done, todo.length);
+        if (log.length) await this.appendEmbedLog(log.splice(0));
+      }
+    };
+
+    await Promise.all(Array.from({ length: WORKERS }, worker));
+    if (log.length) await this.appendEmbedLog(log.splice(0));
+    if (onProgress) onProgress(tally.done, todo.length);
+
+    // Folded into the index once, at the end of a full pass — or when the log
+    // has grown long enough that reading it at startup starts to show.
+    if (compact || (this._embLogLines || 0) > 3000) await this.saveEmbeddings();
     return tally;
+  }
+
+  /** A renamed note keeps its vector — nothing about its meaning changed. */
+  async renameEmbedding(from, to) {
+    if (this.indexIsBorrowed) return;
+    const cache = await this.loadEmbeddings();
+    const e = cache[from];
+    if (!e) return;
+    delete cache[from];
+    cache[to] = e;
+    await this.appendEmbedLog([{ k: from, d: 1 }, { k: to, e }]);
+  }
+
+  async dropEmbedding(path) {
+    if (this.indexIsBorrowed) return;
+    const cache = await this.loadEmbeddings();
+    if (!cache[path]) return;
+    delete cache[path];
+    await this.appendEmbedLog([{ k: path, d: 1 }]);
+  }
+
+  /** How much is left and how long it will take, for the screens that ask. */
+  async indexEstimate() {
+    const todo = this.pendingEmbeddings(await this.loadEmbeddings());
+    let chars = 0;
+    for (const f of todo) chars += Math.min(8000, (f.stat && f.stat.size) || 0);
+    /* Measured through the proxy: three parallel requests of sixteen short
+       notes take about a second; of sixteen long ones (6000 characters) about
+       three. So both the count and the amount of text set the pace. */
+    const seconds = Math.max(todo.length / 40, chars / 100000);
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    return { notes: todo.length, tokens: Math.round(chars / 3.5), minutes };
   }
 
   async semanticSearch(query, limit = 8) {
@@ -595,7 +729,16 @@ class VaultBridge {
       path = normalizePath((dir ? dir + "/" : "") + base + " " + n++ + ".md");
     }
     if (!this.inScope(path)) throw new Error("out-of-scope");
-    return await this.app.vault.create(path, String(content || ""));
+    const f = await this.app.vault.create(path, String(content || ""));
+    await this.journalCreate(f, String(content || ""));
+    return f;
+  }
+
+  /** Every new file the assistant makes can be taken back. */
+  async journalCreate(file, content) {
+    const J = this.plugin.journal;
+    if (!J || !file) return;
+    try { await J.record("create", { path: file.path, after: content }); } catch { /* journal is a convenience */ }
   }
 
   /**
@@ -923,8 +1066,10 @@ class VaultBridge {
 
     const folder = this.dailyFolder();
     if (!folder) return null;
-    await this.ensureFolder(folder);
-    const path = normalizePath(folder + "/" + todayKey() + ".md");
+    // Named the way this vault names them, in whatever folders the format makes.
+    const path = this.dailyPath(VaultBridge.dayFrom(when));
+    const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+    if (dir) await this.ensureFolder(dir);
     if (this.app.vault.getAbstractFileByPath(path)) return this.dailyNote(when);
     return await this.app.vault.create(path, "");
   }
@@ -935,6 +1080,9 @@ class VaultBridge {
       const before = await this.app.vault.read(file);
       this.undoStack.push({ path: file.path, before });
       if (this.undoStack.length > 20) this.undoStack.shift();
+      /* The same snapshot, on disk: the stack above dies with the window,
+         and from the phone there is no window to keep it in. */
+      if (this.plugin.journal) await this.plugin.journal.record("edit", { path: file.path, before });
     } catch {}
   }
 
@@ -1023,7 +1171,11 @@ class VaultBridge {
 
     const dir = path.slice(0, path.lastIndexOf("/"));
     if (dir) await this.ensureFolder(dir);
+    const from = file.path;
     await this.app.fileManager.renameFile(file, path);
+    if (this.plugin.journal) {
+      try { await this.plugin.journal.record("move", { path, from }); } catch { /* convenience */ }
+    }
     return this.app.vault.getAbstractFileByPath(path) || file;
   }
 
@@ -1041,6 +1193,13 @@ class VaultBridge {
   }
 
   async undo() {
+    /* The journal first: it survives a restart and covers new notes and
+       moves too, which the in-memory stack never did. */
+    if (this.plugin.journal) {
+      const r = await this.plugin.journal.undo();
+      this.undoStack.pop();
+      return r.ok ? r.path : null;
+    }
     const last = this.undoStack.pop();
     if (!last) return null;
     const f = this.app.vault.getAbstractFileByPath(last.path);
@@ -1188,37 +1347,217 @@ class VaultBridge {
    */
   dailyFolder() {
     if (this.s.dailyFolder) return this.s.dailyFolder;
+    const o = this.dailyOptions();
+    return o.folder ? String(o.folder).replace(/^\/+|\/+$/g, "") : "";
+  }
+
+  /** What the vault itself says about daily notes: Periodic Notes first —
+      when it is on it takes over from the core plugin — then Daily notes. */
+  dailyOptions() {
+    try {
+      const pn = this.app.plugins && this.app.plugins.plugins && this.app.plugins.plugins["periodic-notes"];
+      const d = pn && pn.settings && pn.settings.daily;
+      if (d && d.enabled) return { folder: d.folder || "", format: d.format || "" };
+    } catch { /* not installed */ }
     const core = this.app.internalPlugins && this.app.internalPlugins.getPluginById
       ? this.app.internalPlugins.getPluginById("daily-notes")
       : null;
-    const folder = core && core.instance && core.instance.options && core.instance.options.folder;
-    return folder ? String(folder).replace(/^\/+|\/+$/g, "") : "";
+    const o = (core && core.instance && core.instance.options) || {};
+    return { folder: o.folder || "", format: o.format || "" };
+  }
+
+  /**
+   * How daily notes are named in this vault.
+   *
+   * It was taken to be DD-MM-YYYY everywhere — the way one vault does it —
+   * while Obsidian's own default is YYYY-MM-DD, Americans write MM-DD-YYYY
+   * and plenty of people put the weekday or the month's name in. Found by
+   * "same numbers in any order", 06-11 and 11-06 were the same day, and a
+   * note made from the phone came out in the wrong shape.
+   * The configured format wins. With none set, the notes already in the
+   * folder say how they are named; with no notes, Obsidian's default.
+   */
+  dailyFormat() {
+    const set = String(this.dailyOptions().format || "").trim();
+    if (set) return set;
+    if (this._dailyGuess !== undefined && this._dailyGuessAt > Date.now() - 60000) return this._dailyGuess;
+    const folder = this.dailyFolder();
+    const shapes = [
+      ["DD-MM-YYYY", /^\d{2}-\d{2}-\d{4}$/], ["YYYY-MM-DD", /^\d{4}-\d{2}-\d{2}$/],
+      ["DD.MM.YYYY", /^\d{2}\.\d{2}\.\d{4}$/], ["YYYY.MM.DD", /^\d{4}\.\d{2}\.\d{2}$/],
+      ["YYYYMMDD", /^\d{8}$/], ["DD_MM_YYYY", /^\d{2}_\d{2}_\d{4}$/],
+    ];
+    const count = new Map();
+    if (folder) {
+      for (const f of this.app.vault.getMarkdownFiles()) {
+        if (!f.path.startsWith(folder + "/")) continue;
+        const hit = shapes.find(([, re]) => re.test(f.basename));
+        if (hit) count.set(hit[0], (count.get(hit[0]) || 0) + 1);
+      }
+    }
+    const best = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
+    this._dailyGuess = best ? best[0] : "YYYY-MM-DD";
+    this._dailyGuessAt = Date.now();
+    return this._dailyGuess;
+  }
+
+  /** The vault path a daily note for `d` has, or would have. The format may
+      hold folders of its own — "YYYY/MM/YYYY-MM-DD" is common. */
+  dailyPath(d) {
+    const folder = this.dailyFolder();
+    const name = formatDay(d, this.dailyFormat());
+    return normalizePath((folder ? folder + "/" : "") + name + ".md");
+  }
+
+  /** "today", "yesterday", "tomorrow" or a date in any usual order → a Date. */
+  static dayFrom(when) {
+    const d = new Date();
+    const w = String(when || "").toLowerCase().trim();
+    let m;
+    if (/позавчера|day before/.test(w)) d.setDate(d.getDate() - 2);
+    else if (/вчера|yesterday/.test(w)) d.setDate(d.getDate() - 1);
+    else if (/послезавтра|day after/.test(w)) d.setDate(d.getDate() + 2);
+    else if (/завтра|tomorrow/.test(w)) d.setDate(d.getDate() + 1);
+    else if ((m = w.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/))) d.setFullYear(+m[1], +m[2] - 1, +m[3]);
+    else if ((m = w.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/))) d.setFullYear(+m[3], +m[2] - 1, +m[1]);
+    return d;
   }
 
   dailyNote(when) {
     const folder = this.dailyFolder();
     if (!folder) return null;
-    const d = new Date();
-    const w = String(when || "").toLowerCase().trim();
-    if (/вчера|yesterday/.test(w)) d.setDate(d.getDate() - 1);
-    else if (/позавчера|day before/.test(w)) d.setDate(d.getDate() - 2);
-    else if (/завтра|tomorrow/.test(w)) d.setDate(d.getDate() + 1);
-    else if (/^\d{2}[-.]\d{2}[-.]\d{4}$/.test(w)) {
-      const [dd, mm, yy] = w.split(/[-.]/).map(Number);
-      d.setFullYear(yy, mm - 1, dd);
-    }
-    const key = todayKey(d);
+    const d = VaultBridge.dayFrom(when);
     // Every other way into a note goes through `files()` or `resolve()`, both
     // of which check the scope. This one reached for a path directly and so
     // was the one hole in it: a daily-notes folder marked private, or outside
     // the working scope, was read anyway.
-    const direct = this.app.vault.getAbstractFileByPath(normalizePath(folder + "/" + key + ".md"));
+    const direct = this.app.vault.getAbstractFileByPath(this.dailyPath(d));
     if (direct instanceof TFile) return this.inScope(direct.path) ? direct : null;
-    // Daily-note naming varies; fall back to any file in the folder whose
-    // name carries the same date parts in any order.
-    const parts = key.split("-");
+    /* Notes made before the format was changed, or by hand: the date at the
+       start of the name, day-first or year-first — never "the same numbers
+       in any order", which made 6 November and 11 June the same day. */
+    const p = (n) => String(n).padStart(2, "0");
+    const y = String(d.getFullYear()), mo = p(d.getMonth() + 1), da = p(d.getDate());
+    const lead = new RegExp(`^(?:${da}[-._ ]${mo}[-._ ]${y}|${y}[-._ ]?${mo}[-._ ]?${da})(?!\\d)`);
     return this.app.vault.getMarkdownFiles().find((f) =>
-      f.path.startsWith(folder + "/") && this.inScope(f.path)
-      && parts.every((p) => f.basename.includes(p))) || null;
+      f.path.startsWith(folder + "/") && this.inScope(f.path) && lead.test(f.basename)) || null;
   }
+}
+
+/* ============================================================
+ *  The indexing run, owned by the plugin rather than by a window.
+ *
+ *  Started from the settings it used to live and die with that window's
+ *  closure: close the settings and the progress was invisible, open them
+ *  again and the button offered to start a second run on top of the first.
+ *  Now there is one run, the status bar shows it, and any screen that cares
+ *  — settings, the welcome — listens to the same one.
+ *
+ *  It also keeps the index current on its own: a note written or changed is
+ *  added a minute after the typing stops, a rename keeps its vector, a delete
+ *  drops it. Only once someone has built an index — the first pass costs
+ *  money and is theirs to start.
+ * ========================================================== */
+class IndexRunner {
+  constructor(plugin) {
+    this.plugin = plugin;
+    this.running = false;
+    this.quiet = false;
+    this.done = 0;
+    this.total = 0;
+    this.stopFlag = false;
+    this.last = null;
+    this.listeners = new Set();
+    this.queue = new Set();
+    this.timer = null;
+    this.bar = null;
+  }
+
+  get s() { return this.plugin.settings; }
+  get auto() { return !!this.s.semanticSearch && this.s.autoIndex !== false; }
+
+  on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+
+  emit() {
+    for (const fn of [...this.listeners]) { try { fn(this); } catch { /* a closed screen */ } }
+    this.paint();
+  }
+
+  paint() {
+    if (!this.bar) return;
+    const show = this.running && !this.quiet;
+    this.bar.style.display = show ? "" : "none";
+    if (show) this.bar.textContent = "🧠 " + (this.total ? t("Indexing… {0}/{1}", this.done, this.total) : t("Indexing…"));
+  }
+
+  stop() { if (this.running) this.stopFlag = true; }
+
+  async run({ only = null, quiet = false, compact } = {}) {
+    if (this.running) return null;
+    this.running = true;
+    this.quiet = quiet;
+    this.stopFlag = false;
+    this.done = 0;
+    this.total = 0;
+    this.emit();
+    let r;
+    try {
+      r = await this.plugin.vault.buildEmbeddings(
+        (done, total) => { this.done = done; this.total = total; this.emit(); },
+        () => this.stopFlag,
+        compact === undefined ? { only } : { only, compact });
+    } catch (e) {
+      // The index file itself could not be written — which used to be
+      // swallowed and looked like a successful pass.
+      r = { done: 0, total: 0, embedded: 0, skipped: 0, failed: 1, error: e.message, stopped: true, saveError: true };
+    } finally {
+      this.running = false;
+    }
+    this.last = r;
+    this.emit();
+    if (!quiet) {
+      // Say what the pass actually did. A run that embedded nothing at all
+      // is the interesting case, and it used to look exactly like a run
+      // that embedded everything.
+      const parts = [];
+      if (r.embedded) parts.push(t("{0} added", r.embedded));
+      if (r.skipped) parts.push(t("{0} too short to be worth a vector", r.skipped));
+      if (r.failed) parts.push(t("{0} failed", r.failed));
+      new Notice(r.saveError ? t("The index could not be saved: {0}", r.error)
+        : (parts.length ? parts.join(" · ") : t("Nothing left to index")), 8000);
+    }
+    return r;
+  }
+
+  touch(path) {
+    if (!this.auto || !/\.md$/i.test(String(path || ""))) return;
+    this.queue.add(path);
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.flush().catch(() => {}), 60000);
+  }
+
+  async flush() {
+    if (!this.queue.size || !this.auto) { this.queue.clear(); return; }
+    if (this.running) { this.timer = setTimeout(() => this.flush().catch(() => {}), 60000); return; }
+    const cache = await this.plugin.vault.loadEmbeddings();
+    if (!Object.keys(cache).length) { this.queue.clear(); return; }
+    // A sync dropping thousands of notes at once is not "the note I just
+    // edited"; that is a job for the button, where the cost is shown.
+    if (this.queue.size > 300) { this.queue.clear(); return; }
+    const only = new Set(this.queue);
+    this.queue.clear();
+    await this.run({ only, quiet: true });
+  }
+
+  /** At startup: whatever was written while Obsidian was closed. */
+  async catchUp() {
+    if (!this.auto || this.running) return;
+    const V = this.plugin.vault;
+    const cache = await V.loadEmbeddings();
+    if (!Object.keys(cache).length) return;
+    const pending = V.pendingEmbeddings(cache).length;
+    if (pending && pending <= 300) await this.run({ quiet: true, compact: false });
+  }
+
+  dispose() { clearTimeout(this.timer); this.stop(); }
 }

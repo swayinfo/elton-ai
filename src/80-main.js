@@ -35,7 +35,20 @@ class EltonAI extends ObsidianPlugin {
     this.ai = new AIClient(this);
     this.spend = new SpendTracker(this);
     this.ambience = new Ambience(this);
+    /* Before everything that writes or talks: the vault records each change
+       into the journal, and every channel reads the conversation from memory. */
+    this.memory = new ConversationMemory(this);
+    this.journal = new ChangeJournal(this);
+    this.memory.load().catch(() => {});
+    this.journal.load().catch(() => {});
     this.vault = new VaultBridge(this);
+    this.index = new IndexRunner(this);
+    try {
+      this.index.bar = this.addStatusBarItem();
+      this.index.bar.addClass("oa-index-bar");
+      this.index.bar.onclick = () => this.openSettings();
+      this.index.paint();
+    } catch { /* no status bar on this platform */ }
     this.recorder = new Recorder();
     this.speaker = new Speaker(this);
     this.scheduler = new AutomationScheduler(this);
@@ -96,6 +109,19 @@ class EltonAI extends ObsidianPlugin {
       this.telegram.start();
       this.connector.start();
 
+      /* After the layout, not before: while the vault loads, Obsidian fires
+         "create" for every file in it, and each would have been queued. */
+      this.registerEvent(this.app.vault.on("modify", (f) => this.index.touch(f.path)));
+      this.registerEvent(this.app.vault.on("create", (f) => this.index.touch(f.path)));
+      this.registerEvent(this.app.vault.on("rename", (f, old) => {
+        if (this.index.auto) this.vault.renameEmbedding(old, f.path).catch(() => {});
+      }));
+      this.registerEvent(this.app.vault.on("delete", (f) => {
+        if (this.index.auto) this.vault.dropEmbedding(f.path).catch(() => {});
+      }));
+      const later = setTimeout(() => this.index.catchUp().catch(() => {}), 90000);
+      this.register(() => clearTimeout(later));
+
       if (!this.settings.onboarded) {
         // Persist the flag before opening: a sync writing data.json can
         // re-trigger onload, and greeting someone twice is worse than not
@@ -147,6 +173,11 @@ class EltonAI extends ObsidianPlugin {
       id: "onboarding",
       name: t("Open the setup guide"),
       callback: () => new OnboardingModal(this.app, this).open(),
+    });
+    this.addCommand({
+      id: "feedback",
+      name: t("Report a problem or suggest an idea"),
+      callback: () => openFeedback(),
     });
     this.addCommand({
       id: "whats-new",
@@ -234,11 +265,15 @@ class EltonAI extends ObsidianPlugin {
   }
 
   onunload() {
+    if (this.index) this.index.dispose();
     this.speaker.stop();
     this.recorder.stop();
     this.ambience.stop();
     this.telegram.stop();
     if (this.connector) this.connector.stop();
+    // Whatever is still waiting on a timer goes to disk now.
+    if (this.memory) this.memory.saveNow();
+    if (this.journal) this.journal.saveNow();
   }
 
   async loadSettings() {
@@ -252,6 +287,14 @@ class EltonAI extends ObsidianPlugin {
       cloudFallback: Object.assign({}, DEFAULT_SETTINGS.cloudFallback, raw.cloudFallback),
       telegram: Object.assign({}, DEFAULT_SETTINGS.telegram, raw.telegram),
     });
+
+    /* The old default was the English word "Assistant", saved into every
+       data.json on first save — so a Russian vault greeted its owner with
+       "Меня зовут Assistant" and headed the panel in English. Nobody chose
+       it; it is the product's own name now, which needs no translating. */
+    if (!this.settings.assistantName || this.settings.assistantName === "Assistant") {
+      this.settings.assistantName = "Elton AI";
+    }
 
     // A voice saved for one engine is rejected by another, and the only
     // symptom is the robotic system voice. Heal it here rather than waiting

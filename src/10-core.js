@@ -1254,7 +1254,7 @@ const DEFAULT_SETTINGS = {
   // sending note text to the cloud.
   cloudFallback: { enabled: false, provider: "obsimind", key: "" },
 
-  assistantName: "Assistant",
+  assistantName: "Elton AI",
   userName: "",
   persona: "calm",
   personaCustom: "",
@@ -1431,6 +1431,27 @@ function joinUrl(base, path) {
   // Bases are configured with or without the /v1 suffix; don't double it.
   if (/\/v\d+$/.test(b) && p.startsWith("/v1/")) return b + p.slice(3);
   return b + p;
+}
+
+/**
+ * A date in a daily-note format — the same moment.js tokens Obsidian uses,
+ * through Obsidian's own moment when it is there (it knows the locale's month
+ * and day names). The fallback covers the numeric tokens, which is what the
+ * test harness and nearly every vault use.
+ */
+function formatDay(d, fmt) {
+  const m = obsidian && obsidian.moment;
+  if (typeof m === "function") return m(d).format(fmt);
+  const p = (n) => String(n).padStart(2, "0");
+  return String(fmt).replace(/YYYY|YY|MM|M|DD|D|\[([^\]]*)\]/g, (t, lit) => {
+    if (lit !== undefined) return lit;
+    if (t === "YYYY") return String(d.getFullYear());
+    if (t === "YY") return String(d.getFullYear()).slice(2);
+    if (t === "MM") return p(d.getMonth() + 1);
+    if (t === "M") return String(d.getMonth() + 1);
+    if (t === "DD") return p(d.getDate());
+    return String(d.getDate());
+  });
 }
 
 function todayKey(d = new Date()) {

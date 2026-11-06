@@ -1142,6 +1142,53 @@ function eq(actual, expected, name) {
       eq(shut.dailyNote("today"), null, "а личная — нет, даже по прямому запросу даты");
     }
 
+    /* Daily notes are named the way the vault names them — not DD-MM-YYYY
+       everywhere. */
+    {
+      const two = (n) => String(n).padStart(2, "0");
+      const now = new Date();
+      const y = now.getFullYear(), m = two(now.getMonth() + 1), d = two(now.getDate());
+      const mk = (names, core) => {
+        const files = names.map((n) => new H.TFile(n));
+        const app = H.fakeApp({});
+        app.vault.getMarkdownFiles = () => files;
+        app.vault.getAbstractFileByPath = (q) => files.find((f) => f.path === q) || null;
+        const made = [];
+        app.vault.create = async (q) => { const f = new H.TFile(q); files.push(f); made.push(q); return f; };
+        app.vault.createFolder = async () => {};
+        app.internalPlugins = { getPluginById: (id) => (id === "daily-notes" ? { instance: { options: core } } : null) };
+        return { V: H.fakePlugin(app, {}).vault, made };
+      };
+
+      const iso = mk([`Journal/${y}-${m}-${d}.md`], { folder: "Journal", format: "YYYY-MM-DD" });
+      ok(iso.V.dailyNote("today"), "формат Obsidian по умолчанию, ГГГГ-ММ-ДД, находится");
+
+      const guessed = mk([`Days/${d}-${m}-${y}.md`, "Days/01-01-2025.md"], { folder: "Days", format: "" });
+      eq(guessed.V.dailyFormat(), "DD-MM-YYYY", "без настройки формат угадан по самим заметкам");
+      ok(guessed.V.dailyNote("today"), "и сегодняшняя по нему находится");
+
+      const empty = mk([], { folder: "Daily", format: "" });
+      eq(empty.V.dailyFormat(), "YYYY-MM-DD", "пустая папка — формат Obsidian по умолчанию");
+
+      // 6 November and 11 June must not be the same day.
+      const us = mk(["Daily/06-11-2026.md"], { folder: "Daily", format: "MM-DD-YYYY" });
+      const june11 = new Date(2026, 5, 11);
+      eq(us.V.dailyPath(june11), "Daily/06-11-2026.md", "американский формат: 11 июня — это 06-11");
+      const dm = mk(["Daily/11-06-2026.md"], { folder: "Daily", format: "DD-MM-YYYY" });
+      eq(dm.V.dailyNote("2026-11-06"), null, "6 ноября не находит заметку 11 июня — день и месяц не путаются");
+
+      const nested = mk([], { folder: "Journal", format: "YYYY/MM/YYYY-MM-DD" });
+      await nested.V.ensureDailyNote("today");
+      eq(nested.made[0], `Journal/${y}/${m}/${y}-${m}-${d}.md`, "формат с папками создаёт заметку в них");
+
+      const ru = mk([], { folder: "Дневник", format: "DD-MM-YYYY" });
+      await ru.V.ensureDailyNote("today");
+      eq(ru.made[0], `Дневник/${d}-${m}-${y}.md`, "ДД-ММ-ГГГГ создаётся как ДД-ММ-ГГГГ");
+
+      eq(T.VaultBridge.dayFrom("2026-11-06").getDate(), 6, "дата год-вперёд понимается");
+      eq(T.VaultBridge.dayFrom("06.11.2026").getMonth(), 10, "и день-вперёд с точками");
+    }
+
     const noidx = V({ noIndexFolders: "4. Archive" });
     ok(!noidx.indexable("4. Archive/2019/Старое.md"), "исключённая из индекса папка не индексируется");
     ok(noidx.indexable("1. Projects/ESP32.md"), "остальное индексируется");
@@ -1381,7 +1428,7 @@ function eq(actual, expected, name) {
     const dir = path.join(__dirname, "..", "src");
     const redrawers = [
       ["70-settings.js", "display()", "display"],
-      ["70-settings.js", "OnboardingModal", "draw"],
+      ["69-onboarding.js", "OnboardingModal", "draw"],
       ["45-schedule.js", "AutomationEditModal", "draw"],
       ["57-telegram.js", "TelegramSetupModal", "draw"],
     ];
@@ -1432,7 +1479,10 @@ function eq(actual, expected, name) {
     // the same way `t` reads it at runtime.
     const start = src.indexOf("const RU = {");
     const end = src.indexOf("\nlet LANG");
-    const table = src.slice(start, end);
+    // 4.0 keeps its strings in a second table, merged in right after.
+    const v4s = src.indexOf("Object.assign(RU, {");
+    const v4e = v4s < 0 ? -1 : src.indexOf("\n});", v4s);
+    const table = src.slice(start, end) + (v4s < 0 ? "" : src.slice(v4s, v4e));
     const known = new Set();
     const kre = /"((?:[^"\\]|\\.)*)":/g;
     let k;
@@ -2239,6 +2289,123 @@ function eq(actual, expected, name) {
     eq(found.length, 2, "в выдаче обе записи");
     ok(found.every((r) => r.score > 0.99), "оценки совпадают у старого и нового формата",
       JSON.stringify(found.map((r) => r.score)));
+  }
+
+  /* ── 28. Индекс смыслов: пачками, с автосохранением ──────── */
+  describe("Индекс смыслов: пачками и с продолжением после обрыва");
+  {
+    const fakeAdapter = () => ({
+      files: new Map(),
+      calls: [],
+      async exists(p) { return this.files.has(p); },
+      async read(p) { if (!this.files.has(p)) throw new Error("нет файла " + p); return this.files.get(p); },
+      async write(p, d) { this.calls.push("write:" + p); this.files.set(p, d); },
+      async append(p, d) { this.calls.push("append:" + p); this.files.set(p, (this.files.get(p) || "") + d); },
+      async remove(p) { this.files.delete(p); },
+      async rename(from, to) { this.files.set(to, this.files.get(from)); this.files.delete(from); },
+    });
+    const vec = Array.from({ length: 64 }, (_, i) => Math.cos(i) / 4);
+    const vault = (n, ai, adapter) => {
+      const ad = adapter || fakeAdapter();
+      const app = H.fakeApp();
+      app.vault.adapter = ad;
+      const files = Array.from({ length: n }, (_, i) => {
+        const f = new H.TFile("notes/n" + i + ".md");
+        f.stat = { mtime: 100 + i, size: 900 };
+        return f;
+      });
+      app.vault.getMarkdownFiles = () => files;
+      app.vault.cachedRead = async (f) => (f.path.endsWith("n3.md") ? "коротко" : "текст про смысл заметки ".repeat(20) + f.path);
+      const plugin = H.fakePlugin(app, {});
+      plugin.ai = ai;
+      return { plugin, v: plugin.vault, ad, files };
+    };
+
+    // 1. пачки: 50 заметок — несколько запросов, а не пятьдесят
+    let calls = 0, sizes = [];
+    const batchAI = {
+      embedMany: async (texts) => { calls++; sizes.push(texts.length); return texts.map(() => vec); },
+      embed: async () => { throw new Error("по одной не должны были звать"); },
+    };
+    const A = vault(50, batchAI);
+    const r1 = await A.v.buildEmbeddings();
+    eq(r1.embedded, 49, "все заметки, кроме короткой, получили вектор");
+    eq(r1.skipped, 1, "короткая пропущена без запроса");
+    ok(calls <= 4, "запросов несколько, а не по одному на заметку", "запросов: " + calls);
+    ok(Math.max(...sizes) <= 16, "в пачке не больше 16 заметок", sizes.join(","));
+    const saved = JSON.parse(A.ad.files.get(A.v.cachePath()));
+    eq(Object.keys(saved).length, 50, "в итоговом файле все 50 записей");
+    ok(!A.ad.files.has(A.v.logPath()), "после полного прохода журнал влит в индекс и убран");
+
+    // 2. обрыв посреди прохода: сделанное не теряется, следующий запуск продолжает
+    let served = 0;
+    const flaky = {
+      embedMany: async (texts) => { served++; if (served > 2) throw new Error("свет выключили"); return texts.map(() => vec); },
+      embed: async () => { throw new Error("свет выключили"); },
+    };
+    const B = vault(80, flaky);
+    const r2 = await B.v.buildEmbeddings();
+    ok(r2.stopped, "проход остановился сам после череды отказов");
+    ok(B.ad.files.has(B.v.logPath()) || B.ad.files.has(B.v.cachePath()), "готовые пачки сохранены на диск");
+    // «Перезапуск Obsidian»: новый мост на том же диске
+    const B2 = vault(80, batchAI, B.ad);
+    const before = B2.v.pendingEmbeddings(await B2.v.loadEmbeddings()).length;
+    ok(before < 80 && before > 0, "после перезапуска ждут только недоделанные", "ждут: " + before);
+    const r3 = await B2.v.buildEmbeddings();
+    eq(r3.total, before, "второй проход взял только остаток");
+    eq(B2.v.pendingEmbeddings(await B2.v.loadEmbeddings()).length, 0, "и доделал всё");
+
+    // 3. оборванная последняя строка журнала не ломает чтение
+    const C = vault(3, batchAI);
+    const entry = { mtime: 100, title: "n0", b: T.packVector(vec) };
+    C.ad.files.set(C.v.logPath(), JSON.stringify({ k: "notes/n0.md", e: entry }) + "\n" + '{"k":"notes/n1.md","e":{"mti');
+    const got = await C.v.loadEmbeddings();
+    ok(!!got["notes/n0.md"], "целая строка журнала прочитана");
+    ok(!got["notes/n1.md"], "оборванная — просто пропущена");
+
+    // 4. переименование и удаление идут в журнал, без перезаписи индекса
+    const D = vault(5, batchAI);
+    await D.v.buildEmbeddings();
+    D.ad.calls.length = 0;
+    await D.v.renameEmbedding("notes/n0.md", "notes/renamed.md");
+    await D.v.dropEmbedding("notes/n1.md");
+    ok(D.ad.calls.every((c) => c.includes(".log")), "ни одной полной перезаписи", D.ad.calls.join(" "));
+    D.v._emb = null;
+    const after = await D.v.loadEmbeddings();
+    ok(!!after["notes/renamed.md"] && !after["notes/n0.md"], "вектор переехал вместе с заметкой");
+    ok(!after["notes/n1.md"], "удалённая заметка ушла из индекса");
+
+    // 5. сервер без массивов: узнаём один раз и дальше по одной
+    const ai = new T.AIClient(H.fakePlugin(H.fakeApp(), {}));
+    let posts = 0;
+    ai.post = async (path, body) => {
+      posts++;
+      if (Array.isArray(body.input)) return { status: 400, json: { error: "input must be a string" } };
+      return { status: 200, json: { data: [{ embedding: vec }] } };
+    };
+    const out = await ai.embedMany(["а", "б", "в"]);
+    eq(out.length, 3, "три вектора и без поддержки массивов");
+    ok(ai._noBatch, "запомнил, что массивы не принимаются");
+    posts = 0;
+    await ai.embedMany(["г", "д"]);
+    eq(posts, 2, "второй раз сразу по одной, без пробного массива");
+
+    // 6. правка заметки после первого прохода — в индекс сама, а до него — нет
+    const E = vault(4, batchAI);
+    const runner = new T.IndexRunner(E.plugin);
+    E.plugin.settings.semanticSearch = true;
+    runner.queue.add("notes/n0.md");
+    await runner.flush();
+    ok(!runner.last, "пока индекса нет, сам ничего не тратит");
+    await E.v.buildEmbeddings();
+    E.files[0].stat.mtime = 999;
+    runner.queue.add("notes/n0.md");
+    await runner.flush();
+    ok(runner.last && runner.last.embedded === 1, "изменённая заметка переиндексирована сама", JSON.stringify(runner.last));
+    E.plugin.settings.autoIndex = false;
+    runner.touch("notes/n1.md");
+    eq(runner.queue.size, 0, "с выключенным автообновлением ничего не копится");
+    runner.dispose();
   }
 
   /* ── report ────────────────────────────────────────────── */

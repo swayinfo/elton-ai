@@ -114,7 +114,7 @@ const EXPOSED = [
   "splitForTelegram", "hotkeyFromEvent", "hotkeyMatches", "hotkeyLabel", "TelegramBridge",
   "pcmToWav", "slugForCommand", "AutomationScheduler", "newAutomation", "siteUrl", "siteLabel",
   "ConnectorBridge", "appUrl",
-  "packVector", "unpackVector",
+  "packVector", "unpackVector", "IndexRunner",
 ];
 
 /** Replay a captured SSE body through the parser, in chunks of `size` bytes. */

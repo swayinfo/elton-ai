@@ -293,6 +293,7 @@ class TelegramBridge {
     }
     if (/^\/(new|reset|clear)\b/.test(said)) {
       this.history.delete(String(chatId));
+      await this.plugin.memory.forget("telegram", String(chatId));
       await this.send(chatId, t("Forgotten. Starting fresh."));
       return;
     }
@@ -387,17 +388,21 @@ class TelegramBridge {
   /** Run the agent and send back what it said. */
   async answer(chatId, text, indicator) {
     const key = String(chatId);
-    const history = this.history.get(key) || [];
+    /* From disk, not from this object: a bot answering from a computer that
+       was restarted at lunch used to forget the morning's conversation. */
+    const history = await this.plugin.memory.messages("telegram", key);
     const show = (indicator && indicator.step) || (() => {});
 
     const agent = new Agent(this.plugin);
     let reply = "";
     // A scenario phrase works here exactly as it does when spoken.
     const hit = matchScenario(text, this.plugin.settings.scenarios);
-    const sent = hit ? scenarioPrompt(hit.scenario, hit.rest) : text;
+    const sent = (await this.plugin.memory.recallNote("telegram", key))
+      + (hit ? scenarioPrompt(hit.scenario, hit.rest) : text);
     if (hit) show(t("Scenario: {0}", scenarioLabel(hit.scenario)));
 
-    reply = await agent.run(history, sent, {
+    try {
+      reply = await agent.run(history, sent, {
       // The agent already narrates every search and edit — that narration is
       // what the caption is for.
       onEvent: (ev) => { if (ev && ev.kind === "action") show(ev.text); },
@@ -408,17 +413,21 @@ class TelegramBridge {
       // Markdown, because this is read rather than spoken.
       written: true,
       channel: "telegram",
-    });
-    history.push({ role: "user", content: sent });
-    history.push({ role: "assistant", content: reply || "" });
-    this.history.set(key, history.slice(-12));
+      });
+    } catch (e) {
+      // A failed turn is still part of the conversation: "so do it" after it
+      // has to know what "it" was.
+      await this.plugin.memory.add("telegram", key, { user: text, reply: (e && e.message) || String(e), did: agent.didList(), status: "error" });
+      throw e;
+    }
+    await this.plugin.memory.add("telegram", key, { user: text, reply: reply || "", did: agent.didList(), status: agent.cancelled ? "cancelled" : "ok" });
 
     if (!reply || !reply.trim()) { await this.send(chatId, t("I have nothing to say to that.")); return; }
 
     // Sources folded away rather than stacked under every answer. They are
     // worth having and rarely worth reading, which is what a collapsible
     // block is for — and rich messages are the reason we can have one.
-    const list = (agent.sources || []).slice(0, 8);
+    const list = agent.shownSources().slice(0, 8);
     const block = list.length
       ? `\n\n<details><summary>${t("From your notes:")} ${list.length}</summary>\n\n`
         + list.map((s) => "- " + (s.title || s.path)).join("\n") + "\n\n</details>"

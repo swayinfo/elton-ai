@@ -1,0 +1,249 @@
+/* ── Russian for what arrived in 4.0 ──────────────────────────
+ * Kept apart from the big table above so that a later look at "what
+ * did 4.0 add" is one file, not a diff of a thousand lines. */
+Object.assign(RU, {
+  "Edit history": "История правок",
+  "{0} this week": "за неделю: {0}",
+  "nothing this week": "за неделю ничего",
+  "nothing yet": "пока ничего",
+  "Indexing…": "Индексирую…",
+  "Keep it up to date by itself": "Обновлять самому",
+  "A note you write or change is added a minute after you stop typing; renamed and deleted notes are followed too. Starts once the first pass is done.": "Новая или изменённая заметка добавляется через минуту после того, как вы перестали печатать; переименования и удаления тоже учитываются. Начинает работать после первого прохода.",
+  "It carries on in the background — this window can be closed. Stopped or interrupted, it picks up where it left off.": "Работает в фоне — окно можно закрыть. Если остановить или прервать, продолжит с того же места.",
+  "{0} notes · about {1} min. Done once; after that only the notes you change.": "Заметок: {0} · около {1} мин. Один раз; дальше — только те, что вы меняете.",
+  "Something not working? An idea?": "Что-то не работает? Есть идея?",
+  "Write to the Telegram bot @elton_feedback_bot — a plain message is enough, a screenshot helps. Complaints, ideas and «this does not work» all go there, and every one is read.": "Напишите в телеграм-бот @elton_feedback_bot — обычным сообщением, скриншот поможет. Жалобы, идеи и «это не работает» — всё туда, читаем каждое.",
+  "Write to the bot": "Написать в бот",
+  "Report a problem or suggest an idea": "Сообщить о проблеме или предложить идею",
+  "Answers from your own notes": "Ответы по вашим заметкам",
+  "To answer about your notes it first has to find the right ones. Search by words works straight away — but finds only notes that contain the words you used.": "Чтобы отвечать по вашим заметкам, ему сначала нужно найти нужные. Поиск по словам работает сразу — но находит только заметки, где есть те же слова.",
+  "Search by meaning finds a note however you put it: ask about «burnout» and «I have nothing left in the tank» comes up. For that each note is read once and given a fingerprint of its meaning — that is what indexing is.": "Поиск по смыслу находит заметку, как её ни назови: спросите про «выгорание» — найдётся «сил больше нет совсем». Для этого каждая заметка один раз прочитывается и получает отпечаток своего смысла — это и есть индексация.",
+  "Something not working, or an idea? Write to @elton_feedback_bot in Telegram — the link is on the Home tab too.": "Что-то не работает или есть идея? Пишите в Телеграм @elton_feedback_bot — ссылка есть и на вкладке «Главная».",
+  "By meaning too (recommended)": "Ещё и по смыслу (рекомендуем)",
+  "A one-time pass over your notes, a fraction of a cent each. After that only the notes you change are redone — by themselves.": "Один проход по заметкам, доли копейки за каждую. Дальше заново обрабатываются только изменённые — сами.",
+  "By words only": "Только по словам",
+  "Free and instant. You can switch meaning on later: Settings → Elton AI → Access → Search and the web.": "Бесплатно и сразу. Смысл можно включить позже: Настройки → Elton AI → Доступ → Поиск и интернет.",
+  "Carry on with the next step — it works in the background. Stopped or interrupted, it picks up where it left off.": "Можно идти дальше — работает в фоне. Если остановить или прервать, продолжит с того же места.",
+  "Nothing to index yet": "Пока нечего индексировать",
+  "New and changed notes are added by themselves.": "Новые и изменённые заметки добавляются сами.",
+  "{0} indexed, {1} to go": "Готово: {0}, осталось: {1}",
+  "{0} notes · about {1} min": "Заметок: {0} · около {1} мин",
+  "Continue": "Продолжить",
+  "Index now": "Проиндексировать",
+  "Private folders are never indexed and never sent.": "Личные папки не индексируются и никуда не отправляются.",
+  "Answers from your notes, by meaning": "Ответы по заметкам — по смыслу",
+  "Its own step in the welcome now. Indexing is many times faster, saves as it goes, picks up where it stopped, and keeps itself current as you write.": "Теперь отдельный шаг в приветствии. Индексация в разы быстрее, сохраняется по ходу, продолжает с места остановки и сама обновляется, пока вы пишете.",
+  "Tell us what is wrong": "Расскажите, что не так",
+  "Complaints, ideas and «this does not work» — the Telegram bot @elton_feedback_bot. The link is on the Home tab.": "Жалобы, идеи и «это не работает» — телеграм-бот @elton_feedback_bot. Ссылка на вкладке «Главная».",
+  "Set up search by meaning": "Настроить поиск по смыслу",
+  "No connection": "нет связи",
+  "Vault": "Хранилище",
+  "The photo did not arrive in full. Please send it again.": "Фотография не дошла целиком. Пришлите ещё раз.",
+  "A local model cannot see photos — a cloud key is needed.": "Локальная модель не видит фотографии — нужен облачный ключ.",
+  "Could not look at the photo: {0}": "Не получилось посмотреть фотографию: {0}",
+  "What is in the photo?": "Что на фото?",
+  "A local model cannot read photos — a cloud key is needed.": "Локальная модель не читает фотографии — нужен облачный ключ.",
+  "Could not read the photo: {0}": "Не получилось прочитать фотографию: {0}",
+  "There is no text to be seen in the photo. Take it closer and in even light — or choose «Into a note» to keep the picture itself.": "На фотографии не видно текста. Снимите ближе и при ровном свете — или выберите «В заметку», чтобы сохранить сам снимок.",
+  "Text from a photo": "Текст с фото",
+  "Could not make out any words.": "Ничего не расслышал.",
+  "A local model cannot recognise speech — a cloud key is needed.": "Локальная модель не распознаёт речь — нужен облачный ключ.",
+  "Could not transcribe it: {0}": "Не получилось расшифровать: {0}",
+  "Could not decrypt the message. Connect the phone again.": "Не удалось расшифровать сообщение. Переподключите телефон.",
+  "Could not answer: {0}": "Не получилось ответить: {0}",
+  "1 note is hidden from the assistant right now.": "Сейчас от ассистента скрыта 1 заметка.",
+  // journal and undo
+  "Already undone: {0}": "Уже отменено: {0}",
+  "The saved copy is gone, so it cannot be put back.": "Сохранённой копии больше нет, вернуть нечего.",
+  "«{0}» has been changed since, so it was not deleted.": "«{0}» с тех пор меняли — поэтому её не удалил.",
+  "«{0}» is no longer there.": "«{0}» на месте больше нет.",
+  "Something else is already at the old place.": "На старом месте уже лежит другой файл.",
+  "Could not undo: {0}": "Не получилось отменить: {0}",
+  "Undone: {0}": "Отменено: {0}",
+  "Note created: {0}": "Создана: {0}",
+  "Note moved: {0}": "Перенесена: {0}",
+  "Note deleted: {0}": "Удалена: {0}",
+  "Note changed: {0}": "Изменена: {0}",
+  // photos from the phone
+  "The attachments folder is private or outside the allowed folders.": "Папка для вложений — личная или вне разрешённых папок.",
+  "Photo added to {0}.": "Фото добавлено в «{0}».",
+  "Photo into today": "Фото в сегодняшний день",
+  "Could not save the photo: {0}": "Не получилось сохранить фото: {0}",
+
+  // access levels
+  "Read only": "Только читать",
+  "Searches and answers from your notes. Changes nothing — not a word.": "Ищет и отвечает по заметкам. Ничего не меняет — ни слова.",
+  "Read and write": "Читать и записывать",
+  "Also writes new notes and edits existing ones. Every change is saved first and can be undone with one tap, from the computer or the phone.":
+    "Ещё пишет новые заметки и правит существующие. Каждая правка сначала сохраняется, и её можно отменить одним нажатием — с компьютера или с телефона.",
+  "Full access": "Полный доступ",
+  "Also deletes and arranges tabs. Deleting always stops and asks you — from the phone or Telegram it never deletes at all.":
+    "Ещё удаляет и раскладывает вкладки. Перед удалением всегда спрашивает вас, а с телефона и из Телеграма не удаляет вообще.",
+  "Right now: your own combination — see Advanced below.": "Сейчас — свой набор разрешений, он в «Дополнительно» ниже.",
+  "Remove": "Убрать",
+  "Add a folder": "Добавить папку",
+  "Start typing a folder name…": "Начните набирать название папки…",
+
+  // onboarding
+  "Hi! This is Elton AI": "Привет! Это Elton AI",
+  "An assistant that lives inside your vault. Ask it something and it searches your own notes and answers from them; ask it to write and it files a proper note — in the right folder, from your own template.":
+    "Ассистент, который живёт в вашем хранилище. Спросите — он найдёт в ваших заметках и ответит по ним. Попросите записать — сделает настоящую заметку: в нужной папке, по вашему шаблону.",
+  "By voice or by text, here in Obsidian, from your phone or from Telegram — it is the same assistant, and it remembers the conversation.":
+    "Голосом или текстом, здесь в Obsidian, с телефона или из Телеграма — это один и тот же ассистент, и он помнит разговор.",
+  "Connect the brains": "Подключите мозги",
+  "Pick where answers come from and paste a key. The key stays in this vault, on this device.":
+    "Выберите, откуда берутся ответы, и вставьте ключ. Ключ остаётся в этом хранилище, на этом устройстве.",
+  "Introduce yourselves": "Познакомьтесь",
+  "What it is called and what to call you. Both can be changed any time.": "Как зовут его и как обращаться к вам. И то и другое можно поменять когда угодно.",
+  "How far it may reach": "Что ему можно",
+  "Choose one. Folders you mark private are never read, never searched and never sent anywhere — whatever you pick here.":
+    "Выберите одно. Папки, отмеченные личными, он не читает, не ищет по ним и никуда не отправляет — что бы вы здесь ни выбрали.",
+  "It has looked around": "Он осмотрелся",
+  "So that a new note lands where yours do and looks like yours, it needs three places. Here is what it found — correct anything that is wrong.":
+    "Чтобы новая заметка ложилась туда же, куда ваши, и выглядела как ваши, ему нужны три места. Вот что он нашёл — поправьте, если не так.",
+  "Your vault in your pocket": "Хранилище в кармане",
+  "The Elton AI app on your phone: a feed of your own notes, your folders exactly as here, and the same assistant in a chat. It installs straight from the browser — no app store.":
+    "Приложение Elton AI на телефоне: лента из ваших заметок, папки точно как здесь и тот же ассистент в чате. Ставится прямо из браузера — без магазина приложений.",
+  "Your notes stay on this computer: the phone asks, the computer answers, and everything in between is end-to-end encrypted. You can turn it on now or later on the Phone tab.":
+    "Заметки остаются на этом компьютере: телефон спрашивает, компьютер отвечает, а всё, что между ними, зашифровано из конца в конец. Включить можно сейчас или потом, на вкладке «Телефон».",
+  "All set": "Готово",
+  "Open the assistant from the ribbon on the left or with the command «Elton AI: open». Try: «what did I write about sleep?», «take down a thought», «what is on my plate today?».":
+    "Ассистент открывается значком на левой панели или командой «Elton AI: открыть». Попробуйте: «что я писал про сон?», «запиши мысль», «что у меня на сегодня?».",
+  "Everything you chose is on the Home tab of the settings, and this welcome is one click away there too.":
+    "Всё, что вы выбрали, — на вкладке «Главная» в настройках. Там же это приветствие, в одно нажатие.",
+  "Step {0}": "Шаг {0}",
+  "Open the assistant": "Открыть ассистента",
+  "This welcome can be opened again any time: Settings → Elton AI → Home.": "Это приветствие можно открыть снова в любой момент: Настройки → Elton AI → Главная.",
+  "Answers about your notes — and about the world, joined to your notes": "Отвечает по вашим заметкам — и о мире, связывая с заметками",
+  "Writes notes, lists and boards from your templates": "Пишет заметки, списки и доски по вашим шаблонам",
+  "Listens and speaks — hold a key and talk": "Слушает и говорит — зажмите клавишу и говорите",
+  "A phone app with a feed and folders, and a Telegram bot": "Приложение на телефоне с лентой и папками, бот в Телеграме",
+  "Every change it makes can be undone": "Любую его правку можно отменить",
+  "Check it works": "Проверить связь",
+  "One tiny request — costs a fraction of a kopeck.": "Один крошечный запрос — стоит доли копейки.",
+  "Your name": "Ваше имя",
+  "None yet. Health, money, other people's details — add them here.": "Пока нет. Здоровье, деньги, чужие данные — добавьте сюда.",
+  "Empty — it picks a fitting folder by meaning.": "Пусто — выберет подходящую папку по смыслу.",
+  "None found — daily notes will be skipped.": "Не нашёл — без ежедневных заметок.",
+  "Answer from the phone": "Отвечать с телефона",
+  "On. The code and the link to the app are on the Phone tab.": "Включено. Код и ссылка на приложение — на вкладке «Телефон».",
+  "Off. Turning it on gives you a code to type once in the app.": "Выключено. Включите — появится код, его один раз вводят в приложении.",
+  "The phone app works through the Elton AI service, so it needs an Elton AI key — even if answers come from another provider.":
+    "Приложение на телефоне работает через сервис Elton AI, поэтому ему нужен ключ Elton AI — даже если отвечает другой провайдер.",
+
+  // what's new
+  "It remembers the conversation": "Он помнит разговор",
+  "“Take down a thought” — and the next message, with no instruction, goes into the same note. Conversations from the phone and Telegram survive a restart, and a message that never reached the computer is picked up from the phone.":
+    "«Запиши мысль» — и следующее сообщение, без всяких команд, ляжет в ту же заметку. Переписка с телефона и из Телеграма переживает перезапуск, а сообщение, не дошедшее до компьютера, подхватывается с телефона.",
+  "A new phone app": "Новое приложение на телефоне",
+  "Feed, Chats, Folders, Settings — at the bottom, like any app. The feed shows your own notes at random, the folders are exactly the ones you have here, and a note opens looking the way it does in Obsidian.":
+    "Лента, Чаты, Папки, Настройки — внизу, как в любом приложении. В ленте — ваши заметки вперемешку, папки — точно ваши, а заметка открывается такой же, как в Obsidian.",
+  "A photo does what you want": "Фото — куда скажете",
+  "Into a note, as text from paper, or “what is this?” — you choose on the phone before sending.":
+    "В заметку, текстом с бумаги или «что это?» — выбираете на телефоне перед отправкой.",
+  "Every change can be undone": "Любую правку можно отменить",
+  "Each note the assistant creates or edits is saved first. Undo it from the answer, from the phone’s settings, or on the Access tab here.":
+    "Каждая заметка, которую ассистент создал или поправил, сначала сохраняется. Отменить можно прямо из ответа, в настройках на телефоне или здесь, на вкладке «Доступ».",
+  "Simpler settings": "Настройки проще",
+  "A Home tab with the state of everything, three levels of access instead of five switches, and the welcome tour whenever you want it.":
+    "Вкладка «Главная», где видно всё сразу, три уровня доступа вместо пяти переключателей и знакомство — когда захотите.",
+  "Take the tour": "Пройти знакомство",
+
+  // settings: tabs and home
+  "Home": "Главная",
+  "AI": "ИИ",
+  "Access": "Доступ",
+  "Phone": "Телефон",
+  "Good night": "Доброй ночи",
+  "Good morning": "Доброе утро",
+  "Good afternoon": "Добрый день",
+  "Good evening": "Добрый вечер",
+  "{0} lives in this vault. Here is how it is set up.": "{0} живёт в этом хранилище. Вот как он настроен.",
+  "Welcome tour": "Знакомство",
+  "No key yet — answers cannot start": "Ключа ещё нет — отвечать нечем",
+  "Connect": "Подключить",
+  "Your own combination": "Свой набор",
+  "{0} private folders": "личных папок: {0}",
+  "Phone app": "Приложение на телефоне",
+  "On · checking devices…": "Включено · проверяю устройства…",
+  "Off": "Выключено",
+  "Open": "Открыть",
+  "Turn on": "Включить",
+  "On · {0} devices connected": "Включено · устройств: {0}",
+  "On · no phone connected yet": "Включено · телефон ещё не подключён",
+  "On": "Включено",
+  "The bot answers": "Бот отвечает",
+  "Set up": "Настроить",
+  "{0} phrases, {1} on a schedule": "по фразе: {0}, по расписанию: {1}",
+  "The panel": "Панель",
+  "Voice first — one big dial": "Сначала голос — один большой круг",
+  "Text — a conversation to read": "Текст — переписка, которую читают",
+  "The assistant": "Ассистент",
+
+  // settings: access
+  "What the assistant may do with your notes. A switched-off permission is not a request it is asked to respect — the tool simply does not exist for it.":
+    "Что ассистенту можно делать с заметками. Выключенное разрешение — это не просьба, которую он обещает соблюдать: такого инструмента у него просто нет.",
+  "Never read, never searched, never indexed, never sent — even when the note is open on your screen. Health, money, other people's details, anything under an agreement.":
+    "Не читаются, не ищутся, не индексируются и никуда не отправляются — даже если заметка открыта у вас на экране. Здоровье, деньги, чужие данные, всё под соглашением.",
+  "None yet.": "Пока нет.",
+  "Changes by the assistant": "Изменения от ассистента",
+  "Each change is saved before it is made. Undo puts the note back exactly as it was before that change — from here, from the answer, or from the phone.":
+    "Каждая правка сохраняется до того, как сделана. «Отменить» возвращает заметку ровно к виду до этой правки — отсюда, из ответа или с телефона.",
+  "Your vault": "Ваше хранилище",
+  "new notes: by meaning": "новые: по смыслу",
+  "Each permission on its own, for when none of the three levels fits.": "Каждое разрешение по отдельности — если ни один из трёх уровней не подходит.",
+  "Let it open notes beside each other, open web pages inside the vault and close tabs you're done with.":
+    "Открывать заметки рядом, открывать веб-страницы внутри хранилища и закрывать ненужные вкладки.",
+  "No folders chosen.": "Папки не выбраны.",
+  "Nothing changed yet.": "Пока ничего не менял.",
+  "from the phone": "с телефона",
+  "in Telegram": "в Телеграме",
+  "on this computer": "на компьютере",
+  "Undo": "Отменить",
+  "Undone": "Отменено",
+  "Delete it anyway": "Всё равно удалить",
+  "Language / Язык": "Язык / Language",
+
+  // scenarios
+  "A short phrase for a long request. Say «wrap up the day» — and the assistant gets the whole brief behind it, the same way from the panel, the phone and Telegram.":
+    "Короткая фраза вместо длинной просьбы. Скажите «итоги дня» — и ассистент получит всё задание целиком: одинаково в панели, на телефоне и в Телеграме.",
+  "No scenarios yet — pick one below to start.": "Сценариев пока нет — выберите любой ниже.",
+  "Add a scenario": "Добавить сценарий",
+  "Your own": "Свой",
+  "A blank scenario: your phrase, your brief.": "Пустой сценарий: ваша фраза, ваше задание.",
+  "Press again to delete": "Нажмите ещё раз, чтобы удалить",
+  "The assistant works on its own at the time you choose — a morning digest in today's note, a weekly catch-up, anything you write down as a request. The result lands in a note, in Telegram or in the phone app.":
+    "Ассистент работает сам в выбранное время: утренняя сводка в сегодняшнюю заметку, обзор недели, любая просьба. Результат — в заметке, в Телеграме или в приложении на телефоне.",
+  "Nothing on a schedule yet — pick one below.": "По расписанию пока ничего — выберите ниже.",
+  "Add on a schedule": "Добавить по расписанию",
+  "Any request, at any time and on any days.": "Любая просьба, в любое время, в любые дни.",
+
+  // the phone
+  "The phone app is on": "Приложение на телефоне включено",
+  "The phone app is off": "Приложение на телефоне выключено",
+  "Your vault in your pocket: a feed of your notes, your folders and the assistant. The answers come from this computer.":
+    "Хранилище в кармане: лента из ваших заметок, папки и ассистент. Отвечает этот компьютер.",
+  "This computer is listening. Notes stay here; the phone only asks.": "Компьютер на связи. Заметки остаются здесь, телефон только спрашивает.",
+  "Works while Obsidian is open here. Anything sent while it is closed waits in a queue and arrives when you open the vault.":
+    "Работает, пока здесь открыт Obsidian. Отправленное, пока он закрыт, ждёт в очереди и придёт, когда вы откроете хранилище.",
+  "Connect a phone": "Подключить телефон",
+  "Open this address on the phone": "Откройте этот адрес на телефоне",
+  "Add it to the home screen": "Поставьте на домашний экран",
+  "iPhone: Share → Add to Home Screen. Android: the browser menu → Install app. No app store and no account.":
+    "iPhone: «Поделиться» → «На экран „Домой“». Android: меню браузера → «Установить приложение». Без магазина и без учётной записи.",
+  "Open it from the home screen and type the code": "Откройте с домашнего экрана и введите код",
+  "Show": "Показать",
+  "The code is a password: anyone who has it can write to your vault. Keep it to yourself.": "Код — это пароль: у кого он есть, тот пишет в ваше хранилище. Не показывайте его другим.",
+  "Quick capture button": "Кнопка быстрой записи",
+  "can only create a note": "умеет только создать заметку",
+  "Sends a test notification to every phone where notifications are on. Switch them on in the app itself.":
+    "Пришлёт пробное уведомление на все телефоны, где они включены. Включаются они в самом приложении.",
+  "New connection code": "Новый код подключения",
+  "Every connected phone is disconnected at once and has to type the new code. For when the old one has leaked.":
+    "Все подключённые телефоны сразу отключатся и должны будут ввести новый код. На случай, если старый кто-то узнал.",
+  "Make a new code": "Сделать новый код",
+  "Privacy": "Приватность",
+  "Turn it on in Obsidian on your computer — Settings → Elton AI → Phone. The app then talks to that computer.":
+    "Включается в Obsidian на компьютере: Настройки → Elton AI → Телефон. Приложение потом говорит с этим компьютером.",
+  "Set up on the computer — it is the one that answers": "Настраивается на компьютере — отвечает он",
+});

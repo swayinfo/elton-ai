@@ -1,87 +1,137 @@
 # 🧠 Elton AI
 
-Talk to your Obsidian vault — by voice or in writing. It searches your notes,
-answers out of them, files new ones from your own templates, and reaches you on
-your phone from a browser or a Telegram bot.
+**An assistant that lives in your Obsidian vault — and goes everywhere with you.**
+Ask it anything about your own notes, dictate a thought, photograph a page,
+plan a project: it answers from what *you* wrote and files new notes the way
+*you* file them. The same assistant on your computer, on your phone and in
+Telegram — and it remembers the conversation.
 
-**[Русский](#-elton-ai-по-русски) · English**
+**[Русский](#-elton-ai-по-русски) · English** · desktop and mobile · open source · MIT
 
-Works on desktop and on mobile (Android / iOS).
+> **Try it free:** open [@elton_ai_obsidian_bot](https://t.me/elton_ai_obsidian_bot),
+> press Start — that is your key. Promo code **Gift** gives you credits to try
+> everything. Or bring your own key from OpenAI or OpenRouter, or run a local model
+> in Ollama: the plugin takes any of them.
 
-> **A key and a free trial live in the Telegram bot
-> [@elton_ai_obsidian_bot](https://t.me/elton_ai_obsidian_bot).**
-> Open it, press Start, and you have a key. Promo code **Gift** gives you
-> credits to try the whole thing without putting anything in. Your own key from
-> OpenAI, OpenRouter or a local Ollama works just as well — the plugin takes any.
+![Elton AI 4.0 — your Obsidian vault answers for itself, now in your pocket](docs/v4-hero-en.jpg)
 
-![Elton AI](docs/promo-hero-en.jpg)
+---
 
-### ▶ Two minutes of it actually running
+## One assistant, three places
 
-[![Watch on YouTube: talking to a second brain like it was ChatGPT](https://img.youtube.com/vi/UHazxHln1aM/maxresdefault.jpg)](https://www.youtube.com/watch?v=UHazxHln1aM)
+| In Obsidian | On your phone | In Telegram |
+| --- | --- | --- |
+| A panel beside your notes. Type, or hold a key and talk — it answers out loud. It sees the note you have open. | An app that installs from the browser: a **feed** of your own notes, your **folders** exactly as on the computer, and **chats** with the assistant. | A bot in your own Telegram. Ask on the go, get a formatted answer, send a voice message. |
 
-*[Talking to my SECOND BRAIN like it was ChatGPT — Obsidian without sync](https://www.youtube.com/watch?v=UHazxHln1aM)* — a real vault, a real phone, nothing sped up.
+Your notes never move to a server. The phone asks, **your computer answers**, and
+everything in between is end-to-end encrypted.
+
+![Ask right where you write — in Obsidian](docs/v4-desktop-en.jpg)
+
+---
+
+## What it is good at
+
+**Asking your own notes.** *"What did I decide about the flat in March?"*,
+*"What have I been thinking about this week?"* — it searches by words and by
+meaning, reads what it finds and answers from it. Asked about the world rather than
+your notes, it simply answers — and points at where your notes touch the subject.
+
+**Search by meaning, set up in the welcome.** Ask about *"burnout"* and it finds the
+note that says *"I have nothing left in the tank"*. The welcome has a step for it, so
+nobody has to go looking: one pass over your notes, a fraction of a cent each, then
+new and changed notes join the index by themselves. A vault of 10–20 thousand
+notes takes about a quarter of an hour instead of an evening, and an interrupted
+pass picks up where it stopped.
+
+**Your notes as a feed.** On the phone the first tab is your own vault, one note per
+screen — swipe up for the next, the way you scroll TikTok. Each note comes with its
+picture; from there you can read it whole, ask about it or take it into a chat.
+
+**Writing things down, properly.** *"Take down a thought: …"* — and every next
+message, with no instruction, goes into the same note. New notes come out of
+**your templates**, land in **your folders** and carry **your properties**, so they
+look like the ones you wrote by hand.
+
+**Turning a sentence into structure.** *"A project to learn ESP32"* becomes a real
+Kanban board, filled with the actual steps. *"Sort my inbox"* proposes a folder for
+every loose note and moves nothing until you say so.
+
+**A photo, done your way.** Into today's note as a picture, as text read off a page
+of handwriting, or *"what is this?"* — you choose on the phone before sending.
+
+**Routines.** A long brief behind a short phrase (*"wrap up the day"*), or behind a
+time of day (a morning digest that lands in a note, in Telegram or in the app).
+
+**Voice both ways.** Hold a key anywhere in Obsidian and speak. Answers are read
+aloud by a cloud voice or a local Piper — or stay silent if you prefer text.
 
 |  |  |
 | --- | --- |
-| ![A project in one sentence](docs/promo-kanban-en.jpg) | ![Ask your own notes](docs/promo-ask-en.jpg) |
-| **A project in one sentence** — say what you want and get a real Kanban board, built from your own template, opened for you. | **Ask your own notes** — in plain words, not "find a file". The answer is assembled out of what you wrote, not out of the internet. |
-| ![My week in thoughts](docs/promo-recall-en.jpg) | ![Capture a thought](docs/promo-write-en.jpg) |
-| **My week in thoughts** — it reads back through the daily notes and tells you what you kept returning to. | **Capture a thought** — one line from the phone lands in today's note. Where exactly is decided by your own settings. |
-| ![Sort out the inbox](docs/promo-inbox-en.jpg) | ![Ready-made prompts](docs/promo-slash-en.jpg) |
-| **Sort out the inbox** — it proposes a folder for every loose note and moves nothing until you say the word. | **Ready-made prompts** — type `/` and pick. Your own saved tasks come first, twenty useful ones come after. |
-| ![By voice, on the move](docs/promo-voice-en.jpg) | ![Explain this note](docs/promo-explain-en.jpg) |
-| **By voice, on the move** — hold, speak, and the transcript lands in the input before anything is sent, so a misheard word is yours to fix. | **Explain this note** — it answers about the note in front of you, in plain words, and will give an example if you ask. |
-| ![A photo of your notes](docs/promo-photo-en.jpg) | ![One tap from the lock screen](docs/promo-quick-en.jpg) |
-| **A photo of your notes** — photograph a page, say where it goes, and the note is created from your template. | **One tap from the lock screen** — a write-only key for a shortcut that can create a note and nothing else. |
+| ![Your notes, one swipe at a time](docs/v4-feed-en.jpg) | ![It remembers the conversation](docs/v4-memory-en.jpg) |
+| ![A photo goes where you meant](docs/v4-photo-en.jpg) | ![Your folders, exactly as in Obsidian](docs/v4-folders-en.jpg) |
+| ![Answers from your own notes](docs/v4-search-en.jpg) | ![You decide how far it reaches](docs/v4-trust-en.jpg) |
 
 ---
 
-## What it does
+## Can I trust it with my notes?
 
-**Answers out of your vault.** Keyword search and, if you switch it on, meaning
-search over an embedding index. It reads the note on screen, the daily notes, a
-folder, a span of days. It says when it found nothing instead of inventing an
-answer — and for a question about the world rather than about your notes, it
-simply answers, then points at where your own notes touch it.
+The fair question, and the answer is built in rather than promised:
 
-**Writes and files.** New notes from your templates, into the folder the vault
-already uses for them. Appends a line under a heading. Edits a note in place.
-Builds Kanban boards and Bases that actually render. Never deletes without
-asking.
-
-**Voice both ways.** Hold a key and talk, or run a hands-free conversation.
-Speech in through your provider; speech out through a cloud voice or a local
-Piper, so the vault can talk without anything leaving the machine.
-
-**Tasks and automations.** A saved prompt behind a phrase ("what was I thinking
-about") or behind a time of day. Results land in a note, in a notification, in
-Telegram, or in the app.
-
-**Your choice of brain.** Elton AI, OpenRouter, OpenAI directly, or a local
-model in Ollama / LM Studio. You bring the key; the plugin keeps it in this
-vault and nowhere else.
+- **Three levels of access**, chosen in one tap: *read only*, *read and write*,
+  *full*. A switched-off permission is not a request the AI is asked to respect —
+  the tool simply does not exist for it.
+- **Private folders** — health, money, other people's details — are never read,
+  never searched, never indexed and never sent, even when the note is open on
+  your screen.
+- **Every change can be undone.** Each note the assistant creates or edits is saved
+  first. Undo it from the answer itself, from the phone, or from the list of
+  changes in the settings — the note goes back exactly as it was.
+- **It never deletes on its own.** Deleting always stops and asks you at the
+  keyboard; from the phone or Telegram it does not delete at all.
+- **No telemetry, no hidden addresses.** Every address the plugin can contact is
+  listed [below](#privacy-and-external-services). With a local model nothing leaves
+  your machine at all.
 
 ---
 
-## The app on your phone
+## Get started in two minutes
 
-The headline of 3.0. The Connector tab gives you a code; type it once in the app
-and the whole vault is with you — ask it something, dictate a note, add a line to
-today's. The app installs onto the home screen straight from the browser at
-[app.eltonlabs.org](https://app.eltonlabs.org): no app store, no account.
+1. Settings → Community plugins → Browse → **Elton AI** → Install → Enable.
+2. A short welcome opens: pick where answers come from, paste the key, choose how
+   far it may reach. It can be reopened any time on **Settings → Elton AI → Home**.
+3. Open the panel from the ribbon and ask something. For the phone, switch on
+   **Settings → Elton AI → Phone** and type the code once in the app at
+   [app.eltonlabs.org](https://app.eltonlabs.org).
 
-**Nothing answers on a server — your own computer does**, which is why the notes
-never leave it. So there is one condition: the computer on, Obsidian open, the
-connector switched on. While it sleeps the app says it is not connected, and
-whatever you send waits in the queue and arrives the moment the computer is back.
+---
 
-The phone and the computer derive a shared secret between themselves
-(ECDH P-256 → HKDF → AES-GCM), so the relay in the middle carries text it cannot
-read.
+## What's new in 4.0
 
-Setting it up step by step, with a short video per step:
-**[eltonlabs.org/en/elton-ai-app](https://eltonlabs.org/en/elton-ai-app)**
+- **A feed like TikTok** — one note per screen, swipe for the next, never the same
+  note twice. Prefer a list? One tap switches.
+- **It remembers the conversation** — on the phone and in Telegram too, across
+  restarts. A message that never reached the computer is picked up from the phone.
+- **A new phone app** — Feed, Chats, Folders and Settings at the bottom, like any
+  app. Notes open looking the way they do in Obsidian: callouts, tasks, tables,
+  links you can follow, pictures.
+- **Photos do what you choose** — into a note, as text, or a question.
+- **Every change can be undone** — from the answer, the phone or the settings.
+- **Search by meaning for everyone** — its own step in the welcome; indexing is many
+  times faster, saves as it goes, resumes, and keeps itself up to date.
+- **Daily notes named your way** — DD-MM-YYYY, YYYY-MM-DD, with weekdays or folders:
+  the format comes from Obsidian's Daily notes or Periodic Notes settings.
+- **Simpler settings** — a Home tab with the state of everything, three levels of
+  access, folders picked from a list.
+
+---
+
+## Something not working? An idea?
+
+Write to the Telegram bot **[@elton_feedback_bot](https://t.me/elton_feedback_bot)** —
+complaints, ideas and "this does not work" all go there. A plain message is enough,
+a screenshot helps, and every message is read. The link is also on
+**Settings → Elton AI → Home** and in the phone app's settings.
 
 ---
 
@@ -91,8 +141,8 @@ Settings → Community plugins → Browse → search for **Elton AI** → Instal
 Enable. If *Restricted mode* is on at the top of that page, turn it off first —
 while it is on, Obsidian runs no community plugin at all.
 
-The setup guide opens the first time you run it, and can be reopened any time
-from Settings → Elton AI → **Show the setup guide again**.
+The welcome opens the first time you run it, and can be reopened any time
+from Settings → Elton AI → **Home** → **Welcome tour**.
 
 ### Beta versions, with BRAT
 
@@ -161,7 +211,7 @@ If something here breaks, you know who to ask, and I am easy to find.
 
 ### Private folders
 
-Answering a question sends parts of your notes to your provider. So there is a list of folders it never touches: **Settings → Vault → What it may do → Private folders**.
+Answering a question sends parts of your notes to your provider. So there is a list of folders it never touches: **Settings → Elton AI → Access → Private folders**.
 
 "Never" means: not read, not found by search, not indexed, not sent — and not offered as "the note on screen" even when it is open in front of you. The check runs before every other one and does not depend on the working scope: in "whole vault" mode private folders are still closed. Subfolders are closed with their parent.
 
@@ -184,7 +234,7 @@ The plugin contacts the provider you chose in settings, and — only if you swit
 | `localhost:5000` | the local Piper voice | only the answer text, to be spoken |
 | `api.telegram.org` | only if you connected a bot | your messages to the bot and the assistant's replies |
 | `media.giphy.com` | only the Telegram waiting animation, once | nothing — a picture is downloaded |
-| `app.eltonlabs.org` | only if you switched the **connector** on | your messages from the app and the assistant's replies — encrypted end to end, so the relay carries text it cannot read. Besides those, your Elton AI key, once every few hours: a connection code is only claimed against a working key, or anyone could reach a vault by inventing twelve characters. The key itself is not stored on the server |
+| `app.eltonlabs.org` | only if you switched the **connector** on | your messages from the app and the assistant's replies, and the notes, folder names and pictures you open in the app's feed and folders — all encrypted end to end, so the relay carries text it cannot read, and a note you opened is deleted from it the moment the phone has it. Besides those, your Elton AI key, once every few hours: a connection code is only claimed against a working key, or anyone could reach a vault by inventing twelve characters. The key itself is not stored on the server |
 | `relay.eltonlabs.org` | the same, as a fallback address | the same |
 | `base.eltonlabs.org` | only when you top the balance up from the app | the amount and your key, to get a payment link back |
 | `api.eltonlabs.org/skills` | only with the Elton AI provider | nothing is sent; short guides to Obsidian's own file formats are fetched, so the assistant writes a Kanban board or a Base that actually renders |
@@ -205,34 +255,6 @@ With a local model, nothing goes out at all.
 
 ---
 
-## What's new in 3.0
-
-**The app on your phone.** The whole point of this version — see above.
-
-**A button for one thought.** A separate write-only key, for a shortcut on the
-lock screen. It can create a note and nothing else: no reading, no editing, no
-deleting.
-
-**End-to-end encryption.** The phone and this computer work out a shared secret
-between themselves; the relay carries text it cannot read.
-
-**It can read a photograph.** Photograph a page of notes, say where it belongs,
-and the note is written from your template. Latin abbreviations stay in Latin,
-and anything genuinely unreadable is marked rather than guessed.
-
-**Voice on the OpenAI provider works again.** Its transcription lives on a
-different endpoint than the chat models, and the request is built for that
-endpoint now. Other providers are unchanged.
-
-**The search index says when it has fallen behind.** Once a week, and only when
-enough notes have piled up outside it.
-
-**A question about the world gets an answer.** Asked what a thing is, it
-explains it instead of searching your vault for the word and reporting nothing
-found — and then points at where your own notes touch the subject.
-
----
-
 ## Building from source
 
 `main.js` is assembled from the files in `src/` by concatenation, in the order
@@ -241,7 +263,7 @@ found — and then points at where your own notes touch the subject.
 ```sh
 sh build.sh      # writes main.js
 npm run lint     # the checks the community scanner runs
-npm test         # 446 assertions
+npm test         # 502 assertions
 ```
 
 `deploy.sh` copies the three files Obsidian reads into a vault of your choice;
@@ -256,91 +278,141 @@ MIT — see [LICENSE](LICENSE).
 ---
 ---
 
+---
+---
+
 # 🧠 Elton AI (по-русски)
 
-Говорите со своим хранилищем Obsidian — голосом или текстом. Он ищет по вашим
-заметкам, отвечает из них, создаёт новые по вашим же шаблонам и достаёт вас на
-телефоне — из браузера или из телеграм-бота.
+**Ассистент, который живёт в вашем хранилище Obsidian — и ходит с вами везде.**
+Спросите что угодно о своих заметках, надиктуйте мысль, сфотографируйте страницу,
+задумайте проект — он отвечает из того, что написали *вы*, и раскладывает новые
+заметки так, как раскладываете *вы*. Один и тот же ассистент на компьютере, на
+телефоне и в Телеграме — и он помнит разговор.
 
-**Русский · [English](#-elton-ai)**
+**Русский · [English](#-elton-ai)** · компьютер и телефон · открытый код · MIT
 
-Работает на компьютере и на телефоне (Android / iOS).
+> **Попробовать бесплатно:** откройте [@elton_ai_obsidian_bot](https://t.me/elton_ai_obsidian_bot),
+> нажмите «Start» — это и есть ключ. Промокод **«Подарок»** даёт кредиты, чтобы
+> попробовать всё. Или свой ключ от OpenAI, OpenRouter, локальная модель в Ollama —
+> плагин работает с любым.
 
-> **Ключ и бесплатная проба — в телеграм-боте
-> [@elton_ai_obsidian_bot](https://t.me/elton_ai_obsidian_bot).**
-> Откройте, нажмите «Start» — и ключ у вас. Промокод **«Подарок»** даёт кредиты,
-> чтобы попробовать всё целиком, ничего не вкладывая. Свой ключ от OpenAI,
-> OpenRouter или локальная Ollama подойдут не хуже — плагин работает с любым.
+![Elton AI 4.0 — хранилище Obsidian отвечает само, теперь и в кармане](docs/v4-hero.jpg)
 
-![Elton AI](docs/promo-hero.jpg)
+---
 
-### ▶ Две минуты того, как это работает
+## Один ассистент — три места
 
-[![Смотреть на YouTube: общаюсь со вторым мозгом как с ChatGPT](https://img.youtube.com/vi/UHazxHln1aM/maxresdefault.jpg)](https://www.youtube.com/watch?v=UHazxHln1aM)
+| В Obsidian | На телефоне | В Телеграме |
+| --- | --- | --- |
+| Панель рядом с заметками. Пишите или зажмите клавишу и говорите — ответит вслух. Видит открытую заметку. | Приложение, которое ставится из браузера: **лента** из ваших заметок, **папки** точно как на компьютере и **чаты** с ассистентом. | Бот в вашем Телеграме. Спросить на ходу, получить оформленный ответ, отправить голосовое. |
 
-*[Общаюсь со ВТОРЫМ мозгом как с ChatGPT — Obsidian без синхронизации](https://www.youtube.com/watch?v=UHazxHln1aM)* — живое хранилище, живой телефон, без ускорений.
+Заметки не переезжают на сервер. Телефон спрашивает — **отвечает ваш компьютер**,
+а всё, что между ними, зашифровано из конца в конец.
+
+![Спросите прямо в Obsidian](docs/v4-desktop.jpg)
+
+---
+
+## Что он умеет лучше всего
+
+**Спросить свои заметки.** «Что я решил про квартиру в марте?», «О чём я думал на
+этой неделе?» — ищет по словам и по смыслу, читает найденное и отвечает из него.
+Спросите о мире, а не о заметках, — просто ответит и покажет, где ваши заметки
+этого касаются.
+
+**Поиск по смыслу — прямо в приветствии.** Спросите про «выгорание» — найдётся
+заметка, где написано «сил больше нет совсем». В приветствии для этого отдельный шаг,
+искать настройку не нужно: один проход по заметкам, доли копейки за каждую, дальше
+новые и изменённые заметки попадают в индекс сами. Хранилище на 10–20 тысяч заметок
+индексируется примерно за четверть часа, а не за вечер, а прерванный проход
+продолжается с того же места.
+
+**Заметки лентой.** На телефоне первая вкладка — ваше собственное хранилище, одна
+заметка на экран: свайп вверх — следующая, как в TikTok. Каждая — со своей картинкой;
+отсюда её можно открыть целиком, спросить о ней или забрать в чат.
+
+**Записать по-настоящему.** «Запиши мысль: …» — и каждое следующее сообщение, без
+всяких команд, ляжет в ту же заметку. Новые заметки — **по вашим шаблонам**, в
+**ваши папки** и с **вашими свойствами**: выглядят так же, как написанные руками.
+
+**Фраза — в структуру.** «Проект: выучить ESP32» превращается в настоящую
+канбан-доску с реальными шагами. «Разбери входящие» — предложит папку каждой
+бесхозной заметке и ничего не тронет, пока вы не скажете.
+
+**Фото — куда скажете.** Картинкой в сегодняшнюю заметку, текстом с исписанной
+страницы или «что это?» — выбираете на телефоне перед отправкой.
+
+**Ритуалы.** Длинная просьба за короткой фразой («итоги дня») или за временем
+(утренняя сводка — в заметку, в Телеграм или в приложение).
+
+**Голос в обе стороны.** Зажмите клавишу в любом месте Obsidian и говорите. Ответы
+читает облачный голос или локальный Piper — или молчит, если вам удобнее текст.
 
 |  |  |
 | --- | --- |
-| ![Проект одной фразой](docs/promo-kanban.jpg) | ![Спросить свои заметки](docs/promo-ask.jpg) |
-| **Проект одной фразой** — говорите, что нужно, и получаете настоящую канбан-доску, собранную по вашему шаблону и открытую перед вами. | **Спросить свои заметки** — по-человечески, а не «найди файл». Ответ собран из того, что вы написали, а не из интернета. |
-| ![Моя неделя в мыслях](docs/promo-recall.jpg) | ![Записать мысль](docs/promo-write.jpg) |
-| **Моя неделя в мыслях** — он перечитывает ежедневные заметки и говорит, к чему вы возвращались чаще всего. | **Записать мысль** — строчка с телефона ложится в сегодняшнюю заметку. Куда именно — решают ваши настройки. |
-| ![Разобрать входящие](docs/promo-inbox.jpg) | ![Готовые запросы](docs/promo-slash.jpg) |
-| **Разобрать входящие** — предлагает папку каждой бесхозной заметке и не двигает ничего, пока вы не скажете. | **Готовые запросы** — набираете `/` и выбираете. Ваши сохранённые задания идут первыми, двадцать полезных — за ними. |
-| ![Голосом на ходу](docs/promo-voice.jpg) | ![Объясни эту заметку](docs/promo-explain.jpg) |
-| **Голосом на ходу** — зажали, сказали, и расшифровка попадает в поле ввода до отправки: ослышался — правите вы. | **Объясни эту заметку** — отвечает про ту заметку, что перед вами, простыми словами, и приведёт пример, если попросить. |
-| ![Фотография конспекта](docs/promo-photo.jpg) | ![Одно нажатие с локскрина](docs/promo-quick.jpg) |
-| **Фотография конспекта** — сфотографировали страницу, сказали куда, и заметка создана по вашему шаблону. | **Одно нажатие с локскрина** — ключ только на запись, для кнопки, которая умеет создать заметку и больше ничего. |
+| ![Свои заметки — свайпом, как в TikTok](docs/v4-feed.jpg) | ![Помнит разговор](docs/v4-memory.jpg) |
+| ![Фото — туда, куда нужно](docs/v4-photo.jpg) | ![Папки — точно как в Obsidian](docs/v4-folders.jpg) |
+| ![Отвечает по вашим заметкам](docs/v4-search.jpg) | ![Вы решаете, куда ему можно](docs/v4-trust.jpg) |
 
 ---
 
-## Что умеет
+## Можно ли доверить ему заметки?
 
-**Отвечает из вашего хранилища.** Поиск по словам и, если включить, поиск по
-смыслу через индекс эмбеддингов. Читает открытую заметку, ежедневные, папку,
-отрезок дней. Если не нашёл — говорит, что не нашёл, а не придумывает. А на
-вопрос про мир, а не про ваши записи, просто отвечает — и показывает, где это
-смыкается с тем, что у вас записано.
+Честный вопрос. Ответ — не обещание, а устройство:
 
-**Пишет и раскладывает.** Новые заметки по вашим шаблонам, в ту папку, которой
-хранилище для них и пользуется. Дописывает строку под заголовок. Правит заметку
-на месте. Собирает канбан-доски и Bases, которые действительно рисуются. Ничего
-не удаляет, не спросив.
-
-**Голос в обе стороны.** Зажали клавишу и говорите — или разговор без рук.
-Распознавание через вашего провайдера, озвучка через облачный голос или
-локальный Piper: тогда хранилище говорит, ничего не отправляя наружу.
-
-**Задания и автоматизации.** Сохранённый запрос за фразой («о чём я думал») или
-за временем суток. Результат ложится в заметку, в уведомление, в Telegram или в
-приложение.
-
-**Мозги на ваш выбор.** Elton AI, OpenRouter, OpenAI напрямую или локальная
-модель в Ollama / LM Studio. Ключ ваш — плагин держит его в этом хранилище и
-больше нигде.
+- **Три уровня доступа** одним нажатием: *только читать*, *читать и записывать*,
+  *полный*. Выключенное разрешение — не просьба к ИИ: такого инструмента у него
+  просто нет.
+- **Личные папки** — здоровье, деньги, чужие данные — не читаются, не ищутся, не
+  индексируются и никуда не отправляются, даже если заметка открыта у вас на экране.
+- **Любую правку можно отменить.** Каждая заметка, которую ассистент создал или
+  поправил, сначала сохраняется. Отменить можно прямо из ответа, с телефона или из
+  списка изменений в настройках — заметка вернётся ровно такой, какой была.
+- **Сам ничего не удаляет.** Удаление всегда останавливается и спрашивает вас за
+  клавиатурой, а с телефона и из Телеграма не удаляет вообще.
+- **Никакой телеметрии и скрытых адресов.** Все адреса, куда плагин может
+  обратиться, перечислены [ниже](#приватность-и-внешние-сервисы). С локальной
+  моделью наружу не уходит ничего.
 
 ---
 
-## Приложение на телефоне
+## Начать за две минуты
 
-Главное в версии 3.0. На вкладке «Коннектор» появляется код; вводите его один
-раз в приложении — и всё хранилище с вами: спросить, надиктовать заметку,
-дописать строку в сегодняшнюю. Приложение ставится на домашний экран прямо из
-браузера по адресу [app.eltonlabs.org](https://app.eltonlabs.org): ни магазина
-приложений, ни учётной записи.
+1. Настройки → Сторонние плагины → Обзор → **Elton AI** → Установить → Включить.
+2. Откроется короткое знакомство: откуда брать ответы, ключ, что ему можно. Его
+   можно открыть снова в любой момент: **Настройки → Elton AI → Главная**.
+3. Откройте панель значком на левой панели и спросите что-нибудь. Для телефона —
+   включите **Настройки → Elton AI → Телефон** и один раз введите код в приложении
+   на [app.eltonlabs.org](https://app.eltonlabs.org).
 
-**Отвечает не сервер, а ваш компьютер** — потому заметки и не уезжают никуда.
-Отсюда единственное условие: компьютер включён, Obsidian открыт, коннектор
-включён. Пока компьютер спит, приложение покажет, что связи нет; всё
-отправленное дождётся в очереди и уедет, как только он вернётся.
+---
 
-Телефон и компьютер договариваются об общем секрете между собой
-(ECDH P-256 → HKDF → AES-GCM), поэтому посредник несёт текст, который не может
-прочитать.
+## Что нового в 4.0
 
-Как подключить, по шагам и с коротким видео на каждый шаг:
-**[eltonlabs.org/elton-ai-app](https://eltonlabs.org/elton-ai-app)**
+- **Лента как в TikTok** — одна заметка на экран, свайп — следующая, без повторов.
+  Удобнее списком — переключается одним нажатием.
+- **Помнит разговор** — и на телефоне, и в Телеграме, даже после перезапуска.
+  Сообщение, не дошедшее до компьютера, подхватывается с телефона.
+- **Новое приложение на телефоне** — Лента, Чаты, Папки и Настройки внизу, как в
+  любом приложении. Заметки открываются такими же, как в Obsidian: выноски,
+  задачи, таблицы, ссылки, по которым можно перейти, картинки.
+- **Фото — куда выберете** — в заметку, текстом или вопросом.
+- **Любую правку можно отменить** — из ответа, с телефона или в настройках.
+- **Поиск по смыслу — для всех** — отдельный шаг в приветствии; индексация в разы
+  быстрее, сохраняется по ходу, продолжает с места остановки и обновляется сама.
+- **Ежедневные заметки — как названы у вас** — ДД-ММ-ГГГГ, ГГГГ-ММ-ДД, с днём недели
+  или по папкам: формат берётся из настроек «Ежедневных заметок» или Periodic Notes.
+- **Настройки проще** — вкладка «Главная», где видно всё сразу, три уровня
+  доступа, папки выбираются из списка.
+
+---
+
+## Что-то не работает? Есть идея?
+
+Пишите в телеграм-бот **[@elton_feedback_bot](https://t.me/elton_feedback_bot)** —
+жалобы, идеи и «это не работает», всё туда. Обычного сообщения достаточно, скриншот
+поможет, читаем каждое. Ссылка есть и в **Настройки → Elton AI → Главная**, и в
+настройках приложения на телефоне.
 
 ---
 
@@ -351,7 +423,7 @@ MIT — see [LICENSE](LICENSE).
 он включён, Obsidian не даёт работать ни одному стороннему плагину.
 
 При первом запуске откроется пошаговая настройка. Её всегда можно вызвать
-заново: Настройки → Elton AI → **Открыть пошаговую настройку**.
+заново: Настройки → Elton AI → **Главная** → **Знакомство**.
 
 ### Бета-версии, через BRAT
 
@@ -418,7 +490,7 @@ Obsidian, находится в `src/`, а `main.js` в каждом релиз�
 
 ### Личные папки
 
-Чтобы ответить, ассистент отправляет провайдеру куски ваших заметок. Поэтому есть список папок, которые он не трогает никогда: **Настройки → Хранилище → Что ему можно → Личные папки**.
+Чтобы ответить, ассистент отправляет провайдеру куски ваших заметок. Поэтому есть список папок, которые он не трогает никогда: **Настройки → Elton AI → Доступ → Личные папки**.
 
 Что значит «никогда»: такие заметки не читаются, не находятся поиском, не попадают в индекс, не уходят провайдеру — и не подставляются как «заметка на экране», даже если она открыта прямо сейчас. Проверка стоит перед всеми остальными и не зависит от области работы: в режиме «всё хранилище» личные папки всё равно закрыты. Вложенные папки закрыты вместе с родительской.
 
@@ -441,7 +513,7 @@ Obsidian, находится в `src/`, а `main.js` в каждом релиз�
 | `localhost:5000` | локальный голос Piper | только текст ответа, для озвучки |
 | `api.telegram.org` | только если вы подключили бота | ваши сообщения боту и ответы ассистента |
 | `media.giphy.com` | только гифка ожидания в Telegram, один раз | ничего — просто скачивается картинка |
-| `app.eltonlabs.org` | только если вы включили **коннектор** | ваши сообщения из приложения и ответы ассистента — под сквозным шифром, посредник несёт текст, который не может прочитать. Кроме этого — ваш ключ Elton AI, раз в несколько часов: код подключения закрепляется только по действующему ключу, иначе чужое хранилище открывалось бы по придуманным двенадцати знакам. Сам ключ на сервере не хранится |
+| `app.eltonlabs.org` | только если вы включили **коннектор** | ваши сообщения из приложения и ответы ассистента, а также заметки, названия папок и картинки, которые вы открываете в ленте и папках приложения, — всё под сквозным шифром: посредник несёт текст, который не может прочитать, а открытая заметка удаляется с него, как только телефон её получил. Кроме этого — ваш ключ Elton AI, раз в несколько часов: код подключения закрепляется только по действующему ключу, иначе чужое хранилище открывалось бы по придуманным двенадцати знакам. Сам ключ на сервере не хранится |
 | `relay.eltonlabs.org` | то же самое, запасной адрес | то же самое |
 | `base.eltonlabs.org` | только при пополнении баланса из приложения | сумма и ваш ключ, в ответ приходит ссылка на оплату |
 | `api.eltonlabs.org/skills` | только с провайдером Elton AI | ничего не отправляется; скачиваются короткие справки по форматам самого Obsidian, чтобы ассистент писал канбан-доску или Base, которые действительно рисуются |
@@ -460,34 +532,6 @@ Elton AI — собственный сервис автора для тех, к�
 
 ---
 
-## Что нового в 3.0
-
-**Приложение на телефоне.** То, ради чего версия и вышла — см. выше.
-
-**Кнопка для одной мысли.** Отдельный ключ только на запись, для кнопки на
-локскрине. Он умеет создать заметку и больше ничего: не читает, не правит, не
-удаляет.
-
-**Сквозное шифрование.** Телефон и этот компьютер договариваются об общем
-секрете между собой; посредник несёт текст, который не может прочитать.
-
-**Умеет прочитать фотографию.** Сфотографировали страницу конспекта, сказали
-куда — и заметка написана по вашему шаблону. Латинские сокращения остаются
-латиницей, а неразобранное помечается, а не угадывается.
-
-**Голос на провайдере OpenAI снова работает.** Распознавание у него живёт не там,
-где чат-модели, и запрос теперь собирается под тот адрес. Остальных провайдеров
-это не касалось.
-
-**Поисковый индекс сам говорит, что отстал.** Раз в неделю и только когда
-заметок вне него накопилось достаточно.
-
-**На вопрос про мир приходит ответ.** Спросили, что такое прибор — он объяснит,
-а не пойдёт искать это слово по вашим заметкам и сообщать, что не нашёл. И
-покажет, где это смыкается с вашими записями.
-
----
-
 ## Сборка из исходников
 
 `main.js` собирается из файлов в `src/` простой склейкой, в том порядке, который
@@ -496,7 +540,7 @@ Elton AI — собственный сервис автора для тех, к�
 ```sh
 sh build.sh      # соберёт main.js
 npm run lint     # те же проверки, что гоняет сканер каталога
-npm test         # 446 проверок
+npm test         # 502 проверки
 ```
 
 `deploy.sh` копирует три файла, которые читает Obsidian, в хранилище на ваш

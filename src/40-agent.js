@@ -94,6 +94,36 @@ const PROMISE_RE = new RegExp(
   ].join("|"),
   "iu",
 );
+/* The same lie in the past tense: "added it to the note" with no tool call
+ * behind it. Seen in 4.0 testing on the author's own vault — the second and
+ * third of three dictated thoughts were reported as appended and were not,
+ * because the conversation above showed the model what such a reply looks
+ * like. A negated verb ("не добавил") is an honest report, not a claim. */
+const CLAIM_EN = new RegExp(
+  `${B}(i'?ve|i have|i)\\s+(just\\s+)?(added|saved|created|written|wrote|appended|updated|inserted|put|moved|deleted|recorded|noted down|filed)${E}`,
+  "iu",
+);
+const CLAIM_RU = new RegExp(
+  `${B}(добавила?|записала?|дописала?|сохранила?|создала?|вн[её]сла?|обновила?|вставила?|переписала?|перен[её]сла?|удалила?|положила?|отметила?|занёс|занес)${E}`,
+  "giu",
+);
+/* The negation is checked by hand rather than with a lookbehind: Obsidian on
+   an iPhone runs the system Safari engine, and before iOS 16.4 a lookbehind
+   in any regular expression stops the whole plugin from loading. */
+const CLAIM_RE = {
+  test(text) {
+    const s = String(text || "");
+    if (CLAIM_EN.test(s)) return true;
+    CLAIM_RU.lastIndex = 0;
+    let m;
+    while ((m = CLAIM_RU.exec(s))) {
+      const before = s.slice(Math.max(0, m.index - 24), m.index + (m[0].length - m[1].length)).toLowerCase();
+      if (!/(^|[^\p{L}])не\s+(\S+\s+)?$/u.test(before)) return true;
+    }
+    return false;
+  },
+};
+
 /* Deliberately narrow, after a live run on a real vault showed the cost of a
  * wide one. "Посмотрю", "поищу", "проверю", "секунду" all describe reading,
  * which the assistant does constantly and which needs no tool call to be
@@ -113,6 +143,26 @@ const KEEP_PROMISE = {
     + "Do it NOW with the tools. Then reply again describing what you did, in the past tense. "
     + "If you genuinely cannot do it, say plainly why instead of promising.",
 };
+
+const KEEP_CLAIM = {
+  role: "user",
+  content: "STOP. Your reply says you already added, saved or changed something — but no tool was called in this turn, "
+    + "so NOTHING in the vault has changed. Earlier turns of the conversation do not count: this turn did nothing yet. "
+    + "If the user's message asks for it (including continuing an ongoing note), do it NOW with the tools — append_note, "
+    + "create_note, replace_in_note — and then reply as if for the first time: say what you did, without mentioning this check and without words like \"already\", and in the language the user wrote in. If nothing needed changing, reply again without claiming you changed anything.",
+};
+
+/**
+ * "I have already added it" after the second pass, said by a model that did it
+ * just now, because the check made it — and asked not to say "already", still
+ * said it, seen live in Russian. The person never saw a first attempt, so for
+ * them there is no "already". Only at the start of the reply, where it is.
+ */
+function dropAlready(text) {
+  return String(text || "")
+    .replace(/^(\s*(?:я|i|i've|i have)\s+)(?:уже|already)\s+/iu, "$1")
+    .replace(/^(\s*)(?:уже|already)\s+(\S)/iu, (m, a, c) => a + c.toUpperCase());
+}
 
 const CONTINUE_PROMPT =
   "Your answer was cut off at the point shown. Carry straight on from there. " +
@@ -191,7 +241,7 @@ function buildTools(s, plugin) {
       fn("daily_note",
         "The user's daily note for one date. Needed for questions like \"what did I do yesterday\" — ordinary search does not find these reliably. For a span of days use recent_notes instead of calling this once per day. Pass open: true when they asked to OPEN or SHOW it rather than asked a question about it — today's note is then created through Obsidian's own Daily notes command if it does not exist yet, so their template and Templater run exactly as if they had opened it themselves.",
         {
-          when: { type: "string", description: "today, yesterday, or a date as DD-MM-YYYY" },
+          when: { type: "string", description: "today, yesterday, tomorrow, or a date as YYYY-MM-DD" },
           open: { type: "boolean", description: "Put it on screen, creating today's from their template if needed." },
         }, ["when"]);
     }
@@ -379,6 +429,19 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
     "• FINISH THE JOB. If something refused, say exactly what refused and why, then do what you can around it. Never end by listing steps for the user to carry out: they asked you precisely so they would not have to.",
     "• SAY WHAT IS TRUE. If you could not find something, say you could not find it — not that it does not exist. If you did half, say which half. Confidence about a vault you have not looked at is the fastest way to be useless.");
 
+  /* Continuity. Written after a run of real complaints, all the same shape:
+     "write down my thoughts" worked, the next message — more thoughts — got
+     "I don't understand what you want me to do"; a request that had failed
+     was followed by "so write it", and the assistant asked "write what?".
+     The conversation already held the answer both times. */
+  lines.push("",
+    "The conversation is one continuous job, not a string of separate requests:",
+    "• Every message continues the ones before it. Read the earlier turns — including the [What I did in this turn: …] lines, which record the notes you created or changed — before deciding what the new one means.",
+    "• If the conversation set up an ongoing job — taking down thoughts, dictating into a note, keeping a list, a log, a diary entry, collecting ideas — and the new message is just more content with no instruction of its own, it is THE NEXT PIECE OF THAT JOB. Add it to the same note, in the same way, and say in one short line where it went. Do not ask what to do with it.",
+    "• If an earlier request failed, was stopped, or never got an answer, and the user now says \"ну?\", \"сделай\", \"напиши это\", \"давай\", \"повтори\", \"so do it\" — they mean THAT request. Carry it out now.",
+    "• Never answer \"I did not understand what you want\" when the conversation shows it. If two readings are genuinely equally likely, take the more useful one, do it, and name the other in one line.",
+    "• A message that starts a clearly new topic ends the previous job; you do not have to keep appending to the old note.");
+
   if (channel === "telegram") {
     /* Telegram renders proper markdown now — headings, lists, tables and all.
        Worth saying outright: told only "write markdown", a model aims at the
@@ -408,6 +471,10 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
   if (remoteChannel) {
     lines.push("• \"Туда\", \"там же\", \"добавь ещё\", \"допиши\" without a name mean the note you have already been working with IN THIS CONVERSATION — not the daily note and not the inbox. Look back at what you last opened, created or edited, and write there.");
     lines.push("• A note named in the conversation beats any default rule about where things go. Rules like \"quick thoughts go in the daily note\" are for when no place was named at all.");
+    /* "Я уже добавил вашу мысль" — said about "add: ask Mia to proofread",
+       written a second earlier. The person cannot see the note; the reply is
+       the only receipt they get, so it has to say what went in. */
+    lines.push("• After writing, the reply is the person's only receipt: one line saying WHAT went in — their words, briefly quoted — and WHERE. Not \"your thought\", not \"already\": this turn's change happened just now.");
   }
 
   if (webSearchOK(s)) {
@@ -532,7 +599,9 @@ async function buildSystemPrompt(plugin, { written = false, channel = "" } = {})
   // from February: the model had the date and no reason to connect it to the
   // fact that its only search tool cannot see dates at all.
   lines.push("",
-    `Today is ${todayKey()} (DD-MM-YYYY).`,
+    `Today is ${todayKey()} (DD-MM-YYYY).` + (plugin.vault.dailyFolder()
+      ? ` Daily notes in this vault are named like "${formatDay(new Date(), plugin.vault.dailyFormat())}" — that is today's.`
+      : ""),
     "Anything about a stretch of time — \"the last few days\", \"this week\", \"lately\", \"recently\" — is answered with recent_notes, never with search_notes. search_notes ranks by topic alone and cannot tell this month from last year.",
     "Before you say when something happened, check the date you were actually given for it. Do not date anything from memory, and do not present an old note as recent.");
   return lines.join("\n");
@@ -606,7 +675,18 @@ class Agent {
     const said = String(text || "");
     if (!said.trim()) return false;
     if (this.acted) return false;
-    return PROMISE_RE.test(said);
+    if (PROMISE_RE.test(said)) return "promise";
+    // Only where writing is possible at all: with editing off, "I added" is
+    // not something it could have been tempted to do.
+    if ((this.plugin.settings.canEdit || this.plugin.settings.canCreate) && CLAIM_RE.test(said)) return "claim";
+    return false;
+  }
+
+  /** Sources worth showing under the answer. None when the turn wrote
+   *  something: the notes it looked through to decide where to write are not
+   *  what the reply rests on, and the change itself is shown beside it. */
+  shownSources() {
+    return (this.changes && this.changes.length) ? [] : (this.sources || []);
   }
 
   noteSource(file) {
@@ -614,8 +694,38 @@ class Agent {
     this.sources.push({ path: file.path, title: file.basename });
   }
 
-  async run(history, userText, { onEvent, confirm, onSegment, onDelta, written = false, channel = "" }) {
+  async run(history, userText, opts) {
+    /* Everything this turn changes in the vault, as the journal saw it — not
+       as the model described it. The conversation memory keeps this list,
+       so "add this too" can find the note the last turn wrote. */
+    this.changes = [];
+    const J = this.plugin.journal;
+    const sink = (e) => this.changes.push(e);
+    if (J) { J.sinks.add(sink); J.channel = (opts && opts.channel) || "panel"; }
+    try { return await this.runInner(history, userText, opts); }
+    finally { if (J) J.sinks.delete(sink); }
+  }
+
+  /** What this turn did, one line per change, for the memory. */
+  didList() {
+    const seen = new Set();
+    const out = [];
+    for (const e of this.changes || []) {
+      // Three edits to the same note are one fact for the conversation.
+      const k = e.kind + "|" + e.path;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(describeChange(e));
+    }
+    return out;
+  }
+
+  async runInner(history, userText, { onEvent, confirm, onSegment, onDelta, written = false, channel = "" }) {
     const plugin = this.plugin;
+    /* From the phone or Telegram nobody is looking at the computer. A note
+       opened there is a tab nobody asked for, and the reply then said "it is
+       open on your screen" to someone holding a phone — seen live. */
+    this.remote = channel === "connector" || channel === "telegram";
     const s = plugin.settings;
     const V = plugin.vault;
     // Индекс скиллов подтягиваем один раз за сессию: он нужен и инструментам,
@@ -700,7 +810,8 @@ class Agent {
         if (handed) {
           // Read the answer before handing it over. A promise with nothing
           // behind it goes back to the model once, with its own words quoted.
-          if (this.brokenPromise(msg.content) && !this.checked) {
+          const broken = this.checked ? false : this.brokenPromise(msg.content);
+          if (broken) {
             this.checked = true;
             // Kept, because the second attempt can come back worse. Seen on a
             // real vault: a good three-paragraph answer was replaced by "I
@@ -709,7 +820,7 @@ class Agent {
             this.firstAnswer = String(msg.content || "");
             if (onDelta) onDelta(null, "");
             messages.push({ role: "assistant", content: this.firstAnswer });
-            messages.push(KEEP_PROMISE);
+            messages.push(broken === "claim" ? KEEP_CLAIM : KEEP_PROMISE);
             continue;
           }
           /* Nothing came of the second pass — no tool call, and an answer
@@ -719,6 +830,7 @@ class Agent {
             && String(msg.content || "").length < this.firstAnswer.length) {
             return await this.finishAnswer(messages, { content: this.firstAnswer }, budget, onSegment);
           }
+          if (this.acted) msg.content = dropAlready(msg.content);
           return await this.finishAnswer(messages, msg, budget, onSegment);
         }
         // The quick model has stopped reaching for tools. Everything it
@@ -889,6 +1001,7 @@ class Agent {
       case "open_note": {
         const f = V.resolve(args.path);
         if (!f) return `No note called "${args.path}".`;
+        if (this.remote) return `The person is on their phone and cannot see the computer. Read "${f.path}" with read_note and tell them what is in it instead.`;
         await V.openNote(f);
         onEvent({ kind: "action", text: t("Opened: {0}", f.basename) });
         return `Opened "${f.basename}" on screen. Tell the user briefly that it is in front of them.`;
@@ -939,7 +1052,8 @@ class Agent {
         onEvent({ kind: "action", text: t("Looking at the last {0} days", days) });
         const files = V.recentNotes(days, 30);
         if (!files.length) return `Nothing was written or changed in the last ${days} days.`;
-        for (const f of files.slice(0, 8)) this.noteSource(f);
+        // Not sources: a list of names is not something the answer was built
+        // from. The notes it then opens with read_note become sources there.
         // The date goes on every line: without it the model has the notes but
         // still no idea which of them is yesterday's.
         const lines = files.map((f) => `${todayKey(new Date(f.stat.mtime))}  ${f.path}`);
@@ -1089,14 +1203,16 @@ class Agent {
         }
         const f = await V.createNote(args.title, args.content, args.folder);
         onEvent({ kind: "action", text: t("Created: {0}", f.basename) });
-        await V.openNote(f);
+        if (!this.remote) await V.openNote(f);
         /* The exact name to link with, spelled out.
            Obsidian may have changed the title on the way in — a colon or a
            slash is not allowed in a file name — and a link written from the
            title you asked for then points at nothing. Which is what happened:
            a board created as "Изучение ESP32" was linked from the MOC as
            "[[MOC - Изучение ESP32]]", and the card sat there grey. */
-        return `Created "${f.basename}" at ${f.path} and opened it. `
+        return `Created "${f.basename}" at ${f.path}` + (this.remote
+          ? ". The person is on their phone: say in one short line where the note went and what it is called — not that it is open. "
+          : " and opened it. ")
           + `Link to it as [[${f.basename}]] — exactly that, it is the real file name. `
           + V.folderConventions(f.parent && f.parent.path);
       }
@@ -1125,9 +1241,9 @@ class Agent {
         const f = await V.createBoard(args.title, args.columns, args.folder, args.properties);
         onEvent({ kind: "action", text: t("Board created: {0}", f.basename) });
         // Opened AS a board, not as the markdown it is made of.
-        await V.showAsBoard(f);
+        if (!this.remote) await V.showAsBoard(f);
         const names = (args.columns || []).map((c) => c && c.name).filter(Boolean).join(", ");
-        return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. It is open and rendering as a board. `
+        return `Created the board "${f.basename}" at ${f.path} with columns: ${names}. ` + (this.remote ? "The person is on their phone; it was not opened. " : "It is open and rendering as a board. ")
           + `Link to it as [[${f.basename}]] — exactly that, it is the real file name. `
           + V.folderConventions(f.parent && f.parent.path);
       }
@@ -1255,12 +1371,21 @@ class Agent {
           danger: true,
         });
         if (!ok) return `The user did not confirm, so "${f.basename}" was NOT deleted. Say so plainly and do not try again.`;
+        // A copy first: the system trash cannot be reached from the phone.
+        if (plugin.journal) {
+          try { await plugin.journal.record("delete", { path: f.path, before: await plugin.app.vault.read(f) }); } catch { /* still delete */ }
+        }
         await plugin.app.fileManager.trashFile(f);
         onEvent({ kind: "action", text: t("Deleted: {0}", f.basename) });
         return `Deleted "${f.basename}" (moved to trash).`;
       }
 
       case "undo_last": {
+        if (plugin.journal) {
+          const r = await plugin.journal.undo();
+          onEvent({ kind: "action", text: r.ok ? t("Undone") : t("Nothing to undo") });
+          return r.ok ? `Undid the last change: ${r.text}. "${r.path}" is back to how it was.` : `Nothing was undone: ${r.text}`;
+        }
         const p = await V.undo();
         onEvent({ kind: "action", text: p ? t("Undone") : t("Nothing to undo") });
         return p ? `Restored "${p}" to how it was.` : "There is nothing to undo.";

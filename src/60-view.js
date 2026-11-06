@@ -64,6 +64,17 @@ class AssistantView extends ItemView {
   getIcon() { return "bot"; }
 
   async onOpen() {
+    /* The conversation survives a restart: what was said in the panel this
+       morning is still there after lunch, and so is what the assistant did. */
+    try {
+      if (!this.messages.length && this.plugin.memory) {
+        const turns = (await this.plugin.memory.turns("panel", "main")).slice(-10);
+        for (const tr of turns) {
+          if (tr.status !== "ok" || !tr.reply) continue;
+          this.messages.push({ role: "user", content: tr.user }, { role: "assistant", content: tr.reply });
+        }
+      }
+    } catch { /* an empty panel is fine */ }
     this.render();
     // The panel used to learn about a new note only when it was rebuilt, so
     // the chip kept naming a note that had been closed ten minutes ago —
@@ -381,7 +392,11 @@ class AssistantView extends ItemView {
     const fresh = btns.createEl("button", { cls: "oa-icon-btn" });
     setIcon(fresh, "plus");
     fresh.setAttr("aria-label", t("New conversation"));
-    fresh.onclick = () => { this.messages = []; this.render(); };
+    fresh.onclick = () => {
+      this.messages = [];
+      if (this.plugin.memory) this.plugin.memory.forget("panel", "main");
+      this.render();
+    };
     const gear = btns.createEl("button", { cls: "oa-icon-btn" });
     setIcon(gear, "settings");
     gear.setAttr("aria-label", t("Settings"));
@@ -717,7 +732,11 @@ class AssistantView extends ItemView {
     const queue = streaming ? new SegmentQueue() : null;
     let reply = null;
     try {
-      const running = this.agent.run(this.messages, sent, {
+      // The history comes from memory, where each answer carries the line
+      // saying which notes it changed — the panel's own copy does not.
+      const past = this.plugin.memory ? await this.plugin.memory.messages("panel", "main") : this.messages;
+      const recall = this.plugin.memory ? await this.plugin.memory.recallNote("panel", "main") : "";
+      const running = this.agent.run(past, recall + sent, {
         onEvent: (ev) => {
           if (ev.kind !== "action") return;
           if (inChat) slot.status(ev.text);
@@ -756,6 +775,9 @@ class AssistantView extends ItemView {
     // it: a follow-up question needs to see what was actually asked.
     this.messages.push({ role: "user", content: sent });
     this.messages.push({ role: "assistant", content: reply });
+    if (this.plugin.memory) {
+      this.plugin.memory.add("panel", "main", { user: sent, reply, did: this.agent.didList(), status: "ok" });
+    }
     if (this.messages.length > 20) this.messages = this.messages.slice(-20);
 
     // Close the books before the answer is drawn, so the cost line is part of
@@ -767,7 +789,7 @@ class AssistantView extends ItemView {
     }
 
     if (inChat) {
-      await slot.content(reply, this.agent.sources, costLine);
+      await slot.content(reply, this.agent.shownSources(), costLine);
     } else if (!streaming) {
       this.setReply(stripMarkdown(reply));
     }
