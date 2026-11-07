@@ -1785,3 +1785,14 @@ body.is-mobile .oa-gallery { grid-template-columns: 1fr 1fr; }
 .oa-journal-count { font-weight: 400; color: var(--text-muted); }
 .oa-journal-fold > .oa-journal { padding: 0 10px 10px; }
 @media (prefers-reduced-motion: reduce) { .oa-journal-fold > summary::before { transition: none; } }
+
+/* ── 4.0: a new device asks to connect ───────────────────── */
+.oa-approve { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 10px 6px 4px; }
+.oa-approve-icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent); color: var(--interactive-accent); }
+.oa-approve-icon .svg-icon { width: 30px; height: 30px; }
+.oa-approve-title { font-size: 19px; font-weight: 700; color: var(--text-normal); }
+.oa-approve-name { font-size: 15px; font-weight: 600; color: var(--text-normal); padding: 4px 12px; border-radius: 999px; background: var(--background-modifier-hover); }
+.oa-approve-text { font-size: 13.5px; line-height: 1.55; color: var(--text-muted); max-width: 360px; }
+.oa-approve-row { display: flex; gap: 10px; margin-top: 8px; }
+.oa-cn-dev.is-pending { border-color: color-mix(in srgb, var(--text-warning) 45%, var(--background-modifier-border)); }

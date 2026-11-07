@@ -1662,7 +1662,13 @@ class AssistantSettingTab extends PluginSettingTab {
         const left = row.createDiv({ cls: "oa-cn-dev-body" });
         left.createDiv({ cls: "oa-cn-dev-name", text: d.name === QUICK_NAME ? t("Quick capture button") : (d.name || t("Device")) });
         left.createDiv({ cls: "oa-cn-dev-when", text: t("last seen {0}", whenWord(d.seen))
-          + " · " + (d.name === QUICK_NAME ? t("can only create a note") : d.pub && d.paired ? t("encrypted") : t("no encryption — reconnect it")) });
+          + " · " + (!this.plugin.connector.isApproved(d.id) ? t("waiting for your approval")
+            : d.name === QUICK_NAME ? t("can only create a note") : d.pub && d.paired ? t("encrypted") : t("no encryption — reconnect it")) });
+        if (!this.plugin.connector.isApproved(d.id)) {
+          row.addClass("is-pending");
+          const allow = row.createEl("button", { cls: "mod-cta", text: t("Allow") });
+          allow.onclick = async () => { await this.plugin.connector.approveDevice(d.id); drawDevices(); };
+        }
         const off = row.createEl("button", { text: t("Disconnect") });
         off.onclick = async () => {
           off.setText(t("Disconnecting…"));

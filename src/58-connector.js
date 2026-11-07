@@ -265,7 +265,9 @@ class ConnectorBridge {
     if (!force && Date.now() - this.keysChecked < 10e3) return;
     this.keysChecked = Date.now();
     const mine = await this.ownKeys();
-    for (const d of await this.listDevices()) {
+    const list = await this.listDevices();
+    this.reviewDevices(list);
+    for (const d of list) {
       if (!d.pub) continue;                       // старое приложение, без ключей
       if (!this.secrets.has(d.id)) {
         try { this.secrets.set(d.id, await cnShared(mine.priv, d.pub)); } catch { continue; }
@@ -290,6 +292,59 @@ class ConnectorBridge {
     if (!key) { await this.syncKeys(true); }
     const k = id && this.secrets.get(id);
     return k ? cnOpen(k, text) : "";
+  }
+
+  /*
+   * A phone is let in only once it has been allowed here, on the computer.
+   *
+   * The code alone was the whole key: anyone who saw it — on a screenshot,
+   * over a shoulder — could add a phone and read the vault from the feed and
+   * the folders. Guessing it is hopeless (twelve characters, and the server
+   * allows ten tries in ten minutes per address); leaking it is not. So a new
+   * device now waits until its owner presses «Allow» in Obsidian, and until
+   * then gets nothing — not a note, not an answer, not a transcription.
+   */
+  isApproved(id) {
+    if (!id) return false;
+    if (this.cfg.quick && id === this.cfg.quick) return true;   // made by this plugin itself
+    return Array.isArray(this.cfg.approved) && this.cfg.approved.includes(id);
+  }
+
+  reviewDevices(list) {
+    const cfg = this.cfg;
+    this.knownDevices = list;
+    if (!Array.isArray(cfg.approved)) cfg.approved = [];
+    if (!cfg.approvalSeeded) {
+      // Phones connected before this check existed were connected by their
+      // owner; asking about each one now would only cut them off.
+      cfg.approved = list.map((d) => d && d.id).filter(Boolean);
+      cfg.approvalSeeded = true;
+      this.plugin.saveSettings();
+      return;
+    }
+    for (const d of list) if (d && d.id && !this.isApproved(d.id)) this.askApproval(d);
+  }
+
+  async approveDevice(id) {
+    if (!Array.isArray(this.cfg.approved)) this.cfg.approved = [];
+    if (!this.cfg.approved.includes(id)) this.cfg.approved.push(id);
+    await this.plugin.saveSettings();
+  }
+
+  askApproval(d) {
+    this.asked = this.asked || new Set();
+    if (this.asked.has(d.id) || typeof DeviceApprovalModal === "undefined") return;
+    this.asked.add(d.id);
+    const name = d.name || t("Device");
+    new DeviceApprovalModal(this.plugin.app, d, async (ok) => {
+      if (ok) {
+        await this.approveDevice(d.id);
+        new Notice(t("«{0}» is connected.", name));
+      } else {
+        await this.dropDevice(d.id);
+        new Notice(t("«{0}» was refused and disconnected.", name));
+      }
+    }).open();
   }
 
   /** Какие телефоны подключены к этому коду. */
@@ -958,6 +1013,18 @@ class ConnectorBridge {
   async handle(m) {
     const from = (m && m.device) || null;
     const raw = String((m && m.body) || "");
+    // Not allowed on this computer yet — nothing goes out, and the person is
+    // told where to allow it (see isApproved).
+    if (from && !this.cfg.approvalSeeded) this.reviewDevices(await this.listDevices());
+    if (from && !this.isApproved(from)) {
+      const known = (this.knownDevices || []).find((d) => d && d.id === from);
+      if (known) this.askApproval(known);
+      const kind = String((m && m.kind) || "text");
+      const msg = t("This phone is waiting for approval: open Obsidian on your computer and press «Allow».");
+      const out = BROWSE_KINDS.has(kind) ? JSON.stringify({ error: "pending" }) : (kind.startsWith("voice") ? "!" + msg : msg);
+      await this.reply(m.id, out, from, !!this.secrets.get(from), { whole: true }).catch(() => {});
+      return;
+    }
     /* Кнопка быстрой записи. Перехватываем до всего остального: у неё нет
        ни ассистента, ни инструментов, ни доступа к переписке — только
        создание заметки. Шифра тут не бывает, «Команды» его не умеют. */

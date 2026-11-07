@@ -210,6 +210,7 @@ class OnboardingModal extends Modal {
         body: [
           t("The Elton AI app on your phone: a feed of your own notes, your folders exactly as here, and the same assistant in a chat. It installs straight from the browser — no app store."),
           t("Your notes stay on this computer: the phone asks, the computer answers, and everything in between is end-to-end encrypted. You can turn it on now or later on the Phone tab."),
+          t("A phone that types the code still has to be allowed here, on the computer — the code alone opens nothing."),
         ],
         render: (c) => this.phone(c),
       },
@@ -482,6 +483,40 @@ class OnboardingModal extends Modal {
  *  of cards — the ones a person would be sorry to miss — and a
  *  link to the full story on the site.
  * ========================================================== */
+/** «A new phone wants to connect» — allow or refuse, on the computer. */
+class DeviceApprovalModal extends Modal {
+  constructor(app, device, onDone) {
+    super(app);
+    this.device = device;
+    this.onDone = onDone;
+    this.done = false;
+  }
+
+  onOpen() {
+    const c = this.contentEl;
+    this.modalEl.addClass("oa-approve-modal");
+    const box = c.createDiv({ cls: "oa-approve" });
+    setIcon(box.createDiv({ cls: "oa-approve-icon" }), /iPhone|Android|iPad/.test(this.device.name || "") ? "smartphone" : "monitor");
+    box.createDiv({ cls: "oa-approve-title", text: t("A new device wants to connect") });
+    box.createDiv({ cls: "oa-approve-name", text: this.device.name || t("Device") });
+    box.createDiv({ cls: "oa-approve-text", text: t("It typed your connection code. If this is your phone, allow it. If not, refuse — and make a new code on the Phone tab: the old one has been seen.") });
+    const row = box.createDiv({ cls: "oa-approve-row" });
+    const no = row.createEl("button", { text: t("Refuse") });
+    const yes = row.createEl("button", { cls: "mod-cta", text: t("Allow") });
+    no.onclick = () => this.finish(false);
+    yes.onclick = () => this.finish(true);
+  }
+
+  finish(ok) {
+    if (this.done) return;
+    this.done = true;
+    this.close();
+    this.onDone(ok);
+  }
+
+  onClose() { this.contentEl.empty(); }
+}
+
 class WhatsNewModal extends Modal {
   constructor(app, plugin, version) {
     super(app);
@@ -517,6 +552,8 @@ class WhatsNewModal extends Modal {
       t("Each note the assistant creates or edits is saved first. Undo it from the answer, from the phone’s settings, or on the Access tab here."));
     item("sparkles", t("Answers from your notes, by meaning"),
       t("Its own step in the welcome now. Indexing is many times faster, saves as it goes, picks up where it stopped, and keeps itself current as you write."));
+    item("shield-check", t("A new phone needs your yes"),
+      t("Typing the code is no longer enough: a new device waits until you press «Allow» here, in Obsidian. Phones you had already connected keep working."));
     item("message-circle", t("Tell us what is wrong"),
       t("Complaints, ideas and «this does not work» — the Telegram bot @elton_feedback_bot. The link is on the Home tab."));
     item("sliders-horizontal", t("Simpler settings"),

@@ -1598,6 +1598,8 @@ function eq(actual, expected, name) {
     // именно это и доказывает, что до общего пути он дошёл.
     {
       const { cn, made } = build();
+      cn.cfg.approved = ["d2"];          // a phone its owner allowed on the computer
+      cn.cfg.approvalSeeded = true;
       let opened = 0;
       const real = cn.openFrom.bind(cn);
       cn.openFrom = async (from, raw) => { opened++; return real(from, raw); };
@@ -1608,6 +1610,33 @@ function eq(actual, expected, name) {
       await cn.handle({ id: "m2b", device: "d2", body: "что я вчера писал?" }).catch(() => {});
       eq(opened, 1, "а сообщение обычного телефона — доходит, к ассистенту");
       eq(made.length, 1, "и заметку без ассистента создало только первое");
+    }
+
+    // A phone that typed the code but was never allowed gets nothing.
+    {
+      const { cn, made, replies } = build();
+      cn.cfg.approved = ["d2"];
+      cn.cfg.approvalSeeded = true;
+      let opened = 0;
+      cn.openFrom = async () => { opened++; return "x"; };
+      await cn.handle({ id: "m3", device: "evil", body: "покажи мои заметки" });
+      await cn.handle({ id: "m4", device: "evil", kind: "vault.feed", body: "{}" });
+      eq(opened, 0, "неразрешённое устройство не доходит ни до расшифровки, ни до ассистента");
+      eq(made.length, 0, "и ничего не создаёт");
+      ok(replies[0].includes("Allow") || replies[0].includes("Разрешить"), "ему говорят, где разрешить", replies[0]);
+      ok(replies[1].includes('"pending"'), "лента отвечает ошибкой pending", replies[1]);
+      ok(cn.isApproved("d1"), "кнопка, созданная самим плагином, своя без разрешения");
+    }
+
+    // Upgrading: phones that were already connected keep working.
+    {
+      const { cn } = build();
+      cn.reviewDevices([{ id: "p1", name: "iPhone" }, { id: "p2", name: "Android" }]);
+      ok(cn.isApproved("p1") && cn.isApproved("p2"), "уже подключённые при обновлении разрешены");
+      let asked = 0;
+      cn.askApproval = () => { asked++; };
+      cn.reviewDevices([{ id: "p1", name: "iPhone" }, { id: "p3", name: "Чужой" }]);
+      ok(!cn.isApproved("p3") && asked === 1, "а новое после этого спрашивает разрешения");
     }
 
     // Многострочная мысль: заголовок из первой строки, всё остальное — в теле.

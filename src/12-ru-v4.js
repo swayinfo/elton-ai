@@ -2,6 +2,17 @@
  * Kept apart from the big table above so that a later look at "what
  * did 4.0 add" is one file, not a diff of a thousand lines. */
 Object.assign(RU, {
+  "«{0}» is connected.": "«{0}» подключено.",
+  "«{0}» was refused and disconnected.": "«{0}» — отказано, устройство отключено.",
+  "This phone is waiting for approval: open Obsidian on your computer and press «Allow».": "Это устройство ждёт подтверждения: откройте Obsidian на компьютере и нажмите «Разрешить».",
+  "A new device wants to connect": "Новое устройство хочет подключиться",
+  "It typed your connection code. If this is your phone, allow it. If not, refuse — and make a new code on the Phone tab: the old one has been seen.": "Оно ввело ваш код подключения. Если это ваш телефон — разрешите. Если нет — откажите и сделайте новый код на вкладке «Телефон»: старый кто-то видел.",
+  "Refuse": "Отказать",
+  "Allow": "Разрешить",
+  "A new phone needs your yes": "Новый телефон — только с вашего «да»",
+  "Typing the code is no longer enough: a new device waits until you press «Allow» here, in Obsidian. Phones you had already connected keep working.": "Одного кода больше мало: новое устройство ждёт, пока вы нажмёте «Разрешить» здесь, в Obsidian. Уже подключённые телефоны работают как раньше.",
+  "A phone that types the code still has to be allowed here, on the computer — the code alone opens nothing.": "Телефон, который ввёл код, нужно ещё разрешить здесь, на компьютере, — сам по себе код ничего не открывает.",
+  "waiting for your approval": "ждёт вашего подтверждения",
   "Edit history": "История правок",
   "{0} this week": "за неделю: {0}",
   "nothing this week": "за неделю ничего",
