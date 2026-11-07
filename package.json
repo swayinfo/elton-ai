@@ -1,6 +1,6 @@
 {
   "name": "elton-ai",
-  "version": "4.0.0",
+  "version": "4.1.1",
   "description": "Voice and text assistant for your Obsidian vault.",
   "main": "main.js",
   "private": true,

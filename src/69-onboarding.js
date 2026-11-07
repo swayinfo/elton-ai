@@ -12,6 +12,10 @@
  *  settings, so leaving halfway still leaves progress behind.
  * ========================================================== */
 
+/* The release whose news the What's new window tells. Fixes on top of it
+   (4.1.1 and the like) bring the same story to whoever has not seen it yet. */
+const WHATS_NEW = "4.0";
+
 /* Complaints, ideas and "it does not work" — one Telegram bot, the same
    way Book Reader does it. No GitHub account, no form. */
 const FEEDBACK_URL = "https://t.me/elton_feedback_bot";
@@ -532,7 +536,7 @@ class WhatsNewModal extends Modal {
     const card = c.createDiv({ cls: "oa-onb-card oa-wn" });
     const hero = card.createDiv({ cls: "oa-onb-hero" });
     hero.createDiv({ cls: "oa-onb-emoji", text: "✨" });
-    hero.createDiv({ cls: "oa-onb-title", text: t("What’s new in {0}", this.version) });
+    hero.createDiv({ cls: "oa-onb-title", text: t("What’s new in {0}", WHATS_NEW) });
 
     const list = card.createDiv({ cls: "oa-wn-list" });
     const item = (icon, title, text) => {

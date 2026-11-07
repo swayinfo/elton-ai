@@ -233,7 +233,7 @@ class AssistantSettingTab extends PluginSettingTab {
     a.setAttr("target", "_blank");
     a.setAttr("rel", "noopener");
     by.appendText(" · ");
-    const wn = by.createEl("a", { text: t("What’s new in {0}", this.plugin.manifest.version), href: "#" });
+    const wn = by.createEl("a", { text: t("What’s new in {0}", WHATS_NEW), href: "#" });
     wn.onclick = (e) => { e.preventDefault(); new WhatsNewModal(this.app, this.plugin, this.plugin.manifest.version).open(); };
   }
 
