@@ -1193,13 +1193,17 @@ class ConnectorBridge {
         this.plugin.journal.saveSoon();
       }
 
-      const list = agent.shownSources().slice(0, 8);
+      const all = agent.shownSources();
+      const list = all.slice(0, 8);
       /* Новому приложению — ссылками: по ним открывается сама заметка. Старое
          показало бы скобки, ему по-прежнему просто названия. */
       const tail = list.length
         ? "\n\n" + t("From your notes:") + "\n" + list.map((x) => (rich
           ? "- [[" + String(x.path || x.title).replace(/\.md$/i, "") + "|" + (x.title || x.path) + "]]"
           : "- " + (x.title || x.path))).join("\n")
+          // Месяц ежедневных заметок — это 30 источников; восемь без пометки
+          // читались как «остальные дни он не смотрел».
+          + (all.length > list.length ? "\n- " + t("…and {0} more", all.length - list.length) : "")
         : "";
       // Одним куском: телефон перестаёт слушать на метке «готово», и всё,
       // что послано после неё, до него уже может не дойти.

@@ -1329,7 +1329,7 @@ class VaultBridge {
    * back with whatever matched best in the whole vault. In August it answered
    * with February and had no way to know it was wrong.
    */
-  recentNotes(days = 3, limit = 30) {
+  recentNotes(days = 3, limit = 60) {
     const since = Date.now() - Math.max(1, Number(days) || 3) * 86400000;
     return this.files()
       .filter((f) => f.stat.mtime >= since)
@@ -1441,6 +1441,51 @@ class VaultBridge {
     const lead = new RegExp(`^(?:${da}[-._ ]${mo}[-._ ]${y}|${y}[-._ ]?${mo}[-._ ]?${da})(?!\\d)`);
     return this.app.vault.getMarkdownFiles().find((f) =>
       f.path.startsWith(folder + "/") && this.inScope(f.path) && lead.test(f.basename)) || null;
+  }
+
+  /**
+   * Every daily note between two dates, oldest first, one entry per day —
+   * `file` is null for a day without a note. Capped at 92 days.
+   *
+   * "All my thoughts for November" used to go through recent_notes: the 30
+   * files changed most recently, which in a living vault are today's and
+   * yesterday's. The 1st to the 12th never made the list, and the answer
+   * covered two days of a month.
+   */
+  dailyNotesBetween(from, to) {
+    let a = VaultBridge.dayFrom(from || "today"), b = VaultBridge.dayFrom(to || "today");
+    a.setHours(12, 0, 0, 0); b.setHours(12, 0, 0, 0);
+    if (a > b) [a, b] = [b, a];
+    const out = [];
+    for (let d = new Date(a), i = 0; d <= b && i < 92; d.setDate(d.getDate() + 1), i++) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      out.push({ date: key, file: this.dailyNote(key) });
+    }
+    return out;
+  }
+
+  /**
+   * The text under one heading — "Мысли", "Thoughts", "Plans" — down to the
+   * next heading of the same level or higher. Matched loosely, so "мысль"
+   * finds "# Мысли" and "plan" finds "## My plans for the day:". Several
+   * matching headings are joined. Empty when there is none.
+   */
+  static sectionOf(text, name) {
+    const norm = (x) => String(x || "").toLowerCase().replace(/^#+\s*/, "").replace(/[:：.!?\s]+$/, "").trim();
+    const want = norm(name);
+    if (!want) return String(text || "");
+    const stem = want.length > 4 ? want.slice(0, Math.max(4, want.length - 2)) : want;
+    const out = [];
+    let level = 0;
+    for (const line of String(text || "").split("\n")) {
+      const h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h) {
+        if (level && h[1].length <= level) level = 0;
+        if (!level && norm(h[2]).includes(stem)) { level = h[1].length; continue; }
+      }
+      if (level) out.push(line);
+    }
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 }
 

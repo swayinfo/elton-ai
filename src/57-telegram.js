@@ -427,10 +427,13 @@ class TelegramBridge {
     // Sources folded away rather than stacked under every answer. They are
     // worth having and rarely worth reading, which is what a collapsible
     // block is for — and rich messages are the reason we can have one.
-    const list = agent.shownSources().slice(0, 8);
+    const all = agent.shownSources();
+    const list = all.slice(0, 8);
     const block = list.length
-      ? `\n\n<details><summary>${t("From your notes:")} ${list.length}</summary>\n\n`
-        + list.map((s) => "- " + (s.title || s.path)).join("\n") + "\n\n</details>"
+      ? `\n\n<details><summary>${t("From your notes:")} ${all.length}</summary>\n\n`
+        + list.map((s) => "- " + (s.title || s.path)).join("\n")
+        + (all.length > list.length ? "\n- " + t("…and {0} more", all.length - list.length) : "")
+        + "\n\n</details>"
       : "";
     // The animation goes before the answer, not after: deleting it afterwards
     // leaves the reply sitting above a spinner for a beat.

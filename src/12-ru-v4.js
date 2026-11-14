@@ -9,6 +9,8 @@ Object.assign(RU, {
   "It typed your connection code. If this is your phone, allow it. If not, refuse — and make a new code on the Phone tab: the old one has been seen.": "Оно ввело ваш код подключения. Если это ваш телефон — разрешите. Если нет — откажите и сделайте новый код на вкладке «Телефон»: старый кто-то видел.",
   "Refuse": "Отказать",
   "Allow": "Разрешить",
+  "…and {0} more": "…и ещё {0}",
+  "Reading daily notes: {0} – {1}": "Читаю ежедневные заметки: {0} – {1}",
   "A new phone needs your yes": "Новый телефон — только с вашего «да»",
   "Typing the code is no longer enough: a new device waits until you press «Allow» here, in Obsidian. Phones you had already connected keep working.": "Одного кода больше мало: новое устройство ждёт, пока вы нажмёте «Разрешить» здесь, в Obsidian. Уже подключённые телефоны работают как раньше.",
   "A phone that types the code still has to be allowed here, on the computer — the code alone opens nothing.": "Телефон, который ввёл код, нужно ещё разрешить здесь, на компьютере, — сам по себе код ничего не открывает.",

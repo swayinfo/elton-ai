@@ -1177,6 +1177,23 @@ function eq(actual, expected, name) {
       const dm = mk(["Daily/11-06-2026.md"], { folder: "Daily", format: "DD-MM-YYYY" });
       eq(dm.V.dailyNote("2026-11-06"), null, "6 ноября не находит заметку 11 июня — день и месяц не путаются");
 
+      // A month of daily notes in one go, and only the part asked for.
+      {
+        const month = mk(["Дневник/01-11-2026.md", "Дневник/03-11-2026.md", "Дневник/30-11-2026.md"], { folder: "Дневник", format: "DD-MM-YYYY" });
+        const nov = month.V.dailyNotesBetween("2026-11-01", "2026-11-30");
+        eq(nov.length, 30, "ноябрь — 30 дней, по одной строке на день");
+        eq(nov.filter((x) => x.file).length, 3, "найдены все три заметки месяца, а не последние изменённые");
+        eq(nov[0].date, "2026-11-01", "от первого дня");
+        eq(month.V.dailyNotesBetween("2026-11-30", "2026-11-01")[0].date, "2026-11-01", "даты наоборот — тот же порядок");
+        eq(month.V.dailyNotesBetween("2026-01-01", "2026-12-31").length, 92, "не больше 92 дней за раз");
+        const VB = T.VaultBridge;
+        const note = "---\nДата: 2026-11-05\n---\n# Мои планы на день:\n- [ ] видео\n# Мысли\nХочу на концерт\n\nКупить плёнку\n# Итоги\nвсё";
+        eq(VB.sectionOf(note, "мысль"), "Хочу на концерт\n\nКупить плёнку", "«мысль» находит «# Мысли» и только её текст");
+        eq(VB.sectionOf(note, "Plans"), "", "чужого раздела нет — пусто");
+        eq(VB.sectionOf(note, "планы"), "- [ ] видео", "«планы» находит «Мои планы на день:»");
+        eq(VB.sectionOf("## A\nx\n### sub\ny\n## B\nz", "a"), "x\n### sub\ny", "подзаголовки остаются внутри раздела");
+      }
+
       const nested = mk([], { folder: "Journal", format: "YYYY/MM/YYYY-MM-DD" });
       await nested.V.ensureDailyNote("today");
       eq(nested.made[0], `Journal/${y}/${m}/${y}-${m}-${d}.md`, "формат с папками создаёт заметку в них");

@@ -233,17 +233,24 @@ function buildTools(s, plugin) {
         pattern: { type: "string", description: "Optional: limit to paths matching this pattern" } },
       ["query"]);
     fn("recent_notes",
-      "What the user has written or changed lately, newest first, with the date of each. This is the ONLY way to answer anything about a period of time — \"the last few days\", \"this week\", \"lately\", \"recently\". search_notes ranks by topic and ignores dates entirely, so it will happily return something from six months ago.",
+      "What the user has written or changed lately, newest first, with the date each file was last changed. Use it for \"what have I been working on lately\" across the whole vault. search_notes ranks by topic and ignores dates entirely, so it will happily return something from six months ago. For what is written IN the daily notes over a span of dates, use daily_notes instead — this list is capped and shows only the most recently changed files.",
       { days: { type: "number", description: "How far back to look. 3 for \"the last few days\", 7 for \"this week\"." } }, []);
     // Registered whether or not the setting was ever filled in: the folder is
     // read from Obsidian's own daily-notes settings when ours is empty.
     if (plugin.vault.dailyFolder()) {
       fn("daily_note",
-        "The user's daily note for one date. Needed for questions like \"what did I do yesterday\" — ordinary search does not find these reliably. For a span of days use recent_notes instead of calling this once per day. Pass open: true when they asked to OPEN or SHOW it rather than asked a question about it — today's note is then created through Obsidian's own Daily notes command if it does not exist yet, so their template and Templater run exactly as if they had opened it themselves.",
+        "The user's daily note for one date. Needed for questions like \"what did I do yesterday\" — ordinary search does not find these reliably. For a span of days use daily_notes instead of calling this once per day. Pass open: true when they asked to OPEN or SHOW it rather than asked a question about it — today's note is then created through Obsidian's own Daily notes command if it does not exist yet, so their template and Templater run exactly as if they had opened it themselves.",
         {
           when: { type: "string", description: "today, yesterday, tomorrow, or a date as YYYY-MM-DD" },
           open: { type: "boolean", description: "Put it on screen, creating today's from their template if needed." },
         }, ["when"]);
+      fn("daily_notes",
+        "All the user's daily notes for a range of dates, in one call — \"all my thoughts for November\", \"what did I do this week\", \"my plans over the last ten days\". Reads every day in the range, oldest first, up to 92 days. Pass section to get only the part under one heading of the note (for example \"Мысли\", \"Thoughts\", \"Plans\") — the rest of each note is left out. When the user asks for ALL of something over a period, this is the tool, and the answer covers every day it returns, not a sample.",
+        {
+          from: { type: "string", description: "First day: YYYY-MM-DD, today or yesterday." },
+          to: { type: "string", description: "Last day: YYYY-MM-DD or today. Defaults to today." },
+          section: { type: "string", description: "Optional: only the text under this heading in each note." },
+        }, ["from"]);
     }
   }
   if (webSearchOK(s)) {
@@ -876,7 +883,12 @@ class Agent {
         } catch (e) {
           result = "That failed: " + e.message;
         }
-        messages.push({ role: "tool", tool_call_id: call.id, content: String(result).slice(0, 8000) });
+        /* 8000 is plenty for one note or a search, and keeps a runaway result
+           from eating the context. A range of daily notes is the exception:
+           it is many notes on purpose, sized by the tool itself, and cutting
+           it here is how "all my thoughts for November" ended on the 6th. */
+        const cap = call.function && call.function.name === "daily_notes" ? 64000 : 8000;
+        messages.push({ role: "tool", tool_call_id: call.id, content: String(result).slice(0, cap) });
       }
     }
 
@@ -1078,6 +1090,40 @@ class Agent {
         }
         onEvent({ kind: "action", text: t("Read: {0}", f.basename) });
         return `Daily note "${f.basename}":\n\n${await V.read(f, 4000)}`;
+      }
+
+      case "daily_notes": {
+        const days = V.dailyNotesBetween(args.from, args.to || "today");
+        const sec = String(args.section || "").trim();
+        if (!days.length) return "No dates in that range.";
+        onEvent({ kind: "action", text: t("Reading daily notes: {0} – {1}", days[0].date, days[days.length - 1].date) });
+        const parts = [], none = [], blank = [];
+        const CAP = 60000;
+        let total = 0, stoppedAt = "";
+        for (const d of days) {
+          if (!d.file) { none.push(d.date); continue; }
+          let body;
+          try { body = await this.plugin.app.vault.cachedRead(d.file); } catch { none.push(d.date); continue; }
+          if (sec) body = VaultBridge.sectionOf(body, sec);
+          body = body.trim();
+          if (!body) { blank.push(d.date); continue; }
+          if (body.length > 8000) body = body.slice(0, 8000) + "\n…";
+          if (total + body.length > CAP) { stoppedAt = d.date; break; }
+          total += body.length;
+          parts.push(`### ${d.date} — ${d.file.basename}\n${body}`);
+          this.noteSource(d.file);
+        }
+        const range = `${days[0].date} … ${days[days.length - 1].date}`;
+        if (!parts.length) {
+          return sec
+            ? `No daily note in ${range} has anything under a heading like "${sec}".` + (none.length ? ` Days without a daily note: ${none.length}.` : "")
+            : `There are no daily notes in ${range}.`;
+        }
+        const tail = [];
+        if (blank.length) tail.push(sec ? `Nothing under "${sec}" on: ${blank.join(", ")}.` : `Empty notes on: ${blank.join(", ")}.`);
+        if (none.length) tail.push(`No daily note on ${none.length} of the ${days.length} days.`);
+        if (stoppedAt) tail.push(`Stopped at ${stoppedAt}: the rest did not fit in one reply. Tell the user and offer to continue from that date.`);
+        return `Daily notes ${range}${sec ? `, only the "${sec}" part` : ""} — ${parts.length} days with content:\n\n${parts.join("\n\n")}\n\n${tail.join("\n")}\n\nThis is everything the vault has for those days. If the user asked for all of it, give all of it, day by day — do not shorten it to a few examples.`;
       }
 
       case "list_tabs": {
