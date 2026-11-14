@@ -1,7 +1,7 @@
 {
   "id": "elton-ai",
   "name": "Elton AI",
-  "version": "4.1.1",
+  "version": "4.1.2",
   "minAppVersion": "1.8.7",
   "description": "An assistant that lives in your vault: ask your notes by voice or text, take down thoughts and photos, build projects from your templates — on the computer, in a phone app with a feed and folders, and in Telegram. Every change can be undone.",
   "author": "Elton",
