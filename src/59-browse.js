@@ -94,12 +94,15 @@ class VaultBrowser {
       const subs = kids.filter((k) => k instanceof TFolder && this.visible(k.path)).sort(byFolder);
       const own = kids.filter((k) => k instanceof TFile && this.visible(k.path)).sort(byFile);
       for (const f of own) {
-        files.push([idx, f.name, Math.round(f.stat.mtime / 1000)]);
+        // Четвёртое — когда создан: телефон сортирует папку «сначала новые».
+        files.push([idx, f.name, Math.round(f.stat.mtime / 1000), Math.round((f.stat.ctime || f.stat.mtime) / 1000)]);
       }
       if (depth < 30) for (const sub of subs) walk(sub, depth + 1);
     };
     walk(this.app.vault.getRoot(), 0);
-    const v = memHash(JSON.stringify([folders, files.length, files.reduce((n, f) => n + f[2], 0), order]));
+    // «c»: дерево с датами создания. Без этой метки телефон, у которого уже
+    // лежит прежний список, так и не узнал бы о них.
+    const v = memHash(JSON.stringify([folders, files.length, files.reduce((n, f) => n + f[2], 0), order, "c"]));
     if (known && known === v) return { same: true, v };
     return { v, vault: this.app.vault.getName(), order, folders, files };
   }
